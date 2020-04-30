@@ -93,6 +93,7 @@ public:
     msr::airlib::Environment::State simGetGroundTruthEnvironment(const std::string& vehicle_name = "") const;
 
     //----------- APIs to control ACharacter in scene ----------/
+    void resetUnreal();
     void simCharSetFaceExpression(const std::string& expression_name, float value, const std::string& character_name = "");
     float simCharGetFaceExpression(const std::string& expression_name, const std::string& character_name = "") const;
     std::vector<std::string> simCharGetAvailableFaceExpressions();
