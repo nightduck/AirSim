@@ -28,6 +28,7 @@ STRICT_MODE_ON
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <geometry_msgs/Twist.h>
+#include <geometry_msgs/Pose.h>
 #include <image_transport/image_transport.h>
 #include <iostream>
 #include <math.h>
@@ -62,6 +63,12 @@ typedef msr::airlib::AirSimSettings::CaptureSetting CaptureSetting;
 typedef msr::airlib::AirSimSettings::VehicleSetting VehicleSetting;
 typedef msr::airlib::AirSimSettings::CameraSetting CameraSetting;
 typedef msr::airlib::AirSimSettings::LidarSetting LidarSetting;
+
+// things in drone.h from Mavbench
+    const float FACE_FORWARD = std::numeric_limits<float>::infinity();
+    const float FACE_BACKWARD = -std::numeric_limits<float>::infinity();
+    const float YAW_UNCHANGED = -1e9;
+
 
 struct SimpleMatrix
 {
@@ -115,11 +122,33 @@ struct GimbalCmd
 class AirsimROSWrapper
 {
 public:
+
     AirsimROSWrapper(const ros::NodeHandle& nh, const ros::NodeHandle& nh_private);
     ~AirsimROSWrapper() {}; 
 
     void initialize_airsim();
     void initialize_ros();
+
+    
+    //function from drone.h in MavBench
+        geometry_msgs::Pose pose();
+
+        float get_yaw();
+        bool set_yaw(int y);
+        bool fly_velocity(double vx, double vy, double vz, float yaw = YAW_UNCHANGED, double duration = 3);
+        // *** F:DN Drone parameters functions
+        float maxYawRate();
+        float maxYawRateDuringFlight();
+        bool set_yaw_at_z(int y, double z);
+
+    // function added by feiyang jin
+        void takeoff_jin();
+        void moveTo(float x, float y, float z, float velocity);
+        void moveOnPath(const std::vector<Vector3r>& path, float velocity);
+        void hover();
+        bool end();
+        Vector3r getPosition();
+        
 
     // std::vector<ros::CallbackQueue> callback_queues_;
     ros::AsyncSpinner img_async_spinner_;
@@ -128,6 +157,10 @@ public:
     bool is_used_img_timer_cb_queue_;
 
 private:
+    // from drone.h
+        float max_yaw_rate = 90.0;
+        float max_yaw_rate_during_flight = 90.0;
+
     /// ROS timer callbacks
     void img_response_timer_cb(const ros::TimerEvent& event); // update images from airsim_client_ every nth sec
     void drone_state_timer_cb(const ros::TimerEvent& event); // update drone state from airsim_client_ every nth sec

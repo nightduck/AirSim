@@ -77,6 +77,17 @@ public:
             rotors_.at(rotor_index).setControlSignal(
                 vehicle_api_->getActuation(rotor_index));
         }
+
+        if (battery_ != nullptr) {
+            TripStats trip_stats; 
+            trip_stats.state_of_charge = battery_->StateOfCharge();
+            trip_stats.voltage = battery_->Voltage();
+            trip_stats.energy_consumed = getEnergyConsumed();
+            trip_stats.collision_count = getCollisionCount();
+            trip_stats.flight_time = getTotalTime();
+            trip_stats.distance_traveled = getDistanceTraveled();
+            vehicle_api_->setTripStats(trip_stats);
+        }
     }
 
     //sensor getter
