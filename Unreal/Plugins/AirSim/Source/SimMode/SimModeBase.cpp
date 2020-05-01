@@ -271,6 +271,8 @@ void ASimModeBase::Tick(float DeltaSeconds)
 
     drawLidarDebugPoints();
 
+    checkUnrealReset();
+
     Super::Tick(DeltaSeconds);
 }
 
@@ -432,6 +434,13 @@ void ASimModeBase::stopApiServer()
 bool ASimModeBase::isApiServerStarted()
 {
     return api_server_ != nullptr;
+}
+
+void ASimModeBase::checkUnrealReset() {
+    if (api_server_->checkUnrealReset()) {
+        api_server_->unSetUnrealReset();    
+        UGameplayStatics::OpenLevel(this, FName(*(this->GetWorld()->GetName()), false));
+    }
 }
 
 void ASimModeBase::updateDebugReport(msr::airlib::StateReporterWrapper& debug_reporter)
