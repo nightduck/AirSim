@@ -9,6 +9,7 @@
 #include "common/CommonStructs.hpp"
 #include "common/ImageCaptureBase.hpp"
 #include "vehicles/multirotor/api/MultirotorApiBase.hpp"
+#include "api/VehicleApiBase.hpp"
 #include "api/RpcLibClientBase.hpp"
 #include "vehicles/multirotor/api/MultirotorCommon.hpp"
 
@@ -48,6 +49,7 @@ public:
 
     MultirotorState getMultirotorState(const std::string& vehicle_name = "");
 
+    CollisionInfo getCollisionInfo();
     TripStats getTripStats();
     
     bool setSafety(SafetyEval::SafetyViolationType enable_reasons, float obs_clearance, SafetyEval::ObsAvoidanceStrategy obs_startegy,

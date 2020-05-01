@@ -6,6 +6,7 @@
 
 #include "common/Common.hpp"
 #include "physics/PhysicsEngineBase.hpp"
+#include "physics/Battery.hpp"
 #include <iostream>
 #include <sstream>
 #include <fstream>
@@ -92,6 +93,14 @@ private:
 
         //Utils::log(Utils::stringf("T-VEL %s %" PRIu64 ": ", 
         //    VectorMath::toString(next.twist.linear).c_str(), clock()->getStepCount()));
+
+        if (body.hasBattery()) { //only intrested in bodies with electrical constraints
+            auto P = p_estimator_.Estimate(body.getEnergyRotorSpecs(), current);
+            body.getBattery()->update(dt, (float)P);
+            body.updateDistanceTraveled(current.pose);
+            body.updateEnergyConsumed((float)P * float(dt));
+            body.updateTime(dt);
+        }
 
         body.setWrench(next_wrench);
         body.updateKinematics(next);
@@ -448,6 +457,7 @@ private:
     std::stringstream debug_string_;
     bool enable_ground_lock_;
     TTimePoint last_message_time;
+    powerlib::PowerEstimator p_estimator_;
 };
 
 }} //namespace

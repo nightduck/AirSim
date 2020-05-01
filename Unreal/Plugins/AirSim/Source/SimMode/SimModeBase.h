@@ -76,6 +76,8 @@ public:
         return static_cast<PawnSimApi*>(api_provider_->getVehicleSimApi(vehicle_name));
     }
 
+    void checkUnrealReset();
+
 protected: //must overrides
     typedef msr::airlib::AirSimSettings AirSimSettings;
 
