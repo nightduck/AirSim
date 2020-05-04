@@ -94,8 +94,10 @@ int main()
         float takeoffTimeout = 5; 
         client.takeoffAsync(takeoffTimeout)->waitOnLastTask();
 
+
+        auto AllStates = client.getMultirotorState();
         msr::airlib::TripStats g_init_stats, g_end_stats;
-        g_init_stats = client.getTripStats();
+        g_init_stats = AllStates.getTripStats();
 
         // switch to explicit hover mode so that this is the fall back when 
         // move* commands are finished.
@@ -128,15 +130,16 @@ int main()
         client.hoverAsync()->waitOnLastTask();
 
 
-        g_end_stats = client.getTripStats();
-        std::cout << "distance_travelled: " << (g_end_stats.distance_traveled - g_init_stats.distance_traveled) << "," << std::endl;
-        std::cout << "flight_time:" << g_end_stats.flight_time - g_init_stats.flight_time<< "," << std::endl;
-        std::cout << "collision_count: " << g_end_stats.collision_count  - g_init_stats.collision_count << "," << std::endl;
+        AllStates = client.getMultirotorState();
+        g_end_stats = AllStates.getTripStats();
+        std::cout << "distance_travelled: " << (g_end_stats.distance_traveled - g_init_stats.distance_traveled) << std::endl;
+        std::cout << "flight_time:" << g_end_stats.flight_time - g_init_stats.flight_time << std::endl;
+        std::cout << "collision_count: " << g_end_stats.collision_count  - g_init_stats.collision_count << std::endl;
     
         std::cout << "initial_voltage: " << g_init_stats.voltage << "," << std::endl;
         std::cout << "end_voltage: " << g_end_stats.voltage << "," << std::endl;
-        std::cout << "StateOfCharge: " << 100 - (g_init_stats.state_of_charge  - g_end_stats.state_of_charge) << "," << std::endl;
-        std::cout << "rotor energy consumed: " << g_end_stats.energy_consumed - g_init_stats.energy_consumed << ","<< std::endl; 
+        std::cout << "StateOfCharge: " << 100 - (g_init_stats.state_of_charge  - g_end_stats.state_of_charge) << std::endl;
+        std::cout << "rotor energy consumed: " << g_end_stats.energy_consumed - g_init_stats.energy_consumed << std::endl; 
 
 
         std::cout << "Press Enter to land" << std::endl; std::cin.get();

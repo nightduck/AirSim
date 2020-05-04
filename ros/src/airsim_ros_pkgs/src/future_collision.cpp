@@ -295,6 +295,7 @@ int main(int argc, char** argv)
         if (state == checking_for_collision) {
             collision_coming = check_for_collisions(airsim_ros_wrapperb, time_to_warn);
             if (collision_coming && !this_traj_already_has_collision) {
+                airsim_ros_wrapper_pointer->fly_velocity(0, 0, 0);
                 next_state = waiting_for_response;
 
                 col_coming_msg.header.stamp = g_pt_cloud_header;

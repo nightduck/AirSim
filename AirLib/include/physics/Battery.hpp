@@ -11,8 +11,8 @@
 #include "common/CommonStructs.hpp"
 #include "common/SteppableClock.hpp"
 #include <cinttypes>
-//#include <math.h>
 #include <numeric>
+
 
 namespace msr { namespace airlib {
 
@@ -104,12 +104,11 @@ class PowerEstimator {
   }
 
   virtual double Estimate(EnergyRotorSpecs rotor_energy_specs,
-                         const Kinematics::State& current)//,
-                         //const Kinematics::State& next) 
+                         const Kinematics::State& current)
                          {
-	//(void)(mass);
+    
     //auto mass = rotor_energy_specs.get_mass();
-    auto mass = 0.0;//rotor_energy_specs.get_mass();
+    auto mass = 2.0;//rotor_energy_specs.get_mass();
     auto vx = current.twist.linear[0]*3.6;
     auto vy = current.twist.linear[1]*3.6;
     auto vz = current.twist.linear[2]*3.6;
@@ -145,8 +144,23 @@ class PowerEstimator {
     double inner_product_third = std::inner_product(std::begin(third_vec), std::end(third_vec), 
             std::begin(third_coeff), 0.0);
 
+
+    std::ofstream myfile;
+    myfile.open("/home/airsim/battery.txt",std::ios::app);
+    myfile << "vx: " << vx << "\n";
+    myfile << "vy: " << vy << "\n";
+    myfile << "first_coefft:" << first_coeff[0] << " " << first_coeff[1] << " " << first_coeff[2] << "\n";
+    myfile << "third_coeff:" << third_coeff[0] << " " << third_coeff[1] << " " << third_coeff[3] << "\n";
+    myfile << "inner_product_one: " << inner_product_one << "\n";
+    myfile << "inner_product_two: " << inner_product_two << "\n";
+    myfile << "inner_product_three: " << inner_product_third << "\n";
+    myfile << "\n";
+    myfile.close();
+
+    //return 0.02;
     return inner_product_one + inner_product_two + inner_product_third;
-  
+    
+
   }
 
  private:
