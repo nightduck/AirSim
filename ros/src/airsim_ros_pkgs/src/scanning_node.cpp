@@ -394,16 +394,6 @@ int main(int argc, char ** argv)
         }
         else if (state == completed){
             ROS_INFO("scanned the entire space and returned successfully");
-
-            auto AllStates = airsim_ros_wrapper.getMultirotorState();
-            msr::airlib::TripStats g_end_stats;
-            g_end_stats = AllStates.getTripStats();
-            std::cout << "end_voltage: " << g_end_stats.voltage << "," << std::endl;
-            std::cout << "end StateOfCharge: " << g_end_stats.state_of_charge << std::endl;
-            std::cout << "rotor energy consumed: " << g_end_stats.energy_consumed << std::endl; 
-
-            airsim_ros_wrapper.end();
-
             g_mission_status = "completed";
             log_data_before_shutting_down();
             //signal_supervisor(g_supervisor_mailbox, "kill"); 

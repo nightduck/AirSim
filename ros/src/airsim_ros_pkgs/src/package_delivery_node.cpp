@@ -1,5 +1,6 @@
 #include "ros/ros.h"
 #include <ros/spinner.h>
+#include <signal.h>
 #include "common_mav.h"
 #include <visualization_msgs/Marker.h>
 #include "airsim_ros_pkgs/get_trajectory.h"
@@ -8,10 +9,25 @@
 #include <airsim_ros_pkgs/BoolPlusHeader.h>
 #include <airsim_ros_pkgs/follow_trajectory_status_srv.h>
 
+#include <airsim_ros_pkgs/profiling_data_srv.h>
+#include <airsim_ros_pkgs/start_profiling_srv.h>
+
 
 enum State { setup, waiting, flying, trajectory_completed, failed, invalid };
 
+// profiling
 std::string g_mission_status = "time_out";
+ros::Time col_coming_time_stamp; 
+long long g_pt_cld_to_pkg_delivery_commun_acc = 0;
+int g_col_com_ctr = 0;
+bool clcted_col_coming_data = true;
+
+long long g_accumulate_loop_time = 0; //it is in ms
+int g_main_loop_ctr = 0;
+int g_panic_ctr = 0;
+bool g_start_profiling = false; 
+
+bool DEBUG;
 
 bool should_panic = false;
 bool col_coming = false;
@@ -20,11 +36,82 @@ double v_max__global = 2.5, a_max__global = 5, g_fly_trajectory_time_out = 1;
 float g_max_yaw_rate= 90;
 float g_max_yaw_rate_during_flight = 90;
 
+long long g_planning_time_including_ros_overhead_acc  = 0;
+int  g_planning_ctr = 0; 
+bool clct_data = true;
+
 bool global_fly_back = false;
 std_msgs::Bool stop_fly_msg;
 
 int traj_id = 0;
 int planning_fail_count = 0;
+
+void log_data_before_shutting_down(){
+
+    std::string ns = ros::this_node::getName();
+    airsim_ros_pkgs::profiling_data_srv profiling_data_srv_inst;
+    
+    profiling_data_srv_inst.request.key = "mission_status";
+    if (g_mission_status == "time_out") {
+        profiling_data_srv_inst.request.value = 0;
+    }else if (g_mission_status == "completed") {
+        profiling_data_srv_inst.request.value = 1;
+    }else {
+        profiling_data_srv_inst.request.value = 2;
+    }
+
+    if (ros::service::waitForService("/record_profiling_data", 10)){ 
+        if(!ros::service::call("/record_profiling_data",profiling_data_srv_inst)){
+            ROS_ERROR_STREAM("could not probe data using stats manager");
+            ros::shutdown();
+        }
+    }
+    
+    profiling_data_srv_inst.request.key = "img_to_pkgDel_commun_t";
+    profiling_data_srv_inst.request.value = (((double)g_pt_cld_to_pkg_delivery_commun_acc)/1e9)/g_col_com_ctr;
+    if (ros::service::waitForService("/record_profiling_data", 10)){ 
+        if(!ros::service::call("/record_profiling_data",profiling_data_srv_inst)){
+            ROS_ERROR_STREAM("could not probe data using stats manager");
+            ros::shutdown();
+        }
+    }
+
+    profiling_data_srv_inst.request.key = "motion_planning_plus_srv_call";
+    profiling_data_srv_inst.request.value = ((double)g_planning_time_including_ros_overhead_acc/g_planning_ctr)/1e9;
+    if (ros::service::waitForService("/record_profiling_data", 10)){ 
+        if(!ros::service::call("/record_profiling_data",profiling_data_srv_inst)){
+            ROS_ERROR_STREAM("could not probe data using stats manager");
+            ros::shutdown();
+        }
+    }
+
+    profiling_data_srv_inst.request.key = "package_delivery_main_loop";
+    profiling_data_srv_inst.request.value = (((double)g_accumulate_loop_time)/1e9)/g_main_loop_ctr;
+    if (ros::service::waitForService("/record_profiling_data", 10)){ 
+        if(!ros::service::call("/record_profiling_data",profiling_data_srv_inst)){
+            ROS_ERROR_STREAM("could not probe data using stats manager");
+        }
+    }
+
+    profiling_data_srv_inst.request.key = "panic_ctr";
+    profiling_data_srv_inst.request.value = g_panic_ctr;
+    if (ros::service::waitForService("/record_profiling_data", 10)){ 
+        if(!ros::service::call("/record_profiling_data",profiling_data_srv_inst)){
+            ROS_ERROR_STREAM("could not probe data using stats manager");
+            ros::shutdown();
+        }
+    }
+    
+}
+
+void sigIntHandlerPrivate(int signo){
+    if (signo == SIGINT) {
+        log_data_before_shutting_down(); 
+        ros::shutdown();
+    }
+    exit(0);
+}
+
 
 double dist(Vector3r t, geometry_msgs::Point m)
 {
@@ -34,6 +121,11 @@ double dist(Vector3r t, geometry_msgs::Point m)
 
 void col_coming_callback(const airsim_ros_pkgs::BoolPlusHeader::ConstPtr& msg) {
     col_coming = msg->data;
+    if (clct_data){ 
+        col_coming_time_stamp = msg->header.stamp;
+        g_pt_cld_to_pkg_delivery_commun_acc += (ros::Time::now() - msg->header.stamp).toSec()*1e9;
+        g_col_com_ctr++;
+    }
 }
 
 
@@ -99,6 +191,7 @@ int main(int argc, char **argv)
 	ros::init(argc, argv, "package_delivery", ros::init_options::NoSigintHandler);
     ros::NodeHandle nh;
     ros::NodeHandle n_private("~");
+    signal(SIGINT, sigIntHandlerPrivate);
     AirsimROSWrapper airsim_ros_wrapper(nh, n_private);
 	
 	// variables
@@ -111,8 +204,6 @@ int main(int argc, char **argv)
 	    const float goal_s_error_margin = 3.0;
 	    
 	    bool srv_call_status = false;
-
-	    std::string mission_status = "time_out";
 
     	geometry_msgs::Twist twist;
 	    twist.linear.x = twist.linear.y = twist.linear.z = 1;
@@ -137,6 +228,12 @@ int main(int argc, char **argv)
             nh.subscribe<std_msgs::Bool>("/fly_back", 1, fly_back_callback);
 
         ros::Publisher stop_fly_pub = nh.advertise<std_msgs::Bool>("/stop_fly", 1);
+
+        ros::ServiceClient record_profiling_data_client = 
+            nh.serviceClient<airsim_ros_pkgs::profiling_data_srv>("record_profiling_data");
+
+        ros::ServiceClient start_profiling_client = 
+            nh.serviceClient<airsim_ros_pkgs::start_profiling_srv>("/start_profiling");
 
 	// visulization
 		uint32_t shape = visualization_msgs::Marker::CUBE;
@@ -195,6 +292,16 @@ int main(int argc, char **argv)
         }
 
 
+    // profiling
+        airsim_ros_pkgs::profiling_data_srv profiling_data_srv_inst;
+        ros::Time loop_start_t(0,0); 
+        ros::Time loop_end_t(0,0);
+        std::string mission_status = "time_out";
+        ros::Time start_hook_t, end_hook_t;   
+        airsim_ros_pkgs::start_profiling_srv start_profiling_srv_inst;
+        start_profiling_srv_inst.request.key = "";
+
+
     bool already_fly_back = false;
 
 	for (State state = setup; ros::ok(); ) 
@@ -203,6 +310,8 @@ int main(int argc, char **argv)
         ros::spinOnce();
         
         State next_state = invalid;
+        loop_start_t = ros::Time::now();
+
         if(global_fly_back && !already_fly_back){
             geometry_msgs::Point back_to_origin;
             back_to_origin.x = 0;
@@ -219,14 +328,33 @@ int main(int argc, char **argv)
         	goal = get_goal();
             start = get_start(airsim_ros_wrapper);
 
+            profiling_data_srv_inst.request.key = "start_profiling";
+            if (ros::service::waitForService("/record_profiling_data", 10)){ 
+                if(!record_profiling_data_client.call(profiling_data_srv_inst)){
+                    ROS_ERROR_STREAM("could not probe data using stats manager");
+                    ros::shutdown();
+                }
+            }
+
             spin_around(airsim_ros_wrapper);
             next_state = waiting;
         }
         else if(state == waiting){
+            if(clct_data){
+                start_hook_t = ros::Time::now();
+            }
+             
         	start = get_start(airsim_ros_wrapper);
             normal_traj = request_trajectory(get_trajectory_client, start, goal, twist, acceleration);
-            
-            cout << normal_traj.size() << endl;
+
+            // Profiling
+            if (clct_data){ 
+                end_hook_t = ros::Time::now(); 
+                g_planning_time_including_ros_overhead_acc += ((end_hook_t - start_hook_t).toSec()*1e9);
+                g_planning_ctr++; 
+            } 
+
+            cout << "trajectory size: " << normal_traj.size() << endl;
 
             if(normal_traj.size() == 0){
                 planning_fail_count += 1;
@@ -344,7 +472,7 @@ int main(int argc, char **argv)
                 mission_status = "completed"; 
                 g_mission_status = mission_status;            
                 
-                next_state = setup;
+                log_data_before_shutting_down();
                 ros::shutdown();
             }
             else if (normal_traj.empty()){
@@ -363,15 +491,31 @@ int main(int argc, char **argv)
         else if (state == failed) {
             ROS_ERROR("Failed to reach destination");
             g_mission_status = mission_status;
-            next_state = setup;
+            log_data_before_shutting_down();
+            ros::shutdown();
         }
         else if(state == invalid){
-        	cout << "invalid state !" << endl;
+        	ROS_ERROR("Invalid FSM state!");
         	break;
         }
 
         state = next_state;
-
+        if (clct_data){
+            if(!g_start_profiling) { 
+                if (ros::service::waitForService("/start_profiling", 10)){ 
+                    if(!start_profiling_client.call(start_profiling_srv_inst)){
+                        ROS_ERROR_STREAM("could not probe data using stats manager");
+                        ros::shutdown();
+                    }
+                    g_start_profiling = start_profiling_srv_inst.response.start; 
+                }
+            }
+            else{
+                loop_end_t = ros::Time::now(); 
+                g_accumulate_loop_time += (((loop_end_t - loop_start_t).toSec())*1e9);
+                g_main_loop_ctr++;
+            }
+        }
 	}
 
 	return 0;

@@ -24,13 +24,8 @@ using namespace std;
 
 //global variables
 AirsimROSWrapper* g_drone;
-string g_mission_status = "failed";
-string g_localization_status = "healthy";
-float g_coverage = 0;
-bool g_end_requested = false;
+msr::airlib::TripStats g_init_stats, g_end_stats;
 
-string g_ns; 
-string g_localization_method;
 string g_stats_fname = "/home/airsim/airsim_profiling.txt";
 //profiling variable
 std::vector<KeyValuePairStruct> g_highlevel_application_stats;
@@ -44,8 +39,6 @@ bool g_start_profiling_data = false;
 
 static int total_cores=0,total_packages=0;
 static int package_map[MAX_PACKAGES];
-
-float g_worst_case_power;
 
 
 static int detect_cpu(void) {
@@ -317,17 +310,20 @@ double read_cpu_power_sample(xpu_sample_stat *s = nullptr) {
 }
 
 
-
-void initialize_params() {
-}
-
-
 void output_flight_summary(void){
     stringstream stats_ss;
     float total_energy_consumed = 0;
     
     //Flight Stats dependent metrics
     stats_ss << "{"<<endl;
+    stats_ss << "\t\"distance_travelled\": " << g_end_stats.distance_traveled - g_init_stats.distance_traveled<< "," << endl;
+    stats_ss << "\t\"flight_time\": " << g_end_stats.flight_time - g_init_stats.flight_time<< "," << endl;
+    stats_ss << "\t\"collision_count\": " << g_end_stats.collision_count  - g_init_stats.collision_count << "," << endl;
+    
+    stats_ss << "\t\"initial_voltage\": " << g_init_stats.voltage << "," << endl;
+    stats_ss << "\t\"end_voltage\": " << g_end_stats.voltage << "," << endl;
+    stats_ss << "\t\"StateOfCharge\": " << 100 - (g_init_stats.state_of_charge  - g_end_stats.state_of_charge) << "," << endl;
+    stats_ss << "\t\"rotor energy consumed \": " << g_end_stats.energy_consumed - g_init_stats.energy_consumed << ","<<endl; 
 
     // the rest of metrics 
      
@@ -343,6 +339,7 @@ void output_flight_summary(void){
     }
      
   
+    total_energy_consumed +=  (g_end_stats.energy_consumed - g_init_stats.energy_consumed);
     stats_ss << "\t\"" <<"total_energy_consumed"<<'"'<<":" << total_energy_consumed << "," << endl;
     // topic rates
     stats_ss << "\t\""  <<"topic_statistics"<<'"'<<":{" << endl;
@@ -389,7 +386,10 @@ bool start_profiling_cb(airsim_ros_pkgs::start_profiling_srv::Request &req, airs
 
 bool record_profiling_data_cb(airsim_ros_pkgs::profiling_data_srv::Request &req, airsim_ros_pkgs::profiling_data_srv::Response &res)
 { 
-    if(req.key == "start_profiling"){  
+    if(req.key == "start_profiling"){
+        auto AllStates = g_drone->getMultirotorState();
+        g_init_stats = AllStates.getTripStats();
+
         xs_gpu.start = xs_cpu.start = std::chrono::system_clock::now();
         xs_gpu.running = xs_cpu.running = true;
         #ifdef USE_INTEL
@@ -444,10 +444,13 @@ int main(int argc, char **argv)
 {
     ros::init(argc, argv, "profile_manager");
     ros::NodeHandle nh, nh_statistics_topic;
+    ros::NodeHandle nh_private("~");
+    AirsimROSWrapper airsim_ros_wrapperb(nh, nh_private);
+    g_drone = &airsim_ros_wrapperb;
+
     ros::ServiceServer record_profiling_data_service = nh.advertiseService("record_profiling_data", record_profiling_data_cb);
     ros::ServiceServer start_profiling = nh.advertiseService("start_profiling", start_profiling_cb);
-    
-    initialize_params();
+
 
     ros::CallbackQueue statistics_queue;
     ros::Subscriber topic_statistics_sub =  
@@ -489,6 +492,9 @@ int main(int argc, char **argv)
     cpu_compute_energy = xs_cpu.sum;
     #endif // USE_INTEL
      
+    auto end_AllStates = g_drone->getMultirotorState();
+    g_end_stats = end_AllStates.getTripStats();
+    
     g_highlevel_application_stats.push_back(
             KeyValuePairStruct("gpu_compute_energy", gpu_compute_energy));
 
