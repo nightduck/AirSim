@@ -140,6 +140,7 @@ public:
         float maxYawRate();
         float maxYawRateDuringFlight();
         bool set_yaw_at_z(int y, double z);
+        MultirotorState getMultirotorState();
 
     // function added by feiyang jin
         void takeoff_jin();

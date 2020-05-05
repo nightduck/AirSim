@@ -31,7 +31,7 @@ bool g_end_requested = false;
 
 string g_ns; 
 string g_localization_method;
-string g_stats_fname;
+string g_stats_fname = "/home/airsim/airsim_profiling.txt";
 //profiling variable
 std::vector<KeyValuePairStruct> g_highlevel_application_stats;
 std::map <std::string, statsStruct> g_topics_stats;
@@ -47,9 +47,7 @@ static int package_map[MAX_PACKAGES];
 
 float g_worst_case_power;
 
-/* TODO: on Skylake, also may support  PSys "platform" domain,    */
-/* the whole SoC not just the package.                */
-/* see dcee75b3b7f025cc6765e6c92ba0a4e59a4d25f4            */
+
 static int detect_cpu(void) {
 
     FILE *fff;
@@ -391,11 +389,6 @@ bool start_profiling_cb(airsim_ros_pkgs::start_profiling_srv::Request &req, airs
 
 bool record_profiling_data_cb(airsim_ros_pkgs::profiling_data_srv::Request &req, airsim_ros_pkgs::profiling_data_srv::Response &res)
 { 
-    if (g_drone == NULL) {
-        ROS_ERROR_STREAM("drone object is not initialized");
-        return false; 
-    }
-
     if(req.key == "start_profiling"){  
         xs_gpu.start = xs_cpu.start = std::chrono::system_clock::now();
         xs_gpu.running = xs_cpu.running = true;
@@ -409,7 +402,6 @@ bool record_profiling_data_cb(airsim_ros_pkgs::profiling_data_srv::Request &req,
         for (ros::master::V_TopicInfo::iterator it = master_topics.begin() ; it != master_topics.end(); it++) {
               const ros::master::TopicInfo& info = *it;
               g_topics_stats[info.name] = statsStruct();
-              //std::cout << "topic_" << it - master_topics.begin() << ": " << info.name << std::endl;
         }
         g_start_profiling_data = true;
     }else{ 
@@ -503,6 +495,7 @@ int main(int argc, char **argv)
     g_highlevel_application_stats.push_back(
             KeyValuePairStruct("cpu_compute_energy", cpu_compute_energy));
     
+    std::cout << "see you, goodbyle" << std::endl;
     output_flight_summary();
     return 0;
 }

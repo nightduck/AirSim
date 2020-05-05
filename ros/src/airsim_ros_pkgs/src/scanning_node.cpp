@@ -1,10 +1,27 @@
 #include "ros/ros.h"
 #include <ros/spinner.h>
+#include <signal.h>
 #include "common_mav.h"
 #include <visualization_msgs/Marker.h>
+#include <airsim_ros_pkgs/profiling_data_srv.h>
+#include <airsim_ros_pkgs/start_profiling_srv.h>
+
 
 // Every coordinate in airsim is NED coordinate, which is used by Airsim
 // +X is North, +Y is East and +Z is down
+
+string g_stats_file_addr;
+string ns;
+std::string g_supervisor_mailbox; //file to write to when completed
+std::string g_mission_status = "failed";
+long long g_planning_time_acc = 0;
+int g_planning_ctr = 0;
+long long g_accumulate_loop_time = 0;
+int g_main_loop_ctr = 0;
+
+bool g_start_profiling = false;
+bool clct_data = true;
+
 
 double max_x = 0, max_y = 0, max_z = 0, min_x = 0, min_y = 0, min_z = 0;
 enum State { setup, waiting, flying, completed, invalid };
@@ -160,8 +177,49 @@ mav_trajectory_generation::Trajectory get_scanning_trajectory(std::vector<Vector
 }
 
 
+void log_data_before_shutting_down(){
+    std::string ns = ros::this_node::getName();
+    airsim_ros_pkgs::profiling_data_srv profiling_data_srv_inst;
+
+    profiling_data_srv_inst.request.key = "mission_status";
+    profiling_data_srv_inst.request.value = (g_mission_status == "completed" ? 1.0: 0.0);
+    if (ros::service::waitForService("/record_profiling_data", 10)){ 
+        if(!ros::service::call("/record_profiling_data",profiling_data_srv_inst)){
+            ROS_ERROR_STREAM("could not probe data using stats manager");
+            ros::shutdown();
+        }
+    }
+    
+    profiling_data_srv_inst.request.key = "scanning_main_loop average time";
+    profiling_data_srv_inst.request.value = (((double)g_accumulate_loop_time)/1e9)/g_main_loop_ctr;
+    if (ros::service::waitForService("/record_profiling_data", 10)){ 
+        if(!ros::service::call("/record_profiling_data",profiling_data_srv_inst)){
+            ROS_ERROR_STREAM("could not probe data using stats manager");
+        }
+    }
+
+    profiling_data_srv_inst.request.key = "planning average time";
+    profiling_data_srv_inst.request.value = ((double)g_planning_time_acc/g_planning_ctr)/1e9;
+    if (ros::service::waitForService("/record_profiling_data", 10)){ 
+        if(!ros::service::call("/record_profiling_data",profiling_data_srv_inst)){
+            ROS_ERROR_STREAM("could not probe data using stats manager");
+            ros::shutdown();
+        }
+    }
+}
+
+void sigIntHandlerPrivate(int signo){
+    if (signo == SIGINT) {
+        log_data_before_shutting_down(); 
+        ros::shutdown();
+    }
+    exit(0);
+}
+
 int main(int argc, char ** argv)
 {
+    
+
 	// initialize ROS
 	ros::init(argc, argv, "scanning_node");
     ros::NodeHandle nh;
@@ -174,6 +232,21 @@ int main(int argc, char ** argv)
     std::vector<Vector3r> path; // piecewise vertices
     mav_trajectory_generation::Trajectory scanning_trajectory; //smoothed trajectory
     yaw_strategy_t yaw_strategy = face_forward;
+
+    //profiling
+        ros::Time start_hook_t, end_hook_t;
+        signal(SIGINT, sigIntHandlerPrivate);
+        ros::ServiceClient record_profiling_data_client = 
+          nh.serviceClient<airsim_ros_pkgs::profiling_data_srv>("/record_profiling_data");
+
+        ros::ServiceClient start_profiling_client = 
+          nh.serviceClient<airsim_ros_pkgs::start_profiling_srv>("/start_profiling");
+
+        airsim_ros_pkgs::start_profiling_srv start_profiling_srv_inst;
+        start_profiling_srv_inst.request.key = "";
+
+        ros::Time loop_start_t(0,0); 
+        ros::Time loop_end_t(0,0);
 
     // visualization setup
         visualization_msgs::Marker points, line_strip, line_list, drone_point;
@@ -237,9 +310,12 @@ int main(int argc, char ** argv)
     ros::Rate loop_rate(scanning_loop_rate);
     marker_pub.publish(drone_point);
 
+
     for (State state = setup; ros::ok(); ) {
         ros::spinOnce();
         State next_state = invalid;
+        loop_start_t = ros::Time::now();
+
         if(state == setup){
             get_goal(width, length, lanes, height);
             std::cout << width << " " << length << "    " << lanes << " " << height << endl;
@@ -248,9 +324,21 @@ int main(int argc, char ** argv)
             max_x = length;
             max_y = width;
             max_z = height*2;
+
+            airsim_ros_pkgs::profiling_data_srv profiling_data_srv_inst;
+            profiling_data_srv_inst.request.key = "start_profiling";
+            if (ros::service::waitForService("/record_profiling_data", 10)){ 
+                if(!record_profiling_data_client.call(profiling_data_srv_inst)){
+                    ROS_ERROR_STREAM("could not probe data using stats manager");
+                    ros::shutdown();
+                }
+            }
+           
             next_state = waiting;
         }
         else if(state == waiting){
+            start_hook_t = ros::Time::now(); 
+
             //simple path
             path = get_turn_points(width, length, lanes, height);
             path.insert(path.begin(),Vector3r(0,0,height));
@@ -262,6 +350,10 @@ int main(int argc, char ** argv)
             auto multiDof_trajectory = get_multiDOF_trajectory(scanning_trajectory);
             traject_t_trajectory = create_trajectory(multiDof_trajectory,true);
             cout << traject_t_trajectory.size() << endl;
+
+            end_hook_t = ros::Time::now(); 
+            g_planning_time_acc += ((end_hook_t - start_hook_t).toSec()*1e9);
+            g_planning_ctr++;
 
             // prepare visulization
                 for(int i = 0; i < traject_t_trajectory.size(); i++){
@@ -301,14 +393,43 @@ int main(int argc, char ** argv)
             next_state = trajectory_done(traject_t_trajectory) ? completed : flying;
         }
         else if (state == completed){
-            cout << "finish flying !" << endl;
+            ROS_INFO("scanned the entire space and returned successfully");
+
+            auto AllStates = airsim_ros_wrapper.getMultirotorState();
+            msr::airlib::TripStats g_end_stats;
+            g_end_stats = AllStates.getTripStats();
+            std::cout << "end_voltage: " << g_end_stats.voltage << "," << std::endl;
+            std::cout << "end StateOfCharge: " << g_end_stats.state_of_charge << std::endl;
+            std::cout << "rotor energy consumed: " << g_end_stats.energy_consumed << std::endl; 
+
             airsim_ros_wrapper.end();
-            return 0;
+
+            g_mission_status = "completed";
+            log_data_before_shutting_down();
+            //signal_supervisor(g_supervisor_mailbox, "kill"); 
+            ros::shutdown(); 
         }
         else if(state == invalid){
             cout << "invalid state !" << endl;
         }
         state = next_state;
+
+        if (clct_data){
+            if(!g_start_profiling) { 
+                if (ros::service::waitForService("/start_profiling", 10)){ 
+                    if(!start_profiling_client.call(start_profiling_srv_inst)){
+                        ROS_ERROR_STREAM("could not probe data using stats manager");
+                        ros::shutdown();
+                    }
+                    g_start_profiling = start_profiling_srv_inst.response.start; 
+                }
+            }
+            else{
+                loop_end_t = ros::Time::now(); 
+                g_accumulate_loop_time += (((loop_end_t - loop_start_t).toSec())*1e9);
+                g_main_loop_ctr++;
+            }
+        }
     }
 
 	return 0;

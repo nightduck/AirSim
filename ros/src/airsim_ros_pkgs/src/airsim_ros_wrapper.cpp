@@ -205,6 +205,10 @@ bool AirsimROSWrapper::set_yaw_at_z(int y, double z){
 }
 
 
+MultirotorState AirsimROSWrapper::getMultirotorState(){
+    return airsim_client_.getMultirotorState();
+}
+
 void AirsimROSWrapper::takeoff_jin()
 {
     float takeoffTimeout = 5;
