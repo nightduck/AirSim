@@ -90,15 +90,14 @@ private:
         }
 
 
-        //if (body.hasBattery()) { //only intrested in bodies with electrical constraints
+        if (body.hasBattery()) { //only intrested in bodies with electrical constraints
             auto P = p_estimator_.Estimate(body.getEnergyRotorSpecs(), current);
             body.getBattery()->update(dt, (float)P);
             body.updateDistanceTraveled(current.pose);
 
-            //body.updateEnergyConsumed(0.2 * float(dt));
             body.updateEnergyConsumed((float)P * float(dt));
             body.updateTime(dt);
-        //}
+        }
 
         body.setWrench(next_wrench);
         body.updateKinematics(next);

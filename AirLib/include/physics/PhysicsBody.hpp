@@ -31,23 +31,6 @@ public: //interface
 
     virtual EnergyRotorSpecs getEnergyRotorSpecs(){
         EnergyRotorSpecs energy_rotor_specs;  
-        // Settings& settings = Settings::singleton();
-
-        // Settings energy_model_settings;
-
-        // settings.getChild("EnergyModelSettings", energy_model_settings);
-
-        // energy_rotor_specs.set_mass(float(energy_model_settings.getFloat("mass", 0)));
-        // energy_rotor_specs.set_mass_coeff(float(energy_model_settings.getFloat("mass_coeff", 0)));
-        // energy_rotor_specs.set_vxy_coeff(float(energy_model_settings.getFloat("vxy_coeff", 0)));
-        // energy_rotor_specs.set_axy_coeff(float(energy_model_settings.getFloat("axy_coeff", 0)));
-        // energy_rotor_specs.set_vxy_axy_coeff(float(energy_model_settings.getFloat("vxy_axy_coeff", 0)));
-        // energy_rotor_specs.set_vz_coeff(float(energy_model_settings.getFloat("vz_coeff", 0)));
-        // energy_rotor_specs.set_az_coeff(float(energy_model_settings.getFloat("az_coeff", 0)));
-        // energy_rotor_specs.set_vz_az_coeff(float(energy_model_settings.getFloat("vz_az_coeff", 0)));
-        // energy_rotor_specs.set_one_coeff(float(energy_model_settings.getFloat("one_coeff", 0)));
-        // energy_rotor_specs.set_vxy_wxy_coeff(float(energy_model_settings.getFloat("vxy_wxy_coeff", 0)));
-
         return  energy_rotor_specs;
     }
 
