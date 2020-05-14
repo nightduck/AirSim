@@ -5,6 +5,7 @@
 #include <boost/foreach.hpp>
 #include <math.h>
 #include <stdio.h>
+#include <signal.h>
 #include "std_msgs/Bool.h"
 #include "common_mav.h"
 #include <mav_msgs/default_topics.h>    
@@ -15,6 +16,8 @@
 #include <airsim_ros_pkgs/multiDOF_array.h>
 #include <airsim_ros_pkgs/follow_trajectory_status_srv.h>
 #include <airsim_ros_pkgs/BoolPlusHeader.h>
+#include <airsim_ros_pkgs/profiling_data_srv.h>
+#include <airsim_ros_pkgs/start_profiling_srv.h>
 
 using namespace std;
 
@@ -43,6 +46,20 @@ bool g_got_new_trajectory = false;
 int traj_id = 0;
 
 
+// Profiling
+ros::Time g_recieved_traj_t;
+ros::Time col_coming_time_stamp;
+long long g_rcv_traj_to_follow_traj_acc_t = 0;
+bool prev_col_coming = false;
+bool DEBUG = false;
+bool CLCT_DATA = true;
+int g_follow_ctr = 0;
+long long g_img_to_follow_acc = 0;
+ros::Time g_msg_time_stamp;
+long long g_pt_cld_to_futurCol_commun_acc = 0;
+int g_traj_ctr = 0; 
+
+
 void slam_loss_callback (const std_msgs::Bool::ConstPtr& msg) {
     slam_lost = msg->data;
 }
@@ -58,6 +75,15 @@ void panic_velocity_callback(const geometry_msgs::Vector3::ConstPtr& msg) {
 
 void callback_trajectory(const airsim_ros_pkgs::multiDOF_array::ConstPtr& msg)
 {
+    if (CLCT_DATA){ 
+        g_recieved_traj_t = ros::Time::now();  
+        g_msg_time_stamp = msg->header.stamp;
+        if (g_msg_time_stamp.sec != 0) {  
+            g_pt_cld_to_futurCol_commun_acc += (ros::Time::now() - msg->header.stamp).toSec()*1e9;
+            g_traj_ctr++; 
+        } 
+    }
+
 	ROS_INFO("call back trajectory");
     if(!fly_back){
         normal_traj.clear(); 
@@ -159,6 +185,57 @@ void stop_fly_callback(const std_msgs::Bool::ConstPtr& msg){
     global_stop_fly = stop_fly_local;
 }
 
+
+void log_data_before_shutting_down(){
+    airsim_ros_pkgs::profiling_data_srv profiling_data_srv_inst;
+    profiling_data_srv_inst.request.key = "localization_status";
+    profiling_data_srv_inst.request.value = g_localization_status;
+    if (ros::service::waitForService("/record_profiling_data", 10)){ 
+        if(!ros::service::call("/record_profiling_data",profiling_data_srv_inst)){
+            ROS_ERROR_STREAM("could not probe data using stats manager");
+            ros::shutdown();
+        }
+    }
+
+    profiling_data_srv_inst.request.key = "img_to_follow_traj_commun_t";
+    profiling_data_srv_inst.request.value = (((double)g_pt_cld_to_futurCol_commun_acc)/1e9)/g_traj_ctr;
+    if (ros::service::waitForService("/record_profiling_data", 10)){ 
+        if(!ros::service::call("/record_profiling_data",profiling_data_srv_inst)){
+            ROS_ERROR_STREAM("could not probe data using stats manager");
+            ros::shutdown();
+        }
+    }
+    
+    profiling_data_srv_inst.request.key = "traj_rcv_to_follow";
+    profiling_data_srv_inst.request.value = (((double)g_rcv_traj_to_follow_traj_acc_t)/1e9)/g_follow_ctr;
+    if (ros::service::waitForService("/record_profiling_data", 10)){ 
+        if(!ros::service::call("/record_profiling_data",profiling_data_srv_inst)){
+            ROS_ERROR_STREAM("could not probe data using stats manager");
+            ros::shutdown();
+        }
+    }
+    
+    profiling_data_srv_inst.request.key = "image_to_follow_time";
+    profiling_data_srv_inst.request.value = (((double)g_img_to_follow_acc)/1e9)/g_follow_ctr;
+    if (ros::service::waitForService("/record_profiling_data", 10)){ 
+        if(!ros::service::call("/record_profiling_data",profiling_data_srv_inst)){
+            ROS_ERROR_STREAM("could not probe data using stats manager");
+            ros::shutdown();
+        }
+    }
+}
+
+
+void sigIntHandlerPrivate(int signo){
+    if (signo == SIGINT) {
+        log_data_before_shutting_down(); 
+        //signal_supervisor(g_supervisor_mailbox, "kill"); 
+        ros::shutdown();
+    }
+    exit(0);
+}
+
+
 int main(int argc, char **argv)
 {
 	ros::init(argc, argv, "follow_trajectory", ros::init_options::NoSigintHandler);
@@ -211,6 +288,7 @@ int main(int argc, char **argv)
     bool app_started = false;  //decides when the first planning has occured
                                //this allows us to activate all the
                                //functionaliy in follow_trajecotry accordingly
+
 
     yaw_strategy_t yaw_strategy = face_forward;
     
@@ -272,6 +350,18 @@ int main(int argc, char **argv)
         // make sure if new traj come, we do not conflict
         const int id_for_this_traj = traj_id;
         if(app_started && !global_stop_fly){
+
+            if (CLCT_DATA) { 
+                if (g_got_new_trajectory) {
+                    g_rcv_traj_to_follow_traj_acc_t +=  
+                        (ros::Time::now() - g_recieved_traj_t).toSec()*1e9;
+                    if (g_msg_time_stamp.sec != 0) {  
+                        g_img_to_follow_acc += (ros::Time::now() - g_msg_time_stamp).toSec()*1e9;
+                        g_follow_ctr++; 
+                    }
+                } 
+            }
+
             // Back up if no trajectory was found
             if (!forward_traj->empty()){
                 follow_trajectory(airsim_ros_wrapper, forward_traj, nullptr, yaw_strategy, check_position, g_v_max);
