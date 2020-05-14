@@ -1,6 +1,8 @@
 <launch>
 	<include file="$(find airsim_tutorial_pkgs)/launch/front_stereo_and_center_mono/front_stereo_and_center_mono.launch"/>
 
+	<node pkg="airsim_ros_pkgs" name="profile_manager" type="profile_manager"/>
+
  	<node pkg="airsim_ros_pkgs" name="scanning_node" type="scanning_node" output="screen" />
 
 	<node pkg="octomap_server" type="octomap_server_node" name="octomap_server">
