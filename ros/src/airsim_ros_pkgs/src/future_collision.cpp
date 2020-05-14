@@ -26,6 +26,8 @@
 
 //airsim
 #include "airsim_ros_wrapper.h"
+#include <airsim_ros_pkgs/profiling_data_srv.h>
+#include <airsim_ros_pkgs/start_profiling_srv.h>
 
 using namespace octomap_server;
 
@@ -41,8 +43,20 @@ typedef std::chrono::time_point<sys_clock> sys_clock_time_point;
 static const sys_clock_time_point never = sys_clock_time_point::min();
 
 // Profiling variables
+ros::Time start_hook_chk_col_t, end_hook_chk_col_t;                                          
+long long g_checking_collision_kernel_acc = 0;
+ros::Time g_checking_collision_t;
+long long g_future_collision_main_loop = 0;
+int g_check_collision_ctr = 0;
+double g_distance_to_collision_first_realized = 0;
+bool CLCT_DATA = true;
+bool DEBUG = false;
 ros::Time g_pt_cloud_header;    //this is used to figure out the octomap msg that 
                                 //collision was detected in
+long long g_pt_cloud_future_collision_acc = 0;
+int g_octomap_rcv_ctr = 0;
+ros::Duration g_pt_cloud_to_future_collision_t;
+
 
 // Global variables
 bool g_got_new_traj = false;
@@ -59,6 +73,14 @@ double drone_height__global = 0.6;
 double drone_radius__global = 1.5;
 
 AirsimROSWrapper* airsim_ros_wrapper_pointer;
+
+//Profiling
+int g_main_loop_ctr = 0;
+long long g_accumulate_loop_time = 0; //it is in ms
+long long g_pt_cld_to_octomap_commun_olverhead_acc = 0;
+
+long long octomap_integration_acc = 0;
+int octomap_ctr = 0;
 
 
 bool occupied(octomap::OcTree * octree, double x, double y, double z){
@@ -133,6 +155,13 @@ void pull_octomap(const octomap_msgs::Octomap& msg)
         ROS_ERROR("Octree could not be pulled.");
     }
 
+    if (CLCT_DATA){ 
+        g_pt_cloud_header = msg.header.stamp; 
+        
+        g_pt_cloud_future_collision_acc += (ros::Time::now() - g_pt_cloud_header).toSec()*1e9;
+        g_octomap_rcv_ctr++;
+    }
+
 }
 
 
@@ -157,6 +186,7 @@ void pull_traj(const traj_msg_t::ConstPtr& msg)
 
 bool check_for_collisions(AirsimROSWrapper& airsim_ros_wrapper, sys_clock_time_point& time_to_warn)
 {
+    start_hook_chk_col_t = ros::Time::now();
 
     if(traj_id != nextSteps_id){
         //ROS_INFO("traj_id and nextSteps_id doesn't match !");
@@ -215,6 +245,11 @@ bool check_for_collisions(AirsimROSWrapper& airsim_ros_wrapper, sys_clock_time_p
         ROS_INFO("collision coming !");
     }
     
+
+    end_hook_chk_col_t = ros::Time::now(); 
+    g_checking_collision_t = end_hook_chk_col_t;
+    g_checking_collision_kernel_acc += ((end_hook_chk_col_t - start_hook_chk_col_t).toSec()*1e9);
+    g_check_collision_ctr++;
     return col;
 }
 
@@ -232,11 +267,69 @@ void setup(){
     ros::param::get("/future_collision/drone_height", drone_height__global);
 }
 
+
+void log_data_before_shutting_down(){
+
+    std::string ns = ros::this_node::getName();
+    airsim_ros_pkgs::profiling_data_srv profiling_data_srv_inst;
+    
+    
+    profiling_data_srv_inst.request.key = "future_collision_kernel";
+    profiling_data_srv_inst.request.value = (((double)g_checking_collision_kernel_acc)/1e9)/g_check_collision_ctr;
+    if (ros::service::waitForService("/record_profiling_data", 10)){ 
+        if(!ros::service::call("/record_profiling_data",profiling_data_srv_inst)){
+            ROS_ERROR_STREAM("could not probe data using stats manager");
+            ros::shutdown();
+        }
+    }
+
+    profiling_data_srv_inst.request.key = "future_collision_main_loop";
+    profiling_data_srv_inst.request.value = (((double)g_future_collision_main_loop)/1e9)/g_check_collision_ctr;
+    if (ros::service::waitForService("/record_profiling_data", 10)){ 
+        if(!ros::service::call("/record_profiling_data",profiling_data_srv_inst)){
+            ROS_ERROR_STREAM("could not probe data using stats manager");
+            ros::shutdown();
+        }
+    }
+
+    profiling_data_srv_inst.request.key = "img_to_octomap_commun_t";
+    profiling_data_srv_inst.request.value = ((double)g_pt_cld_to_octomap_commun_olverhead_acc/1e9)/octomap_ctr;
+    if (ros::service::waitForService("/record_profiling_data", 10)){ 
+        if(!ros::service::call("/record_profiling_data",profiling_data_srv_inst)){
+            ROS_ERROR_STREAM("could not probe data using stats manager using octomap");
+            ros::shutdown();
+        }
+    }
+    
+    profiling_data_srv_inst.request.key = "octomap_integration";
+    profiling_data_srv_inst.request.value = (((double)octomap_integration_acc)/1e9)/octomap_ctr;
+    if (ros::service::waitForService("/record_profiling_data", 10)){ 
+        if(!ros::service::call("/record_profiling_data",profiling_data_srv_inst)){
+            ROS_ERROR_STREAM("could not probe data using stats manager using octomap");
+            ros::shutdown();
+        }
+    }
+
+    ROS_INFO_STREAM("done with the octomap profiles");
+}
+
+
+void sigIntHandlerPrivate(int signo){
+    if (signo == SIGINT) {
+        log_data_before_shutting_down(); 
+        ros::shutdown();
+    }
+    exit(0);
+}
+
+
 int main(int argc, char** argv)
 {
     ros::init(argc, argv, "future_collision", ros::init_options::NoSigintHandler);
     ros::NodeHandle n;
     ros::NodeHandle nh("~");
+    signal(SIGINT, sigIntHandlerPrivate);
+
     setup();
 
     AirsimROSWrapper airsim_ros_wrapperb(n, nh);
@@ -264,6 +357,7 @@ int main(int argc, char** argv)
 
     State state, next_state;
     next_state = state = checking_for_collision;
+    ros::Time main_loop_start_hook_t, main_loop_end_hook_t;
     
     // collision point visulization
         collision_point.header.frame_id = "world_enu";
@@ -287,9 +381,18 @@ int main(int argc, char** argv)
 
     ros::Rate loop_rate(60);
     while (ros::ok()) {
+        main_loop_start_hook_t = ros::Time::now();
+
         marker_pub.publish(collision_point);
 
         ros::spinOnce();
+
+        // if (CLCT_DATA){ 
+        //     g_pt_cloud_header = server.rcvd_point_cld_time_stamp; 
+        //     octomap_ctr = server.octomap_ctr;
+        //     octomap_integration_acc = server.octomap_integration_acc; 
+        //     g_pt_cld_to_octomap_commun_olverhead_acc = server.pt_cld_octomap_commun_overhead_acc;
+        // }
 
         // State machine 
         if (state == checking_for_collision) {
@@ -307,6 +410,14 @@ int main(int argc, char** argv)
             else if(collision_coming && this_traj_already_has_collision){
                 ROS_INFO("this one already has collision, not published");
             }
+
+            // Profiling 
+            if(CLCT_DATA){ 
+                g_pt_cloud_to_future_collision_t = start_hook_chk_col_t - g_pt_cloud_header;
+            } 
+            if(DEBUG) {
+                ROS_INFO_STREAM("pt cloud to start of checking collision in future collision"<< g_pt_cloud_to_future_collision_t);
+            }
         }else if (state == waiting_for_response) {
             if (g_got_new_traj){
                 next_state = checking_for_collision;
@@ -315,6 +426,9 @@ int main(int argc, char** argv)
         
         state = next_state;
         
+        main_loop_end_hook_t = ros::Time::now();
+        g_future_collision_main_loop += (main_loop_end_hook_t - main_loop_start_hook_t).toSec()*1e9; 
+
         loop_rate.sleep();
     }
 }
