@@ -1,0 +1,3 @@
+<launch>
+	<node pkg="cinematography" type="motion_planner" name="motion_planner" launch-prefix="xterm -e gdb --args"/>
+</launch>
