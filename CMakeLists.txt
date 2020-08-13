@@ -210,7 +210,7 @@ target_link_libraries(common_mav airsim_ros ${catkin_LIBRARIES} ${OpenCV_LIBS} y
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 add_executable(motion_planner src/motion_planner.cpp)
-target_link_libraries(motion_planner common_mav ${catkin_LIBRARIES} libompl.so ${OCTOMAP_LIBRARIES})
+target_link_libraries(motion_planner ${catkin_LIBRARIES} libompl.so ${OCTOMAP_LIBRARIES})
 add_dependencies(motion_planner ${catkin_EXPORTED_TARGETS})
 
 add_executable(follow_trajectory src/follow_trajectory_node.cpp)
@@ -259,6 +259,13 @@ add_dependencies(follow_trajectory ${catkin_EXPORTED_TARGETS})
 #   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
 #   RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
 # )
+install(TARGETS
+        #list of shared libraries
+        airsim_ros
+        pd_position_controller_simple
+        ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+        LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+        )
 
 ## Mark cpp header files for installation
 # install(DIRECTORY include/${PROJECT_NAME}/
@@ -266,6 +273,13 @@ add_dependencies(follow_trajectory ${catkin_EXPORTED_TARGETS})
 #   FILES_MATCHING PATTERN "*.h"
 #   PATTERN ".svn" EXCLUDE
 # )
+
+# for shipping binaries. run `$ catin_make install`
+install(DIRECTORY
+        launch
+        DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+        # PATTERN ".git" EXCLUDE
+        )
 
 ## Mark other files for installation (e.g. launch and bag files, etc.)
 # install(FILES

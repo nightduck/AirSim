@@ -21,8 +21,8 @@
 using namespace std;
 
 // add by feiyang jin
-	bool fly_back = false;
-    std_msgs::Bool fly_back_msg;
+	//bool fly_back = false;
+    //std_msgs::Bool fly_back_msg;
     bool global_stop_fly = false;
 
 bool slam_lost = false;
@@ -85,37 +85,19 @@ void panic_velocity_callback(const geometry_msgs::Vector3::ConstPtr& msg) {
 void callback_trajectory(const cinematography::multiDOF_array::ConstPtr& msg)
 {
 	ROS_INFO("call back trajectory");
-    if(!fly_back){
-        normal_traj.clear();
-        rev_normal_traj.clear();
-        for (auto point : msg->points){
-            multiDOFpoint traj_point;
-            traj_point.x = point.x;
-            traj_point.y = point.y;
-            traj_point.z = point.z;
-            traj_point.vx = point.vx;
-            traj_point.vy = point.vy;
-            traj_point.vz = point.vz;
-            traj_point.yaw = point.yaw;
-            traj_point.duration = point.duration;
-            normal_traj.push_back(traj_point);
-        }
-    }
-    else{
-        rev_normal_traj.clear();
-        normal_traj.clear();
-        for (auto point : msg->points){
-            multiDOFpoint traj_point;
-            traj_point.x = point.x;
-            traj_point.y = point.y;
-            traj_point.z = point.z;
-            traj_point.vx = point.vx;
-            traj_point.vy = point.vy;
-            traj_point.vz = point.vz;
-            traj_point.yaw = point.yaw;
-            traj_point.duration = point.duration;
-            rev_normal_traj.push_back(traj_point);
-        }
+    rev_normal_traj.clear();
+    normal_traj.clear();
+    for (auto point : msg->points){
+        multiDOFpoint traj_point;
+        traj_point.x = point.x;
+        traj_point.y = point.y;
+        traj_point.z = point.z;
+        traj_point.vx = point.vx;
+        traj_point.vy = point.vy;
+        traj_point.vz = point.vz;
+        traj_point.yaw = point.yaw;
+        traj_point.duration = point.duration;
+        rev_normal_traj.push_back(traj_point);
     }
 
     traj_id = msg->traj_id;
@@ -259,7 +241,7 @@ int main(int argc, char **argv)
         }
 
         
-        if ((!fly_back && normal_traj.size() > 0) || (fly_back && rev_normal_traj.size() > 0)) {
+        if (normal_traj.size() > 0) {
             app_started = true;
         }
 
@@ -269,32 +251,13 @@ int main(int argc, char **argv)
         if(app_started && !global_stop_fly){
             // Back up if no trajectory was found
             if (!forward_traj->empty()){
+                // NOTE: Profile here, see how long is spends following this trajectory
                 follow_trajectory(airsim_ros_wrapper, forward_traj, nullptr, yaw_strategy, check_position, g_v_max);
-            }
-            else {
-                follow_trajectory(airsim_ros_wrapper, rev_traj, nullptr, yaw_strategy, true, g_v_max);
-            }
-
-            if (forward_traj->size() > 0){
                 next_steps_pub.publish(next_steps_msg(*forward_traj,id_for_this_traj));
             }
-            else if(rev_traj->size() > 0){
-                next_steps_pub.publish(next_steps_msg(*rev_traj,id_for_this_traj));
+            else {
+                ROS_ERROR("!!! forward trajectory empty! Doing nothing");
             }
-        }
-
-
-        if(app_started && fly_back && trajectory_done(*rev_traj)){
-        	ROS_INFO_STREAM("mission completed");
-        	g_trajectory_done = true;
-            app_started = false;
-        }
-        else if (app_started && !fly_back && trajectory_done(*forward_traj)){
-            fly_back = true;
-            app_started = false;
-            g_trajectory_done = false;
-            ROS_INFO("front trajectory done");
-            loop_rate.sleep();
         }
 
         g_got_new_trajectory = false;
