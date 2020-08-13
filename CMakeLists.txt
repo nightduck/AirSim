@@ -1,6 +1,19 @@
 cmake_minimum_required(VERSION 3.0.2)
 project(cinematography)
 
+set(AIRSIM_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../../../AirSim/)
+set (common_utility_src ${AIRSIM_ROOT}/ros/src/common)
+
+add_subdirectory("${AIRSIM_ROOT}/cmake/rpclib_wrapper" rpclib_wrapper)
+add_subdirectory("${AIRSIM_ROOT}/cmake/AirLib" AirLib)
+add_subdirectory("${AIRSIM_ROOT}/cmake/MavLinkCom" MavLinkCom)
+
+set(CMAKE_CXX_STANDARD 11)
+
+
+set(RPC_LIB_INCLUDES " ${AIRSIM_ROOT}/external/rpclib/rpclib-2.2.1/include")
+set(RPC_LIB rpc) # name of .a file with lib prefix
+message(STATUS "found RPC_LIB_INCLUDES=${RPC_LIB_INCLUDES}")
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -24,7 +37,6 @@ find_package(catkin REQUIRED COMPONENTS
         cv_bridge
         image_transport
         mavros_msgs
-        message_generation
         nav_msgs
         # nodelet
         roscpp
@@ -32,6 +44,7 @@ find_package(catkin REQUIRED COMPONENTS
         sensor_msgs
         std_msgs
         std_srvs
+        message_generation
         tf2
         tf2_ros
         mav_trajectory_generation
@@ -71,15 +84,32 @@ find_package(catkin REQUIRED COMPONENTS
 ##   * uncomment the generate_messages entry below
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
-## Generate messages in the 'msg' folder
- add_message_files(
-   FILES
-   drone_state.msg
- )
+# Generate messages in the 'msg' folder
+add_message_files(
+        FILES
+        GimbalAngleEulerCmd.msg
+        GimbalAngleQuatCmd.msg
+        GPSYaw.msg
+        VelCmd.msg
+        VelCmdGroup.msg
+        multiDOF.msg
+        multiDOF_array.msg
+        BoolPlusHeader.msg
+)
 
 add_service_files(
         FILES
+        SetGPSPosition.srv
+        Takeoff.srv
+        TakeoffGroup.srv
+        Land.srv
+        LandGroup.srv
+        Reset.srv
+        SetLocalPosition.srv
         get_trajectory.srv
+        follow_trajectory_status_srv.srv
+        profiling_data_srv.srv
+        start_profiling_srv.srv
 )
 
 ## Generate actions in the 'action' folder
@@ -90,14 +120,12 @@ add_service_files(
 # )
 
 ## Generate added messages and services with any dependencies listed here
- generate_messages(
-   DEPENDENCIES
-   geometry_msgs
-   nav_msgs
-   std_msgs
-   trajectory_msgs
-   visualization_msgs
- )
+generate_messages(
+        DEPENDENCIES
+        std_msgs
+        geometry_msgs
+        trajectory_msgs
+)
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -129,9 +157,9 @@ add_service_files(
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-  INCLUDE_DIRS include
+		#INCLUDE_DIRS include
 #  LIBRARIES cinematography
-  CATKIN_DEPENDS geometry_msgs nav_msgs roscpp rospy std_msgs trajectory_msgs
+  CATKIN_DEPENDS message_runtime geometry_msgs nav_msgs roscpp rospy std_msgs trajectory_msgs
 #  DEPENDS system_lib
 )
 
@@ -142,14 +170,36 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-  include
-  ${catkin_INCLUDE_DIRS}
+		include
+        ${catkin_INCLUDE_DIRS}
+        ${AIRSIM_ROOT}/AirLib/deps/eigen3
+        ${AIRSIM_ROOT}/AirLib/include
+        ${RPC_LIB_INCLUDES}
+        ${AIRSIM_ROOT}/MavLinkCom/include
+        ${AIRSIM_ROOT}/MavLinkCom/common_utils
+        ${OpenCV_INCLUDE_DIRS}
+        ${Boost_INCLUDE_DIRS}
+        ${common_utility_src}
 )
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
 #   src/${PROJECT_NAME}/cinematography.cpp
 # )
+add_library(airsim_settings_parser src/airsim_settings_parser.cpp)
+target_link_libraries(airsim_settings_parser ${catkin_LIBRARIES} AirLib)
+
+add_library(pd_position_controller_simple src/pd_position_controller_simple.cpp)
+add_dependencies(pd_position_controller_simple ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(pd_position_controller_simple ${catkin_EXPORTED_TARGETS})
+
+add_library(airsim_ros src/airsim_ros_wrapper.cpp)
+add_dependencies(airsim_ros ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(airsim_ros ${catkin_LIBRARIES} ${OpenCV_LIBS} yaml-cpp AirLib airsim_settings_parser)
+
+# library created by feiyang jin
+add_library(common_mav src/common_mav.cpp)
+target_link_libraries(common_mav airsim_ros ${catkin_LIBRARIES} ${OpenCV_LIBS} yaml-cpp AirLib airsim_settings_parser)
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
@@ -160,7 +210,12 @@ include_directories(
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 add_executable(motion_planner src/motion_planner.cpp)
-target_link_libraries(motion_planner ${catkin_LIBRARIES} libompl.so ${OCTOMAP_LIBRARIES})
+target_link_libraries(motion_planner common_mav ${catkin_LIBRARIES} libompl.so ${OCTOMAP_LIBRARIES})
+add_dependencies(motion_planner ${catkin_EXPORTED_TARGETS})
+
+add_executable(follow_trajectory src/follow_trajectory_node.cpp)
+target_link_libraries(follow_trajectory ${catkin_LIBRARIES} AirLib common_mav)
+add_dependencies(follow_trajectory ${catkin_EXPORTED_TARGETS})
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the

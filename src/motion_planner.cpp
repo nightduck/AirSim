@@ -15,10 +15,11 @@
 #include <boost/range/combine.hpp>
 
 // My headers
-//#include "common_mav.h"
+#include "common_mav.h"
 #include "graph.h"
 #include "cinematography/get_trajectory.h"
 #include "cinematography/drone_state.h"
+#include "cinematography/multiDOF_array.h"
 #include "visualization_msgs/Marker.h"
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2/LinearMath/Vector3.h>
@@ -76,7 +77,7 @@ float g_planning_budget = 4;
 std::string motion_planning_core_str;
 
 octomap::OcTree * octree = nullptr;
-trajectory_msgs::MultiDOFJointTrajectory traj_topic;
+cinematography::multiDOF_array traj_topic;
 bool g_requested_trajectory = false;
 bool path_found = false;
 
@@ -100,7 +101,7 @@ smooth_trajectory smoothen_the_shortest_path(piecewise_trajectory& piecewise_pat
 
 
 // ***F:DN Build the response to the service from the smooth_path
-trajectory_msgs::MultiDOFJointTrajectory create_traj_msg(smooth_trajectory& smooth_path);
+cinematography::multiDOF_array create_traj_msg(smooth_trajectory& smooth_path);
 
 
 // ***F:DN Use the PRM sampling method to find a piecewise path
@@ -385,117 +386,114 @@ void print_rviz_traj(trajectory_msgs::MultiDOFJointTrajectory path, std::string 
         rviz_path.poses.push_back(p);
     }
 
-
-//    visualization_msgs::Marker rviz_path = visualization_msgs::Marker();
-//    rviz_path.header.seq = 0;
-//    rviz_path.header.stamp = ros::Time::now();
-//    rviz_path.header.frame_id = "world_enu";
-//    rviz_path.ns = name;
-//    rviz_path.id = 0;
-//    rviz_path.type = visualization_msgs::Marker::POINTS;
-//    rviz_path.action = visualization_msgs::Marker::ADD;
-//    rviz_path.pose.orientation.w = 1.0;
-//    rviz_path.scale.x = 0.2;
-//    rviz_path.scale.y = 0.2;
-//    rviz_path.color.g = 1.0f;
-//    rviz_path.color.a = 1.0;
-//    rviz_path.points.reserve(path.points.size());
-//    for(trajectory_msgs::MultiDOFJointTrajectoryPoint n : path.points) {
-//        geometry_msgs::Point p;
-//        p.x = n.transforms.data()->translation.x;
-//        p.y = n.transforms.data()->translation.y;
-//        p.z = n.transforms.data()->translation.z;
-//        rviz_path.points.push_back(p);
-//    }
     rviz_pose_pub.publish(rviz_path);
 }
 
-piecewise_trajectory calc_ideal_drone_traj(trajectory_msgs::MultiDOFJointTrajectory actor_traj) {
-    piecewise_trajectory drone_traj;
-    drone_traj.reserve(actor_traj.points.size());
+void print_rviz_traj(cinematography::multiDOF_array path, std::string name) {
+    geometry_msgs::PoseArray rviz_path = geometry_msgs::PoseArray();
+    rviz_path.header.seq = 0;
+    rviz_path.header.stamp = ros::Time::now();
+    rviz_path.header.frame_id = "world_enu";
+    rviz_path.poses.reserve(path.points.size());
+    for(cinematography::multiDOF n : path.points) {
+        geometry_msgs::Pose p;
+        p.orientation = tf2::toMsg(tf2::Quaternion(0, 0, sin(n.yaw / 2), cos(n.yaw / 2)));
+        p.position.x = n.x;
+        p.position.y = n.y;
+        p.position.z = n.z;
+        rviz_path.poses.push_back(p);
+    }
 
-    // Calculate a unit quaternion based on heading and azimuth of drone, then incorporate the viewing distance
-    tf2::Quaternion viewport_position_relative;
-    viewport_position_relative.setW(std::cos(viewport_azimuth/2) * std::cos(viewport_heading/2));
-    viewport_position_relative.setY(std::sin(viewport_azimuth/2) * std::cos(viewport_heading/2) * -1);
-    viewport_position_relative.setZ(std::cos(viewport_azimuth/2) * std::sin(viewport_heading/2));
-    viewport_position_relative
-        = viewport_position_relative * tf2::Quaternion(viewport_distance,0,0,0) * viewport_position_relative.inverse();
+    rviz_pose_pub.publish(rviz_path);
+}
+
+cinematography::multiDOF_array calc_ideal_drone_traj(cinematography::multiDOF_array actor_traj) {
+    cinematography::multiDOF_array drone_traj;
+    drone_traj.points.reserve(actor_traj.points.size());
+
+//    // Calculate a unit quaternion based on heading and azimuth of drone, then incorporate the viewing distance
+//    tf2::Quaternion viewport_position_relative;
+//    viewport_position_relative.setW(std::cos(viewport_azimuth/2) * std::cos(viewport_heading/2));
+//    viewport_position_relative.setY(std::sin(viewport_azimuth/2) * std::cos(viewport_heading/2) * -1);
+//    viewport_position_relative.setZ(std::cos(viewport_azimuth/2) * std::sin(viewport_heading/2));
+//    viewport_position_relative
+//        = viewport_position_relative * tf2::Quaternion(viewport_distance,0,0,0) * viewport_position_relative.inverse();
+
+    float horiz_dist = cos(viewport_azimuth) * viewport_distance;
+    float height = sin(viewport_azimuth) * viewport_distance;
 
     // For each point in the actor's trajectory...
-    for (trajectory_msgs::MultiDOFJointTrajectoryPoint point : actor_traj.points) {
-        graph::node n;
+    for (cinematography::multiDOF point : actor_traj.points) {
+        cinematography::multiDOF n;
 
-        // Get the actor's orientation, and rotate the drone's position relative to that heading
-        tf2::Quaternion actor_orientation;
-        tf2::convert(point.transforms.data()->rotation, actor_orientation);
-        tf2::Quaternion p = actor_orientation * viewport_position_relative * actor_orientation.inverse();
+//        // Get the actor's orientation, and rotate the drone's position relative to that heading
+//        tf2::Quaternion actor_orientation = tf2::Quaternion(0, 0, sin(2*point.yaw), cos(2*point.yaw));
+//        tf2::Quaternion p = actor_orientation * viewport_position_relative * actor_orientation.inverse();
 
         // Center p on the actor to get the drone's ideal coordinates
-        n.x = point.transforms[0].translation.x + p.getX();
-        n.y = point.transforms[0].translation.y + p.getY();
-        n.z = point.transforms[0].translation.z + p.getZ();
-        drone_traj.push_back(n);
+        n.x = point.x + cos(viewport_heading + point.yaw) * horiz_dist;
+        n.y = point.y + sin(viewport_heading + point.yaw) * horiz_dist;
+        n.z = point.z + height;
+        n.yaw = point.yaw + PI + viewport_heading;
+        if (n.yaw > PI) {
+            n.yaw -= 2 * PI;
+        }
+        drone_traj.points.push_back(n);
     }
     return drone_traj;
 }
 
-void face_actor(trajectory_msgs::MultiDOFJointTrajectory& drone_traj, const trajectory_msgs::MultiDOFJointTrajectory& actor_traj) {
+void face_actor(cinematography::multiDOF_array& drone_traj, const cinematography::multiDOF_array& actor_traj) {
     if (drone_traj.points.size() != actor_traj.points.size()) {
         ROS_ERROR("Cannot face actor. Two trajectories don't match in number of points");
     }
 
-    vector<trajectory_msgs::MultiDOFJointTrajectoryPoint>::iterator dit = drone_traj.points.begin();
-    vector<trajectory_msgs::MultiDOFJointTrajectoryPoint>::const_iterator ait = actor_traj.points.begin();
+    std::vector<cinematography::multiDOF>::iterator dit = drone_traj.points.begin();
+    std::vector<cinematography::multiDOF>::const_iterator ait = actor_traj.points.begin();
 
+    double d_time = dit->duration, a_time = 0;
     for(; ait < actor_traj.points.end(); ait++) {
+        a_time = ait->duration;
+
         // There will be more drone points than actor points. Match each drone point to the most recent actor point.
-        while(dit->time_from_start < ait->time_from_start) {
-            // Convert point's position to tf2 for math
-            tf2::Vector3 d_pos, a_pos;
-            tf2::convert(dit->transforms.data()->translation, d_pos);
-            tf2::convert(ait->transforms.data()->translation, a_pos);
+        while(d_time < a_time) {
+//            // Convert point's position to tf2 for math
+//            tf2::Vector3 d_pos, a_pos;
+//            tf2::convert(dit->transforms.data()->translation, d_pos);
+//            tf2::convert(ait->transforms.data()->translation, a_pos);
+//
+//            // Calculate the rotation from forward facing to facing the actor
+//            tf2::Vector3 diff = a_pos - d_pos;
+//            tf2::Vector3 forward = tf2::Vector3(0,1,0);
+//            tf2::Quaternion orient = tf2::shortestArcQuatNormalize2(forward, diff);
+//
+//            // Rebuild the transform and put it back in the drone trajectory
+////            geometry_msgs::Transform t;
+////            t.translation = tf2::toMsg(d_pos);
+//            dit->transforms[0].rotation = tf2::toMsg(orient);
+//            //dit->transforms.push_back(t);
 
-            // Calculate the rotation from forward facing to facing the actor
-            tf2::Vector3 diff = a_pos - d_pos;
-            tf2::Vector3 forward = tf2::Vector3(0,1,0);
-            tf2::Quaternion orient = tf2::shortestArcQuatNormalize2(forward, diff);
+            // Get the vector difference (just x and y, since we only care about the yaw of the drone)
+            tf2::Vector3 diff = tf2::Vector3(ait->x, ait->y, 0) - tf2::Vector3(dit->x, dit->y, 0);
 
-            // Rebuild the transform and put it back in the drone trajectory
-//            geometry_msgs::Transform t;
-//            t.translation = tf2::toMsg(d_pos);
-            dit->transforms[0].rotation = tf2::toMsg(orient);
-            //dit->transforms.push_back(t);
+            // Get the angle
+            double angle = atan(diff.y() / diff.x());
+
+            // Double check which cartesian quadrant you're in and add/subtract a 180 offset if necessary
+            if (diff.x() < 0) {
+                if (diff.y() < 0) {
+                    angle -= PI;
+                } else {
+                    angle += PI;
+                }
+            }
 
             // Get the next drone point
             dit++;
+            d_time = dit->duration;
         }
 
     }
-
-//    for(auto tup : boost::combine(drone_traj.points, actor_traj.points)) {
-//        // Get the position vectors for corresponding drone and actor points. Convert to tf2 library for math-ing
-//        trajectory_msgs::MultiDOFJointTrajectoryPoint d, a;
-//        tf2::Vector3 d_pos, a_pos;
-//        boost::tie(d, a) = tup;
-//        tf2::convert(d.transforms.data()->translation, d_pos);
-//        tf2::convert(a.transforms.data()->translation, a_pos);
-//
-//        tf2::Vector3 diff = a_pos - d_pos;
-//        tf2::Vector3 cross = tf2::tf2Cross(diff, tf2::Vector3(0,1,0));
-//        tf2::Vector3 forward = tf2::Vector3(0,1,0);
-//
-//        tf2::Quaternion orient = tf2::shortestArcQuatNormalize2(forward, diff);
-//
-//        d.transforms.data()[0].rotation = tf2::toMsg(orient);
-//    }
-
-    /* for p, q in drone_traj, actor_traj:
-     *      diff = q - p
-     *      cross = cross_product(diff, <0,1,0>)
-     *      quaternion orient<x,y,z,w> = <cross.x * sin(angle(diff, <0,1,0>)/2), cross.y * sin(angle(diff, <0,1,0>)/2), cross.z * sin(angle(diff, <0,1,0>)/2), cos(angle(diff, <0,1,0>)/2)>
-     *      p.rotation = orient
-     */
 
     return;
 }
@@ -602,7 +600,7 @@ smooth_trajectory smoothen_the_shortest_path(piecewise_trajectory& piecewise_pat
 
 
 //bool get_trajectory_fun(cinematography::get_trajectory::Request &req, cinematography::get_trajectory::Response &res)
-void get_actor_trajectory(const trajectory_msgs::MultiDOFJointTrajectory& actor_traj)
+void get_actor_trajectory(const cinematography::multiDOF_array& actor_traj)
 {
     if (actor_traj.points.size() == 0) {
         ROS_ERROR("Received empty actor path");
@@ -611,7 +609,7 @@ void get_actor_trajectory(const trajectory_msgs::MultiDOFJointTrajectory& actor_
 
     print_rviz_traj(actor_traj, "actor_traj");
 
-    piecewise_trajectory piecewise_path;
+    cinematography::multiDOF_array ideal_path;
     smooth_trajectory smooth_path;
 
     geometry_msgs::Point start;
@@ -619,37 +617,24 @@ void get_actor_trajectory(const trajectory_msgs::MultiDOFJointTrajectory& actor_
     start.y += twist.linear.y*g_planning_budget;
     start.z += twist.linear.z*g_planning_budget;
 
-    piecewise_path = calc_ideal_drone_traj(actor_traj);
+    ideal_path = calc_ideal_drone_traj(actor_traj);
 
-    print_rviz_traj(piecewise_path, "drone_traj");
+    print_rviz_traj(ideal_path, "drone_traj");
 
-    //Smoothen the path and build the multiDOFtrajectory response
-    smooth_path = smoothen_the_shortest_path(piecewise_path, octree, 
-                                    Eigen::Vector3d(twist.linear.x,
-                                        twist.linear.y,
-                                        twist.linear.z),
-                                    Eigen::Vector3d(acceleration.linear.x,
-                                                    acceleration.linear.y,
-                                                    acceleration.linear.z));
-
-    traj_topic = create_traj_msg(smooth_path);
-    print_rviz_traj(traj_topic, "smooth_traj");
-    face_actor(traj_topic, actor_traj);
-
-    print_rviz_traj(traj_topic, "final_traj");
+    // TODO: Put in artificial load here to simulate optimizing
 
     // Publish the trajectory (for debugging purposes)
-    traj_topic.header.stamp = ros::Time::now();
+    ideal_path.header.stamp = ros::Time::now();
     path_found = true;
 
-    traj_pub.publish(traj_topic);
+    traj_pub.publish(ideal_path);
 }
 
 
-trajectory_msgs::MultiDOFJointTrajectory create_traj_msg(smooth_trajectory& smooth_path)
+cinematography::multiDOF_array create_traj_msg(smooth_trajectory& smooth_path)
 {
     const double safe_radius = 1.0;
-    trajectory_msgs::MultiDOFJointTrajectory multiDOFtrajectory = trajectory_msgs::MultiDOFJointTrajectory();
+    cinematography::multiDOF_array multiDOFtrajectory = cinematography::multiDOF_array();
 
     multiDOFtrajectory.header.seq = 0;
     multiDOFtrajectory.header.stamp = ros::Time::now(); //DEBUGGING. Should be 0
@@ -663,48 +648,43 @@ trajectory_msgs::MultiDOFJointTrajectory create_traj_msg(smooth_trajectory& smoo
     // Get starting position
     graph::node start = {states[0].position_W.x(), states[0].position_W.y(), states[0].position_W.z()};
 
-    // Convert sampled trajectory points to MultiDOFJointTrajectory response
-    multiDOFtrajectory.joint_names.push_back("base");
+//    // Convert sampled trajectory points to MultiDOFJointTrajectory response
+//    multiDOFtrajectory.joint_names.push_back("base");
 
     int state_index = 0;
 
     for (const auto& s : states) {
-      trajectory_msgs::MultiDOFJointTrajectoryPoint point;
+        cinematography::multiDOF point;
 
-      geometry_msgs::Transform pos;
-      graph::node current;
+        geometry_msgs::Transform pos;
+        graph::node current;
 
-      pos.translation.x = current.x = s.position_W.x();
-      pos.translation.y = current.y = s.position_W.y();
-      pos.translation.z = current.z = s.position_W.z();
+        point.x = current.x = s.position_W.x();
+        point.y = current.y = s.position_W.y();
+        point.z = current.z = s.position_W.z();
 
-      geometry_msgs::Twist vel;
-      vel.linear.x = s.velocity_W.x();
-      vel.linear.y = s.velocity_W.y();
-      vel.linear.z = s.velocity_W.z();
+        geometry_msgs::Twist vel;
+        point.vx = s.velocity_W.x();
+        point.vy = s.velocity_W.y();
+        point.vz = s.velocity_W.z();
 
-      geometry_msgs::Twist acc;
-      acc.linear.x = s.acceleration_W.x();
-      acc.linear.y = s.acceleration_W.y();
-      acc.linear.z = s.acceleration_W.z();
+        geometry_msgs::Twist acc;
+        point.ax = s.acceleration_W.x();
+        point.ay = s.acceleration_W.y();
+        point.az = s.acceleration_W.z();
 
-      ros::Duration dur(float(s.time_from_start_ns) / 1e9);
+        ros::Duration dur(float(s.time_from_start_ns) / 1e9);
 
-      point.transforms.push_back(pos);
-      point.velocities.push_back(vel);
-      point.accelerations.push_back(acc);
-      point.time_from_start = dur;
+        // if (res.unknown != -1 &&
+        //         !known(octree, current.x, current.y, current.z)
+        //         && dist(start, current) > safe_radius) {
+        //     ROS_WARN("Trajectory enters unknown space.");
+        //     res.unknown = state_index;
+        // }
 
-      // if (res.unknown != -1 &&
-      //         !known(octree, current.x, current.y, current.z)
-      //         && dist(start, current) > safe_radius) {
-      //     ROS_WARN("Trajectory enters unknown space.");
-      //     res.unknown = state_index;
-      // }
+        multiDOFtrajectory.points.push_back(point);
 
-      multiDOFtrajectory.points.push_back(point);
-          
-      state_index++;
+        state_index++;
     }
 
     return multiDOFtrajectory;
@@ -757,7 +737,7 @@ int main(int argc, char ** argv)
     ros::Subscriber actor_traj_sub = nh.subscribe("actor_traj", 1, get_actor_trajectory);
     ros::Subscriber octomap_sub = nh.subscribe("octomap_binary", 1, generate_octomap);
     ros::Subscriber drone_state_sub = nh.subscribe("drone_state", 1, get_drone_state);
-    traj_pub = nh.advertise<trajectory_msgs::MultiDOFJointTrajectory>("multidoftraj", 1);
+    traj_pub = nh.advertise<cinematography::multiDOF_array>("multidoftraj", 1);
     rviz_pub = nh.advertise<visualization_msgs::Marker>("scanning_visualization_marker", 1);
     rviz_pose_pub = nh.advertise<geometry_msgs::PoseArray>("poses", 1);
 
