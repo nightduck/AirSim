@@ -627,6 +627,8 @@ void get_actor_trajectory(const cinematography::multiDOF_array& actor_traj)
     ideal_path.header.stamp = ros::Time::now();
     path_found = true;
 
+    ROS_INFO("Publishing drone trajectory");
+
     traj_pub.publish(ideal_path);
 }
 

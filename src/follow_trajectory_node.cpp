@@ -45,9 +45,7 @@ bool g_got_new_trajectory = false;
 
 int traj_id = 0;
 
-ros::NodeHandle n;
-ros::NodeHandle n_private("~");
-AirsimROSWrapper airsim_ros_wrapper(n, n_private);
+AirsimROSWrapper* airsim_ros_wrapper;
 
 void slam_loss_callback (const std_msgs::Bool::ConstPtr& msg) {
     slam_lost = msg->data;
@@ -56,7 +54,7 @@ void slam_loss_callback (const std_msgs::Bool::ConstPtr& msg) {
     if (slam_lost) {
         ROS_WARN("SLAM lost!");
         if (!created_slam_loss_traj)
-            slam_loss_traj = create_slam_loss_trajectory(airsim_ros_wrapper, normal_traj, rev_normal_traj);
+            slam_loss_traj = create_slam_loss_trajectory(*airsim_ros_wrapper, normal_traj, rev_normal_traj);
         created_slam_loss_traj = true;
     }
     else {
@@ -73,7 +71,7 @@ void panic_callback(const std_msgs::Bool::ConstPtr& msg) {
     ROS_INFO("Panicking!");
     ROS_INFO("Panicking!");
 
-    panic_traj = create_panic_trajectory(airsim_ros_wrapper, panic_velocity);
+    panic_traj = create_panic_trajectory(*airsim_ros_wrapper, panic_velocity);
     normal_traj.clear(); // Replan a path once we're done
 }
 
@@ -170,19 +168,22 @@ void stop_fly_callback(const std_msgs::Bool::ConstPtr& msg){
 int main(int argc, char **argv)
 {
 	ros::init(argc, argv, "follow_trajectory", ros::init_options::NoSigintHandler);
+    ros::NodeHandle n;
+    ros::NodeHandle n_private("~");
+    airsim_ros_wrapper = new AirsimROSWrapper(n, n_private);
 
     // airsim setup
-        if (airsim_ros_wrapper.is_used_img_timer_cb_queue_)
+        if (airsim_ros_wrapper->is_used_img_timer_cb_queue_)
         {
-            airsim_ros_wrapper.img_async_spinner_.start();
+            airsim_ros_wrapper->img_async_spinner_.start();
         }
 
-        if (airsim_ros_wrapper.is_used_lidar_timer_cb_queue_)
+        if (airsim_ros_wrapper->is_used_lidar_timer_cb_queue_)
         {
-            airsim_ros_wrapper.lidar_async_spinner_.start();
+            airsim_ros_wrapper->lidar_async_spinner_.start();
         }
 
-    airsim_ros_wrapper.takeoff_jin();
+    airsim_ros_wrapper->takeoff_jin();
 
     //variable
 	    std::string localization_method; 
@@ -213,7 +214,7 @@ int main(int argc, char **argv)
                                //this allows us to activate all the
                                //functionaliy in follow_trajecotry accordingly
 
-    yaw_strategy_t yaw_strategy = face_forward;
+    yaw_strategy_t yaw_strategy = ignore_yaw;
     
     while (ros::ok()) {
         
@@ -229,7 +230,7 @@ int main(int argc, char **argv)
             forward_traj = &panic_traj;
             rev_traj = nullptr;
             check_position = false;
-            yaw_strategy = ignore_yaw;
+            yaw_strategy = follow_yaw;
         } else if (!slam_loss_traj.empty()) {
             forward_traj = &slam_loss_traj;
             rev_traj = &normal_traj;
@@ -252,7 +253,7 @@ int main(int argc, char **argv)
             // Back up if no trajectory was found
             if (!forward_traj->empty()){
                 // NOTE: Profile here, see how long is spends following this trajectory
-                follow_trajectory(airsim_ros_wrapper, forward_traj, nullptr, yaw_strategy, check_position, g_v_max);
+                follow_trajectory(*airsim_ros_wrapper, forward_traj, nullptr, yaw_strategy, check_position, g_v_max);
                 next_steps_pub.publish(next_steps_msg(*forward_traj,id_for_this_traj));
             }
             else {
