@@ -18,15 +18,24 @@
 #include <trajectory_msgs/MultiDOFJointTrajectory.h>
 #include <trajectory_msgs/MultiDOFJointTrajectoryPoint.h>
 
+#define FREQ 5
+#define MARGIN 0.01     // Used as a margin of error to prevent the call to follow_trajectory from going over the node's period
+#define likely(x)      __builtin_expect(!!(x), 1)
+#define unlikely(x)    __builtin_expect(!!(x), 0)
+
 using namespace std;
 
 // add by feiyang jin
 	//bool fly_back = false;
     //std_msgs::Bool fly_back_msg;
     bool global_stop_fly = false;
+    bool stopped = true;
 
 bool slam_lost = false;
 bool created_slam_loss_traj = false;
+bool copy_slam_loss_traj = false;
+bool copy_panic_traj = false;
+bool copy_normal_traj = false;
 
 trajectory_t normal_traj;
 trajectory_t rev_normal_traj;
@@ -41,7 +50,6 @@ bool g_trajectory_done;
 
 bool should_panic = false;
 geometry_msgs::Vector3 panic_velocity;
-bool g_got_new_trajectory = false;
 
 int traj_id = 0;
 
@@ -53,8 +61,10 @@ void slam_loss_callback (const std_msgs::Bool::ConstPtr& msg) {
     // slam lost
     if (slam_lost) {
         ROS_WARN("SLAM lost!");
-        if (!created_slam_loss_traj)
+        if (!created_slam_loss_traj) {
             slam_loss_traj = create_slam_loss_trajectory(*airsim_ros_wrapper, normal_traj, rev_normal_traj);
+            copy_slam_loss_traj = true;
+        }
         created_slam_loss_traj = true;
     }
     else {
@@ -66,13 +76,15 @@ void slam_loss_callback (const std_msgs::Bool::ConstPtr& msg) {
 void panic_callback(const std_msgs::Bool::ConstPtr& msg) {
     should_panic = msg->data;
 
-    ROS_INFO("Panicking!");
-    ROS_INFO("Panicking!");
-    ROS_INFO("Panicking!");
-    ROS_INFO("Panicking!");
+    if (should_panic) {
+        ROS_INFO("Panicking!");
+        ROS_INFO("Panicking!");
+        ROS_INFO("Panicking!");
+        ROS_INFO("Panicking!");
 
-    panic_traj = create_panic_trajectory(*airsim_ros_wrapper, panic_velocity);
-    normal_traj.clear(); // Replan a path once we're done
+        panic_traj = create_panic_trajectory(*airsim_ros_wrapper, panic_velocity);
+        normal_traj.clear(); // Replan a path once we're done
+    }
 }
 
 void panic_velocity_callback(const geometry_msgs::Vector3::ConstPtr& msg) {
@@ -83,8 +95,8 @@ void panic_velocity_callback(const geometry_msgs::Vector3::ConstPtr& msg) {
 void callback_trajectory(const cinematography::multiDOF_array::ConstPtr& msg)
 {
 	ROS_INFO("call back trajectory");
-    rev_normal_traj.clear();
     normal_traj.clear();
+    rev_normal_traj.clear();
     for (auto point : msg->points){
         multiDOFpoint traj_point;
         traj_point.x = point.x;
@@ -95,12 +107,12 @@ void callback_trajectory(const cinematography::multiDOF_array::ConstPtr& msg)
         traj_point.vz = point.vz;
         traj_point.yaw = point.yaw;
         traj_point.duration = point.duration;
-        rev_normal_traj.push_back(traj_point);
+        normal_traj.push_back(traj_point);
     }
 
     traj_id = msg->traj_id;
 
-    g_got_new_trajectory = true; 
+    copy_normal_traj = true;
 }
 
 
@@ -151,7 +163,7 @@ cinematography::multiDOF_array next_steps_msg(const trajectory_t& traj, const in
         point_msg.az = point.az;
         point_msg.yaw = point.yaw;
         point_msg.duration = point.duration;
-        array_of_point_msg.points.push_back(point_msg); 
+        array_of_point_msg.points.push_back(point_msg);
     }
 
     array_of_point_msg.traj_id = true_id;
@@ -192,77 +204,114 @@ int main(int argc, char **argv)
 	    float cur_z, last_z = -9999;
 	    bool created_future_col_traj = false;
 	    trajectory_t future_col_traj;
-	    ros::Rate loop_rate(50);
+	    ros::Rate loop_rate(FREQ);     // NOTE: Set to frequency of trajectory points
         g_trajectory_done = false;
 
     //publisher and subscriber
 	    ros::ServiceServer trajectory_done_service = n.advertiseService("follow_trajectory_status", follow_trajectory_status_cb);
 
-	    ros::Publisher next_steps_pub = n.advertise<trajectory_msgs::MultiDOFJointTrajectory>("/next_steps", 1);
+	    ros::Publisher next_steps_pub = n.advertise<cinematography::multiDOF_array>("/next_steps", 1);
 
 	    ros::Subscriber panic_sub =  n.subscribe<std_msgs::Bool>("panic_topic", 1, panic_callback);
 	    ros::Subscriber panic_velocity_sub = n.subscribe<geometry_msgs::Vector3>("panic_velocity", 1, panic_velocity_callback);
 	    
 
 		ros::Subscriber slam_lost_sub = n.subscribe<std_msgs::Bool>("/slam_lost", 1, slam_loss_callback);
-	    ros::Subscriber trajectory_follower_sub = n.subscribe<cinematography::multiDOF_array>("normal_traj", 1, callback_trajectory);
+	    ros::Subscriber trajectory_follower_sub = n.subscribe<cinematography::multiDOF_array>("multidoftraj", 1, callback_trajectory);
 
         ros::Subscriber stop_fly_sub = 
             n.subscribe<std_msgs::Bool>("/stop_fly", 1, stop_fly_callback);
 
-    bool app_started = false;  //decides when the first planning has occured
+    bool following_traj = false;  //decides when the first planning has occured
                                //this allows us to activate all the
                                //functionaliy in follow_trajecotry accordingly
+    std::chrono::system_clock::time_point sleep_time;
 
     yaw_strategy_t yaw_strategy = ignore_yaw;
-    
-    while (ros::ok()) {
-        
-    	ros::spinOnce();
 
-        trajectory_t * forward_traj = nullptr;
-        trajectory_t * rev_traj = nullptr;
-        bool check_position = true;
+    trajectory_t * traj = nullptr;
+    while (ros::ok()) {
+    	ros::spinOnce();
 
 
         // setup trajectory
-        if (!panic_traj.empty()) {
-            forward_traj = &panic_traj;
-            rev_traj = nullptr;
-            check_position = false;
-            yaw_strategy = follow_yaw;
-        } else if (!slam_loss_traj.empty()) {
-            forward_traj = &slam_loss_traj;
-            rev_traj = &normal_traj;
-            check_position = false;
+        if (unlikely(copy_panic_traj)) {
+            traj = &panic_traj;
+            copy_panic_traj = false;
+        } else if (unlikely(copy_slam_loss_traj)) {
+            traj = &slam_loss_traj;
+            copy_slam_loss_traj = false;
         }
-        else {
-            forward_traj = &normal_traj;
-            rev_traj = &rev_normal_traj;
+        else if (copy_normal_traj) {
+            traj = &normal_traj;
+            copy_normal_traj = false;
         }
 
-        
-        if (normal_traj.size() > 0) {
-            app_started = true;
+        // If there's a trajectory to follow and we haven't been commanded to halt,
+        // start the clock and signal that we should follow the trajectory. If
+        // commanded to halt, signal to stop following trajectory
+        if (normal_traj.size() > 0 && !global_stop_fly) {
+            if (!following_traj) {
+                sleep_time = std::chrono::system_clock::now();
+            }
+
+            following_traj = true;
+        } else if (global_stop_fly) {
+            following_traj = false;
         }
 
 
         // make sure if new traj come, we do not conflict
         const int id_for_this_traj = traj_id;
-        if(app_started && !global_stop_fly){
-            // Back up if no trajectory was found
-            if (!forward_traj->empty()){
-                // NOTE: Profile here, see how long is spends following this trajectory
-                follow_trajectory(*airsim_ros_wrapper, forward_traj, nullptr, yaw_strategy, check_position, g_v_max);
-                next_steps_pub.publish(next_steps_msg(*forward_traj,id_for_this_traj));
+
+        // Follow a single point in the trajectory. This will probably mean sleeping until the last one is reached
+        if(following_traj) {
+            if (likely(!traj->empty())){
+                static double max_speed_so_far = 0;
+                static int ctr = 0;
+
+                multiDOFpoint p = traj->front();
+
+                // Calculate the velocities we should be flying at
+                double v_x = p.vx;
+                double v_y = p.vy;
+                double v_z = p.vz;
+                float yaw = p.yaw;
+
+                auto pos = airsim_ros_wrapper->getPosition();
+                v_x += (p.x-pos.y())/p.duration;
+                v_y += (p.y-pos.x())/p.duration;
+                v_z += (p.z+pos.z())/p.duration;
+
+                // Make sure we're not going over the maximum speed
+                double speed = std::sqrt((v_x*v_x + v_y*v_y + v_z*v_z));
+                double scale = 1;
+//                if (speed > g_v_max) {
+//                    scale = g_v_max / speed;
+//
+//                    v_x *= scale;
+//                    v_y *= scale;
+//                    v_z *= scale;
+//                    speed = std::sqrt((v_x*v_x + v_y*v_y + v_z*v_z));
+//                }
+
+                // Calculate the time for which this point's flight commands should run
+                auto scaled_flight_time = std::chrono::duration<double>(p.duration / scale);
+
+                // Wait until the the last point finishes processing, then tackle this point
+                std::this_thread::sleep_until(sleep_time);
+                airsim_ros_wrapper->fly_velocity(v_x, v_y, v_z, yaw, scaled_flight_time.count());
+
+                // Get deadline to process next point
+                sleep_time += std::chrono::duration_cast<std::chrono::system_clock::duration>(scaled_flight_time);
+
+                // Update trajectory
+                traj->pop_front();
             }
             else {
                 ROS_ERROR("!!! forward trajectory empty! Doing nothing");
             }
         }
-
-        g_got_new_trajectory = false;
-
     }
 	return 0;
 }

@@ -435,6 +435,7 @@ cinematography::multiDOF_array calc_ideal_drone_traj(cinematography::multiDOF_ar
         n.y = point.y + sin(viewport_heading + point.yaw) * horiz_dist;
         n.z = point.z + height;
         n.yaw = point.yaw + PI + viewport_heading;
+        n.duration = point.duration;
         if (n.yaw > PI) {
             n.yaw -= 2 * PI;
         }

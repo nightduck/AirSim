@@ -1,0 +1,3 @@
+<launch>
+	<node pkg="cinematography" type="follow_trajectory" name="follow_trajectory" launch-prefix="xterm -e gdb --args"/>
+</launch>
