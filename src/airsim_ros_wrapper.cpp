@@ -130,19 +130,19 @@ bool AirsimROSWrapper::fly_velocity(double vx, double vy, double vz, float yaw, 
             yaw_diff = yaw_diff <= 180 ? yaw_diff : yaw_diff - 360;
             
 
-            // add by feiyang jin
-            // because if do not set, the drone will just turn left and right very quickly
-            float yaw_threshold = 30;
-
-            if(yaw_diff >= yaw_threshold){
-                yaw_diff -= yaw_threshold;
-            }
-            else if(yaw_diff <= (-1)*yaw_threshold){
-                yaw_diff += yaw_threshold;
-            }
-            else{
-                yaw_diff = 0;
-            }
+//            // add by feiyang jin
+//            // because if do not set, the drone will just turn left and right very quickly
+//            float yaw_threshold = 30;
+//
+//            if(yaw_diff >= yaw_threshold){
+//                yaw_diff -= yaw_threshold;
+//            }
+//            else if(yaw_diff <= (-1)*yaw_threshold){
+//                yaw_diff += yaw_threshold;
+//            }
+//            else{
+//                yaw_diff = 0;
+//            }
 
             float yaw_rate = yaw_diff / duration;
 

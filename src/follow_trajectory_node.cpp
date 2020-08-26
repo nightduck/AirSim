@@ -5,6 +5,7 @@
 #include <boost/foreach.hpp>
 #include <math.h>
 #include <stdio.h>
+#include <cmath>
 #include "std_msgs/Bool.h"
 #include "common_mav.h"
 #include <mav_msgs/default_topics.h>    
@@ -17,6 +18,7 @@
 #include <cinematography/BoolPlusHeader.h>
 #include <trajectory_msgs/MultiDOFJointTrajectory.h>
 #include <trajectory_msgs/MultiDOFJointTrajectoryPoint.h>
+#include <nav_msgs/Odometry.h>
 
 #define FREQ 5
 #define MARGIN 0.01     // Used as a margin of error to prevent the call to follow_trajectory from going over the node's period
@@ -50,6 +52,9 @@ bool g_trajectory_done;
 
 bool should_panic = false;
 geometry_msgs::Vector3 panic_velocity;
+
+ros::Publisher rviz_vel_pub;
+int rviz_id = 0;
 
 int traj_id = 0;
 
@@ -119,6 +124,23 @@ void callback_trajectory(const cinematography::multiDOF_array::ConstPtr& msg)
 bool trajectory_done(const trajectory_msgs::MultiDOFJointTrajectory& trajectory) {
     g_trajectory_done = (trajectory.points.size() == 0);
     return g_trajectory_done;
+}
+
+void print_rviz_vel(double x, double y, double z, double vx, double vy, double vz) {
+    nav_msgs::Odometry rviz_point = nav_msgs::Odometry();
+    rviz_point.header.seq = 0;
+    rviz_point.header.stamp = ros::Time::now();
+    rviz_point.header.frame_id = "world_enu";
+    rviz_point.child_frame_id = rviz_id++;
+
+    rviz_point.pose.pose.position.x = x;
+    rviz_point.pose.pose.position.y = y;
+    rviz_point.pose.pose.position.z = z;
+    rviz_point.twist.twist.linear.x = vx;
+    rviz_point.twist.twist.linear.y = vy;
+    rviz_point.twist.twist.linear.z = vz;
+
+    rviz_vel_pub.publish(rviz_point);
 }
 
 
@@ -222,6 +244,9 @@ int main(int argc, char **argv)
         ros::Subscriber stop_fly_sub = 
             n.subscribe<std_msgs::Bool>("/stop_fly", 1, stop_fly_callback);
 
+        // DEBUGGING
+        rviz_vel_pub = n.advertise<nav_msgs::Odometry>("velocities", 1);
+
     bool following_traj = false;  //decides when the first planning has occured
                                //this allows us to activate all the
                                //functionaliy in follow_trajecotry accordingly
@@ -245,6 +270,10 @@ int main(int argc, char **argv)
         else if (copy_normal_traj) {
             traj = &normal_traj;
             copy_normal_traj = false;
+
+            // DEBUGGING
+            airsim_ros_wrapper->moveTo(traj->front().y, traj->front().x, -1*traj->front().z, 1.0);
+            airsim_ros_wrapper->set_yaw((traj->front().yaw*-180/M_PI) + 90);
         }
 
         // If there's a trajectory to follow and we haven't been commanded to halt,
@@ -276,12 +305,12 @@ int main(int argc, char **argv)
                 double v_x = p.vx;
                 double v_y = p.vy;
                 double v_z = p.vz;
-                float yaw = p.yaw;
+                float yaw = (p.yaw*-180/M_PI) + 90;
 
                 auto pos = airsim_ros_wrapper->getPosition();
-                v_x += (p.x-pos.y())/p.duration;
-                v_y += (p.y-pos.x())/p.duration;
-                v_z += (p.z+pos.z())/p.duration;
+//                v_x += (p.x-pos.y())/p.duration;
+//                v_y += (p.y-pos.x())/p.duration;
+//                v_z += (p.z+pos.z())/p.duration;
 
                 // Make sure we're not going over the maximum speed
                 double speed = std::sqrt((v_x*v_x + v_y*v_y + v_z*v_z));
@@ -301,6 +330,8 @@ int main(int argc, char **argv)
                 // Wait until the the last point finishes processing, then tackle this point
                 std::this_thread::sleep_until(sleep_time);
                 airsim_ros_wrapper->fly_velocity(v_x, v_y, v_z, yaw, scaled_flight_time.count());
+                print_rviz_vel(pos.y(), pos.x(), -1*pos.z(), v_x, v_y, v_z);
+                ROS_INFO("Flying at (%f, %f, %f) for %f seconds", v_x, v_y, v_z, p.duration);
 
                 // Get deadline to process next point
                 sleep_time += std::chrono::duration_cast<std::chrono::system_clock::duration>(scaled_flight_time);

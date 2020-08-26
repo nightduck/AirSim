@@ -85,9 +85,8 @@ double drone_height__global = 0.6;
 double drone_radius__global = 2;
 
 // Define default artistic constraints
-#define PI 3.14159
-double viewport_heading = PI / 3;
-double viewport_azimuth = PI / 4;
+double viewport_heading = M_PI / 3;
+double viewport_azimuth = M_PI / 4;
 double viewport_distance = 5;
 
 
@@ -434,10 +433,11 @@ cinematography::multiDOF_array calc_ideal_drone_traj(cinematography::multiDOF_ar
         n.x = point.x + cos(viewport_heading + point.yaw) * horiz_dist;
         n.y = point.y + sin(viewport_heading + point.yaw) * horiz_dist;
         n.z = point.z + height;
-        n.yaw = point.yaw + PI + viewport_heading;
+        n.yaw = point.yaw + M_PI + viewport_heading;
         n.duration = point.duration;
-        if (n.yaw > PI) {
-            n.yaw -= 2 * PI;
+
+        if (n.yaw > M_PI) {
+            n.yaw -= 2 * M_PI;
         }
         drone_traj.points.push_back(n);
     }
@@ -483,9 +483,9 @@ void face_actor(cinematography::multiDOF_array& drone_traj, const cinematography
             // Double check which cartesian quadrant you're in and add/subtract a 180 offset if necessary
             if (diff.x() < 0) {
                 if (diff.y() < 0) {
-                    angle -= PI;
+                    angle -= M_PI;
                 } else {
-                    angle += PI;
+                    angle += M_PI;
                 }
             }
 
@@ -623,6 +623,11 @@ void get_actor_trajectory(const cinematography::multiDOF_array& actor_traj)
     print_rviz_traj(ideal_path, "drone_traj");
 
     // TODO: Put in artificial load here to simulate optimizing
+    for(int i = 1; i < ideal_path.points.size(); i++) {
+        ideal_path.points[i-1].vx = (ideal_path.points[i].x - ideal_path.points[i-1].x) / ideal_path.points[i-1].duration;
+        ideal_path.points[i-1].vy = (ideal_path.points[i].y - ideal_path.points[i-1].y) / ideal_path.points[i-1].duration;
+        ideal_path.points[i-1].vz = (ideal_path.points[i].z - ideal_path.points[i-1].z) / ideal_path.points[i-1].duration;
+    }
 
     // Publish the trajectory (for debugging purposes)
     ideal_path.header.stamp = ros::Time::now();
