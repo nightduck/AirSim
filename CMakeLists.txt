@@ -62,6 +62,7 @@ add_message_files(
         multiDOF_array.msg
         BoolPlusHeader.msg
         drone_state.msg
+        artistic_spec.msg
 )
 
 add_service_files(

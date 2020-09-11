@@ -271,9 +271,9 @@ int main(int argc, char **argv)
             traj = &normal_traj;
             copy_normal_traj = false;
 
-            // DEBUGGING
-            airsim_ros_wrapper->moveTo(traj->front().y, traj->front().x, -1*traj->front().z, 1.0);
-            airsim_ros_wrapper->set_yaw((traj->front().yaw*-180/M_PI) + 90);
+//            // DEBUGGING
+//            airsim_ros_wrapper->moveTo(traj->front().y, traj->front().x, -1*traj->front().z, 1.0);
+//            airsim_ros_wrapper->set_yaw((traj->front().yaw*-180/M_PI) + 90);
         }
 
         // If there's a trajectory to follow and we haven't been commanded to halt,
@@ -305,7 +305,7 @@ int main(int argc, char **argv)
                 double v_x = p.vx;
                 double v_y = p.vy;
                 double v_z = p.vz;
-                float yaw = (p.yaw*-180/M_PI) + 90;
+                float yaw = 90 - (p.yaw*180/M_PI);
 
                 auto pos = airsim_ros_wrapper->getPosition();
 //                v_x += (p.x-pos.y())/p.duration;

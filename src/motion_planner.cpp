@@ -20,6 +20,7 @@
 #include "cinematography/get_trajectory.h"
 #include "cinematography/drone_state.h"
 #include "cinematography/multiDOF_array.h"
+#include "cinematography/artistic_spec.h"
 #include "visualization_msgs/Marker.h"
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2/LinearMath/Vector3.h>
@@ -86,7 +87,7 @@ double drone_radius__global = 2;
 
 // Define default artistic constraints
 double viewport_heading = M_PI / 3;
-double viewport_azimuth = M_PI / 4;
+double viewport_pitch = M_PI / 4;
 double viewport_distance = 5;
 
 
@@ -412,14 +413,14 @@ cinematography::multiDOF_array calc_ideal_drone_traj(cinematography::multiDOF_ar
 
 //    // Calculate a unit quaternion based on heading and azimuth of drone, then incorporate the viewing distance
 //    tf2::Quaternion viewport_position_relative;
-//    viewport_position_relative.setW(std::cos(viewport_azimuth/2) * std::cos(viewport_heading/2));
-//    viewport_position_relative.setY(std::sin(viewport_azimuth/2) * std::cos(viewport_heading/2) * -1);
-//    viewport_position_relative.setZ(std::cos(viewport_azimuth/2) * std::sin(viewport_heading/2));
+//    viewport_position_relative.setW(std::cos(viewport_pitch/2) * std::cos(viewport_heading/2));
+//    viewport_position_relative.setY(std::sin(viewport_pitch/2) * std::cos(viewport_heading/2) * -1);
+//    viewport_position_relative.setZ(std::cos(viewport_pitch/2) * std::sin(viewport_heading/2));
 //    viewport_position_relative
 //        = viewport_position_relative * tf2::Quaternion(viewport_distance,0,0,0) * viewport_position_relative.inverse();
 
-    float horiz_dist = cos(viewport_azimuth) * viewport_distance;
-    float height = sin(viewport_azimuth) * viewport_distance;
+    float horiz_dist = cos(viewport_pitch) * viewport_distance;
+    float height = sin(viewport_pitch) * viewport_distance;
 
     // For each point in the actor's trajectory...
     for (cinematography::multiDOF point : actor_traj.points) {
@@ -623,6 +624,7 @@ void get_actor_trajectory(const cinematography::multiDOF_array& actor_traj)
     print_rviz_traj(ideal_path, "drone_traj");
 
     // TODO: Put in artificial load here to simulate optimizing
+
     for(int i = 1; i < ideal_path.points.size(); i++) {
         ideal_path.points[i-1].vx = (ideal_path.points[i].x - ideal_path.points[i-1].x) / ideal_path.points[i-1].duration;
         ideal_path.points[i-1].vy = (ideal_path.points[i].y - ideal_path.points[i-1].y) / ideal_path.points[i-1].duration;
@@ -709,6 +711,12 @@ void get_drone_state(const cinematography::drone_state::ConstPtr& state) {
     y__high_bound__global = std::max(y__high_bound__global, position.y);
     z__low_bound__global = std::min(z__low_bound__global, position.z);
     z__high_bound__global = std::max(z__high_bound__global, position.z);
+}
+
+void get_artistic_specs(const cinematography::artistic_spec::ConstPtr& as) {
+    viewport_heading = as->heading;
+    viewport_pitch = as->pitch;
+    viewport_distance = as->distance;
 }
 
 // set for package delivery
