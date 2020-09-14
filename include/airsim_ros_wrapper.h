@@ -7,6 +7,7 @@ STRICT_MODE_OFF //todo what does this do?
 STRICT_MODE_ON
 
 #include "airsim_settings_parser.h"
+#include "common/Common.hpp"
 #include "common/AirSimSettings.hpp"
 #include "common/common_utils/FileSystem.hpp"
 #include "ros/ros.h"

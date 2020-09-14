@@ -22,6 +22,9 @@
 
 #define FREQ 5
 #define MARGIN 0.01     // Used as a margin of error to prevent the call to follow_trajectory from going over the node's period
+#define DAMPING_FACTOR_X 0.05
+#define DAMPING_FACTOR_Y 0.05
+#define DAMPING_FACTOR_Z 0.15
 #define likely(x)      __builtin_expect(!!(x), 1)
 #define unlikely(x)    __builtin_expect(!!(x), 0)
 
@@ -305,12 +308,15 @@ int main(int argc, char **argv)
                 double v_x = p.vx;
                 double v_y = p.vy;
                 double v_z = p.vz;
-                float yaw = 90 - (p.yaw*180/M_PI);
+                float yaw = p.yaw*180/M_PI;
 
-                auto pos = airsim_ros_wrapper->getPosition();
-//                v_x += (p.x-pos.y())/p.duration;
-//                v_y += (p.y-pos.x())/p.duration;
-//                v_z += (p.z+pos.z())/p.duration;
+                Vector3r pos = airsim_ros_wrapper->getPosition();
+                double posx = pos.x();
+                double posy = pos.y();
+                double posz = pos.z();
+                v_x += DAMPING_FACTOR_X*(p.x-pos.x())/p.duration;
+                v_y += DAMPING_FACTOR_Y*(p.y-pos.y())/p.duration;
+                v_z += DAMPING_FACTOR_Z*(p.z-pos.z())/p.duration;
 
                 // Make sure we're not going over the maximum speed
                 double speed = std::sqrt((v_x*v_x + v_y*v_y + v_z*v_z));

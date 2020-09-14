@@ -50,6 +50,9 @@
 #include <ompl/geometric/SimpleSetup.h>
 #include <ompl/config.h>
 
+#define DEG_TO_RAD(d)   d*M_PI/180
+#define RAD_TO_DEG(r)   r*180/M_PI
+
 using namespace std;
 using namespace octomap;
 using piecewise_trajectory = std::vector<graph::node>;
@@ -407,17 +410,10 @@ void print_rviz_traj(cinematography::multiDOF_array path, std::string name) {
     rviz_pose_pub.publish(rviz_path);
 }
 
+// Calculate an ideal drone trajectory using a given actor trajectory (both in NED and radians)
 cinematography::multiDOF_array calc_ideal_drone_traj(cinematography::multiDOF_array actor_traj) {
     cinematography::multiDOF_array drone_traj;
     drone_traj.points.reserve(actor_traj.points.size());
-
-//    // Calculate a unit quaternion based on heading and azimuth of drone, then incorporate the viewing distance
-//    tf2::Quaternion viewport_position_relative;
-//    viewport_position_relative.setW(std::cos(viewport_pitch/2) * std::cos(viewport_heading/2));
-//    viewport_position_relative.setY(std::sin(viewport_pitch/2) * std::cos(viewport_heading/2) * -1);
-//    viewport_position_relative.setZ(std::cos(viewport_pitch/2) * std::sin(viewport_heading/2));
-//    viewport_position_relative
-//        = viewport_position_relative * tf2::Quaternion(viewport_distance,0,0,0) * viewport_position_relative.inverse();
 
     float horiz_dist = cos(viewport_pitch) * viewport_distance;
     float height = sin(viewport_pitch) * viewport_distance;
@@ -426,19 +422,15 @@ cinematography::multiDOF_array calc_ideal_drone_traj(cinematography::multiDOF_ar
     for (cinematography::multiDOF point : actor_traj.points) {
         cinematography::multiDOF n;
 
-//        // Get the actor's orientation, and rotate the drone's position relative to that heading
-//        tf2::Quaternion actor_orientation = tf2::Quaternion(0, 0, sin(2*point.yaw), cos(2*point.yaw));
-//        tf2::Quaternion p = actor_orientation * viewport_position_relative * actor_orientation.inverse();
-
         // Center p on the actor to get the drone's ideal coordinates
         n.x = point.x + cos(viewport_heading + point.yaw) * horiz_dist;
         n.y = point.y + sin(viewport_heading + point.yaw) * horiz_dist;
-        n.z = point.z + height;
+        n.z = point.z - height;
         n.yaw = point.yaw + M_PI + viewport_heading;
         n.duration = point.duration;
 
         if (n.yaw > M_PI) {
-            n.yaw -= 2 * M_PI;
+            n.yaw -= 2*M_PI;
         }
         drone_traj.points.push_back(n);
     }
@@ -602,6 +594,7 @@ smooth_trajectory smoothen_the_shortest_path(piecewise_trajectory& piecewise_pat
 
 
 //bool get_trajectory_fun(cinematography::get_trajectory::Request &req, cinematography::get_trajectory::Response &res)
+// Get actor's predicted trajectory (in NED and radians)
 void get_actor_trajectory(const cinematography::multiDOF_array& actor_traj)
 {
     if (actor_traj.points.size() == 0) {
@@ -744,18 +737,19 @@ void setup(){
 int main(int argc, char ** argv)
 {
     ros::init(argc, argv, "motion_planner");
-    ros::NodeHandle nh;
+    ros::NodeHandle nh("/motion_planner");
 
     motion_planning_core = OMPL_RRTConnect;
     setup();
 
     //ros::ServiceServer service = nh.advertiseService("get_trajectory_srv", get_trajectory_fun);
-    ros::Subscriber actor_traj_sub = nh.subscribe("actor_traj", 1, get_actor_trajectory);
-    ros::Subscriber octomap_sub = nh.subscribe("octomap_binary", 1, generate_octomap);
-    ros::Subscriber drone_state_sub = nh.subscribe("drone_state", 1, get_drone_state);
-    traj_pub = nh.advertise<cinematography::multiDOF_array>("multidoftraj", 1);
-    rviz_pub = nh.advertise<visualization_msgs::Marker>("scanning_visualization_marker", 1);
-    rviz_pose_pub = nh.advertise<geometry_msgs::PoseArray>("poses", 1);
+    ros::Subscriber actor_traj_sub = nh.subscribe("/actor_traj", 1, get_actor_trajectory);
+    ros::Subscriber octomap_sub = nh.subscribe("/octomap_binary", 1, generate_octomap);
+    ros::Subscriber drone_state_sub = nh.subscribe("/drone_state", 1, get_drone_state);
+    ros::Subscriber art_spec_sub = nh.subscribe("artistic_specs", 1, get_artistic_specs);
+    traj_pub = nh.advertise<cinematography::multiDOF_array>("/multidoftraj", 1);
+    rviz_pub = nh.advertise<visualization_msgs::Marker>("/scanning_visualization_marker", 1);
+    rviz_pose_pub = nh.advertise<geometry_msgs::PoseArray>("/poses", 1);
 
     // Sleep
     ros::spin();

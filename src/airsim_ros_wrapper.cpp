@@ -71,10 +71,13 @@ geometry_msgs::Pose AirsimROSWrapper::pose()
 }
 
 float AirsimROSWrapper::get_yaw(){
+    float t = 0;
     auto pose = this->pose();
-    msr::airlib::Quaternionr q(pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w);
-    float p, r, y;
-    msr::airlib::VectorMath::toEulerianAngle(q, p, y, r);
+    msr::airlib::Quaternionr q(pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z);
+
+    // NOTE: There is a function in VectorMath.hpp that does this, but it interprets all q's values as zero
+    float y = atan2(2.0 * (q.w() * q.z() + q.x() * q.y()),
+                    1.0 - 2.0 * (q.y() * q.y() + q.z() * q.z()));
     return y*180 / M_PI;
 }
 
@@ -154,9 +157,9 @@ bool AirsimROSWrapper::fly_velocity(double vx, double vy, double vz, float yaw, 
             auto drivetrain = msr::airlib::DrivetrainType::MaxDegreeOfFreedom;
             auto yawmode = msr::airlib::YawMode(true, yaw_rate);
 
-            airsim_client_.moveByVelocityAsync(vy, vx, -vz, duration, drivetrain, yawmode);
+            airsim_client_.moveByVelocityAsync(vx, vy, vz, duration, drivetrain, yawmode);
         } else {
-            airsim_client_.moveByVelocityAsync(vy, vx, -vz, duration);
+            airsim_client_.moveByVelocityAsync(vx, vy, vz, duration);
         }
     } catch(...) {
         std::cerr << "fly_velocity failed" << std::endl;
