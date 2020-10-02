@@ -70,6 +70,15 @@ protected: //optional overrides but recommended, default values may work
 public: //optional overrides
     virtual void moveByRC(const RCData& rc_data);
 
+    virtual void setTripStats(const TripStats& trip_stats) {
+        trip_stats_ = trip_stats;     
+        //TripStats;
+    }
+
+    virtual const TripStats getTripStats() const{
+        return trip_stats_; 
+    }
+
     //below method exist for any firmwares that may want to use ground truth for debugging purposes
     virtual void setSimulatedGroundTruth(const Kinematics::State* kinematics, const Environment* environment)
     {
@@ -133,6 +142,7 @@ public: //these APIs uses above low level APIs
         state.rc_data = getRCData();
         state.ready = isReady(state.ready_message);
         state.can_arm = canArm();
+        state.trip_stats = getTripStats();
         return state;
     }
 
@@ -340,6 +350,8 @@ private: //variables
     float landing_vel_ = 0.2f; //velocity to use for landing
     float approx_zero_vel_ = 0.05f;
     float approx_zero_angular_vel_ = 0.01f;
+
+    TripStats trip_stats_;
 };
 
 }} //namespace

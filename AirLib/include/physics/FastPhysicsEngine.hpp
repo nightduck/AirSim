@@ -6,6 +6,7 @@
 
 #include "common/Common.hpp"
 #include "physics/PhysicsEngineBase.hpp"
+#include "physics/Battery.hpp"
 #include <iostream>
 #include <sstream>
 #include <fstream>
@@ -86,22 +87,21 @@ private:
             bool is_collision_response = getNextKinematicsOnCollision(dt, collision_info, body, 
                 current, next, next_wrench, enable_ground_lock_);
             updateCollisionResponseInfo(collision_info, next, is_collision_response, collision_response);
-            //throttledLogOutput("*** has collision", 0.1);
         }
-        //else throttledLogOutput("*** no collision", 0.1);
 
-        //Utils::log(Utils::stringf("T-VEL %s %" PRIu64 ": ", 
-        //    VectorMath::toString(next.twist.linear).c_str(), clock()->getStepCount()));
+
+        if (body.hasBattery()) { //only intrested in bodies with electrical constraints
+            auto P = p_estimator_.Estimate(body.getEnergyRotorSpecs(), current);
+            body.getBattery()->update(dt, (float)P);
+            body.updateDistanceTraveled(current.pose);
+
+            body.updateEnergyConsumed((float)P * float(dt));
+            body.updateTime(dt);
+        }
 
         body.setWrench(next_wrench);
         body.updateKinematics(next);
 
-
-		//TODO: this is now being done in PawnSimApi::update. We need to re-think this sequence
-        //with below commented out - Arducopter GPS may not work.
-		//body.getEnvironment().setPosition(next.pose.position);
-		//body.getEnvironment().update();
-		
 	}
 
     static void updateCollisionResponseInfo(const CollisionInfo& collision_info, const Kinematics::State& next, 
@@ -449,6 +449,7 @@ private:
     std::stringstream debug_string_;
     bool enable_ground_lock_;
     TTimePoint last_message_time;
+    powerlib::PowerEstimator p_estimator_;
 };
 
 }} //namespace

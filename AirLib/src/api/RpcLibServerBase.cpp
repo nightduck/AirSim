@@ -77,6 +77,7 @@ RpcLibServerBase::RpcLibServerBase(ApiProvider* api_provider, const std::string&
     : api_provider_(api_provider)
 {
 
+    unreal_reset_ = false;
     if (server_address == "")
         pimpl_.reset(new impl(port));
     else
@@ -182,6 +183,10 @@ RpcLibServerBase::RpcLibServerBase(ApiProvider* api_provider, const std::string&
         else
             getVehicleApi("")->reset();
             resetInProgress = false;
+    });
+
+    pimpl_->server.bind("resetUnreal", [&]() -> void {
+        setUnrealReset();
     });
 
     pimpl_->server.bind("simPrintLogMessage", [&](const std::string& message, const std::string& message_param, unsigned char severity) -> void {
@@ -337,6 +342,22 @@ void* RpcLibServerBase::getServer() const
 {
     return &pimpl_->server;
 }
+
+
+bool RpcLibServerBase::checkUnrealReset()
+{
+    return unreal_reset_;
+}
+
+void RpcLibServerBase::unSetUnrealReset()
+{
+    unreal_reset_ = false;
+}
+
+void RpcLibServerBase::setUnrealReset() {
+    unreal_reset_ = true;
+}
+
 
 }} //namespace
 #endif

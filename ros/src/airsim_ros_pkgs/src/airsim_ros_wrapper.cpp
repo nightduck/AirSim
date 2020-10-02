@@ -46,6 +46,204 @@ AirsimROSWrapper::AirsimROSWrapper(const ros::NodeHandle& nh, const ros::NodeHan
     // gimbal_cmd_ = GimbalCmd();
 }
 
+float AirsimROSWrapper::maxYawRate()
+{
+    return max_yaw_rate;
+}
+
+float AirsimROSWrapper::maxYawRateDuringFlight()
+{
+    return max_yaw_rate_during_flight;
+}
+
+geometry_msgs::Pose AirsimROSWrapper::pose()
+{
+    geometry_msgs::Pose result;
+    
+    auto p = this->getPosition();
+    auto q = airsim_client_.getMultirotorState().getOrientation();
+    result.position.x = p.y();
+    result.position.y = p.x();
+    result.position.z = -1*p.z();
+    result.orientation.x = q.x();
+    result.orientation.y = q.y();
+    result.orientation.z = q.z();
+    result.orientation.w = q.w();
+
+    return result;
+}
+
+float AirsimROSWrapper::get_yaw(){
+    auto pose = this->pose();
+    msr::airlib::Quaternionr q(pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w);
+    float p, r, y;
+    msr::airlib::VectorMath::toEulerianAngle(q, p, y, r);
+    return y*180 / M_PI;
+}
+
+static float xy_yaw(double x, double y) {
+    if (x == 0 && y == 0)
+        return YAW_UNCHANGED;
+    return 90 - atan2(y, x)*180.0/3.14;
+}
+
+bool AirsimROSWrapper::set_yaw(int y)
+{
+    int pos_dist = (y - int(get_yaw()) + 360) % 360;
+    int yaw_diff = pos_dist <= 180 ? pos_dist : pos_dist - 360;
+
+    float duration = yaw_diff / max_yaw_rate;
+    if (duration < 0)
+        duration = -duration;
+
+    float yaw_rate = max_yaw_rate;
+    if (yaw_diff < 0)
+        yaw_rate = -yaw_rate;
+
+    try {
+        auto drivetrain = msr::airlib::DrivetrainType::MaxDegreeOfFreedom;
+        auto yawmode = msr::airlib::YawMode(true, yaw_rate);
+
+        airsim_client_.moveByVelocityAsync(0, 0, 0, duration, drivetrain, yawmode);
+
+        int duration_ms = duration*1000;
+        std::this_thread::sleep_for(std::chrono::milliseconds(duration_ms));
+    }catch(...){
+        std::cerr << "set_yaw failed" << std::endl;
+        return false;
+    }
+}
+
+
+bool AirsimROSWrapper::fly_velocity(double vx, double vy, double vz, float yaw, double duration)
+{
+    try {
+        if (yaw != YAW_UNCHANGED) {
+            float target_yaw = yaw;
+            if (yaw == FACE_FORWARD)
+                target_yaw = xy_yaw(vx, vy);
+            else if (yaw == FACE_BACKWARD) {
+                target_yaw = xy_yaw(vx, vy);
+                target_yaw += 180;
+                target_yaw = target_yaw <= 180 ? target_yaw : target_yaw-360;
+            }
+
+            float current_yaw = get_yaw();
+            float yaw_diff = (int(target_yaw - get_yaw()) + 360) % 360;
+            yaw_diff = yaw_diff <= 180 ? yaw_diff : yaw_diff - 360;
+            
+
+            // add by feiyang jin
+            // because if do not set, the drone will just turn left and right very quickly
+            float yaw_threshold = 30;
+
+            if(yaw_diff >= yaw_threshold){
+                yaw_diff -= yaw_threshold;
+            }
+            else if(yaw_diff <= (-1)*yaw_threshold){
+                yaw_diff += yaw_threshold;
+            }
+            else{
+                yaw_diff = 0;
+            }
+
+            float yaw_rate = yaw_diff / duration;
+
+            if (yaw_rate > max_yaw_rate_during_flight)
+                yaw_rate = max_yaw_rate_during_flight;
+            else if (yaw_rate < -max_yaw_rate_during_flight)
+                yaw_rate = -max_yaw_rate_during_flight;
+
+            auto drivetrain = msr::airlib::DrivetrainType::MaxDegreeOfFreedom;
+            auto yawmode = msr::airlib::YawMode(true, yaw_rate);
+
+            airsim_client_.moveByVelocityAsync(vy, vx, -vz, duration, drivetrain, yawmode);
+        } else {
+            airsim_client_.moveByVelocityAsync(vy, vx, -vz, duration);
+        }
+    } catch(...) {
+        std::cerr << "fly_velocity failed" << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
+
+bool AirsimROSWrapper::set_yaw_at_z(int y, double z){
+    int pos_dist = (y - int(get_yaw()) + 360) % 360;
+    int yaw_diff = pos_dist <= 180 ? pos_dist : pos_dist - 360;
+
+    float duration = yaw_diff / max_yaw_rate;
+    if (duration < 0)
+        duration = -duration;
+
+    float yaw_rate = max_yaw_rate;
+    if (yaw_diff < 0)
+        yaw_rate = -yaw_rate;
+
+    try {
+        auto drivetrain = msr::airlib::DrivetrainType::MaxDegreeOfFreedom;
+        msr::airlib::YawMode yawmode(true, yaw_rate);
+
+        auto t = std::chrono::system_clock::now();
+        auto end_t = t + std::chrono::milliseconds(int(duration*1000));
+        const double t_step = 0.05; // 50 ms
+        const auto t_step_ms = std::chrono::milliseconds(int(t_step*1000));
+
+        for (; t < end_t; t += t_step_ms) {
+            double current_z = pose().position.z;
+            double v_z = (z - current_z) * 0.5;
+
+            airsim_client_.moveByVelocityAsync(0, 0, -v_z, duration, drivetrain, yawmode);
+
+            std::this_thread::sleep_until(t);
+        }
+        
+        airsim_client_.moveByVelocityAsync(0, 0, 0, 1);
+    } catch(...) {
+        std::cerr << "set_yaw failed" << std::endl;
+        return false;
+    }
+}
+
+
+MultirotorState AirsimROSWrapper::getMultirotorState(){
+    return airsim_client_.getMultirotorState();
+}
+
+void AirsimROSWrapper::takeoff_jin()
+{
+    float takeoffTimeout = 5;
+    airsim_client_.takeoffAsync(takeoffTimeout)->waitOnLastTask();
+}
+
+void AirsimROSWrapper::hover()
+{
+    airsim_client_.hoverAsync()->waitOnLastTask();
+}
+
+void AirsimROSWrapper::moveTo(float x, float y, float z, float velocity)
+{
+    airsim_client_.moveToPositionAsync(x,y,z,velocity);
+}
+
+void AirsimROSWrapper::moveOnPath(const vector<Vector3r>& path, float velocity)
+{
+    airsim_client_.moveOnPathAsync(path,velocity);
+}
+
+bool AirsimROSWrapper::end()
+{
+    airsim_client_.armDisarm(false);
+    airsim_client_.enableApiControl(false);
+    return true;
+}
+
+Vector3r AirsimROSWrapper::getPosition(){
+    return airsim_client_.getMultirotorState().getPosition();
+}
+
 void AirsimROSWrapper::initialize_airsim()
 {
     // todo do not reset if already in air?
