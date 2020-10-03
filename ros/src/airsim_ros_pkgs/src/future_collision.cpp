@@ -328,11 +328,12 @@ int main(int argc, char** argv)
     ros::init(argc, argv, "future_collision", ros::init_options::NoSigintHandler);
     ros::NodeHandle n;
     ros::NodeHandle nh("~");
+    std::string host_ip = "localhost";
     signal(SIGINT, sigIntHandlerPrivate);
 
     setup();
 
-    AirsimROSWrapper airsim_ros_wrapperb(n, nh);
+    AirsimROSWrapper airsim_ros_wrapperb(n, nh, host_ip);
     airsim_ros_wrapper_pointer = &airsim_ros_wrapperb;
     
     //----------------------------------------------------------------- 

@@ -224,7 +224,8 @@ int main(int argc, char ** argv)
 	ros::init(argc, argv, "scanning_node");
     ros::NodeHandle nh;
     ros::NodeHandle nh_private("~");
-    AirsimROSWrapper airsim_ros_wrapper(nh, nh_private);
+    std::string host_ip = "localhost";
+    AirsimROSWrapper airsim_ros_wrapper(nh, nh_private, host_ip);
     uint32_t shape = visualization_msgs::Marker::CUBE;
     trajectory_t traject_t_trajectory;
 

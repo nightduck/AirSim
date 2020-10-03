@@ -191,8 +191,9 @@ int main(int argc, char **argv)
 	ros::init(argc, argv, "package_delivery", ros::init_options::NoSigintHandler);
     ros::NodeHandle nh;
     ros::NodeHandle n_private("~");
+    std::string host_ip = "localhost";
     signal(SIGINT, sigIntHandlerPrivate);
-    AirsimROSWrapper airsim_ros_wrapper(nh, n_private);
+    AirsimROSWrapper airsim_ros_wrapper(nh, n_private, host_ip);
 	
 	// variables
 		geometry_msgs::Point start, goal;

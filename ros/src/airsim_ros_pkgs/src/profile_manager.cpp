@@ -445,7 +445,8 @@ int main(int argc, char **argv)
     ros::init(argc, argv, "profile_manager");
     ros::NodeHandle nh, nh_statistics_topic;
     ros::NodeHandle nh_private("~");
-    AirsimROSWrapper airsim_ros_wrapperb(nh, nh_private);
+    std::string host_ip = "localhost";
+    AirsimROSWrapper airsim_ros_wrapperb(nh, nh_private, host_ip);
     g_drone = &airsim_ros_wrapperb;
 
     ros::ServiceServer record_profiling_data_service = nh.advertiseService("record_profiling_data", record_profiling_data_cb);
