@@ -1,0 +1,4 @@
+<launch>
+    <node pkg="cinematography" type="motion_planner" name="motion_planner"/>
+    <node pkg="cinematography" type="follow_trajectory" name="follow_trajectory"/>
+</launch>
