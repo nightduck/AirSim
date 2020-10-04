@@ -114,11 +114,11 @@ void MultirotorPawnSimApi::updateRendering(float dt)
     //UAirBlueprintLib::LogMessage(TEXT("Collision (raw) Count:"), FString::FromInt(collision_response.collision_count_raw), LogDebugLevel::Unimportant);
     UAirBlueprintLib::LogMessage(TEXT("Collision Count:"), 
         FString::FromInt(collision_response.collision_count_non_resting), LogDebugLevel::Informational);
-    UAirBlueprintLib::LogMessage(TEXT("Voltage:"), FString::SanitizeFloat(phys_vehicle_->getVotage()), LogDebugLevel::Failure);
-    UAirBlueprintLib::LogMessage(TEXT("StateOfCharge:"), FString::SanitizeFloat(phys_vehicle_->getStateOfCharge()), LogDebugLevel::Failure);
-    UAirBlueprintLib::LogMessage(TEXT("EnergyConsumed:"), FString::SanitizeFloat(phys_vehicle_->getEnergyConsumed()), LogDebugLevel::Failure);
-    UAirBlueprintLib::LogMessage(TEXT("distanceTraveled:"), FString::SanitizeFloat(phys_vehicle_->getDistanceTraveled()), LogDebugLevel::Failure);
-    UAirBlueprintLib::LogMessage(TEXT("flightTime:"), FString::SanitizeFloat(phys_vehicle_->getTotalTime()), LogDebugLevel::Failure);
+    UAirBlueprintLib::LogMessage(TEXT("Voltage:"), FString::SanitizeFloat(multirotor_physics_body_->getVotage()), LogDebugLevel::Failure);
+    UAirBlueprintLib::LogMessage(TEXT("StateOfCharge:"), FString::SanitizeFloat(multirotor_physics_body_->getStateOfCharge()), LogDebugLevel::Failure);
+    UAirBlueprintLib::LogMessage(TEXT("EnergyConsumed:"), FString::SanitizeFloat(multirotor_physics_body_->getEnergyConsumed()), LogDebugLevel::Failure);
+    UAirBlueprintLib::LogMessage(TEXT("distanceTraveled:"), FString::SanitizeFloat(multirotor_physics_body_->getDistanceTraveled()), LogDebugLevel::Failure);
+    UAirBlueprintLib::LogMessage(TEXT("flightTime:"), FString::SanitizeFloat(multirotor_physics_body_->getTotalTime()), LogDebugLevel::Failure);
 
     for (auto i = 0; i < vehicle_api_messages_.size(); ++i) {
         UAirBlueprintLib::LogMessage(FString(vehicle_api_messages_[i].c_str()), TEXT(""), LogDebugLevel::Success, 30);
