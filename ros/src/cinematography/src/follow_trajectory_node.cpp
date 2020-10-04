@@ -12,10 +12,10 @@
 #include <iostream>
 #include <fstream>
 #include <std_srvs/SetBool.h>
-#include <cinematography/multiDOF.h>
-#include <cinematography/multiDOF_array.h>
-#include <cinematography/follow_trajectory_status_srv.h>
-#include <cinematography/BoolPlusHeader.h>
+#include <airsim_ros_pkgs/multiDOF.h>
+#include <airsim_ros_pkgs/multiDOF_array.h>
+#include <airsim_ros_pkgs/follow_trajectory_status_srv.h>
+#include <airsim_ros_pkgs/BoolPlusHeader.h>
 #include <trajectory_msgs/MultiDOFJointTrajectory.h>
 #include <trajectory_msgs/MultiDOFJointTrajectoryPoint.h>
 #include <nav_msgs/Odometry.h>
@@ -100,7 +100,7 @@ void panic_velocity_callback(const geometry_msgs::Vector3::ConstPtr& msg) {
 }
 
 
-void callback_trajectory(const cinematography::multiDOF_array::ConstPtr& msg)
+void callback_trajectory(const airsim_ros_pkgs::multiDOF_array::ConstPtr& msg)
 {
 	ROS_INFO("call back trajectory");
     normal_traj.clear();
@@ -147,8 +147,8 @@ void print_rviz_vel(double x, double y, double z, double vx, double vy, double v
 }
 
 
-bool follow_trajectory_status_cb(cinematography::follow_trajectory_status_srv::Request &req,
-                                 cinematography::follow_trajectory_status_srv::Response &res)
+bool follow_trajectory_status_cb(airsim_ros_pkgs::follow_trajectory_status_srv::Request &req,
+                                 airsim_ros_pkgs::follow_trajectory_status_srv::Response &res)
 {
     //res.success.data = true;
     //ROS_INFO("trajectory done: %i", g_trajectory_done);
@@ -172,11 +172,11 @@ bool follow_trajectory_status_cb(cinematography::follow_trajectory_status_srv::R
 }
 
 
-cinematography::multiDOF_array next_steps_msg(const trajectory_t& traj, const int true_id) {
-    cinematography::multiDOF_array array_of_point_msg;
+airsim_ros_pkgs::multiDOF_array next_steps_msg(const trajectory_t& traj, const int true_id) {
+    airsim_ros_pkgs::multiDOF_array array_of_point_msg;
 
     for (const auto& point : traj){
-        cinematography::multiDOF point_msg;
+        airsim_ros_pkgs::multiDOF point_msg;
         point_msg.x = point.x;
         point_msg.y = point.y;
         point_msg.z = point.z;
@@ -207,7 +207,8 @@ int main(int argc, char **argv)
 	ros::init(argc, argv, "follow_trajectory", ros::init_options::NoSigintHandler);
     ros::NodeHandle n;
     ros::NodeHandle n_private("~");
-    airsim_ros_wrapper = new AirsimROSWrapper(n, n_private);
+    std::string host_ip = "localhost";
+    airsim_ros_wrapper = new AirsimROSWrapper(n, n_private, host_ip);
 
     // airsim setup
         if (airsim_ros_wrapper->is_used_img_timer_cb_queue_)
@@ -235,14 +236,14 @@ int main(int argc, char **argv)
     //publisher and subscriber
 	    ros::ServiceServer trajectory_done_service = n.advertiseService("follow_trajectory_status", follow_trajectory_status_cb);
 
-	    ros::Publisher next_steps_pub = n.advertise<cinematography::multiDOF_array>("/next_steps", 1);
+	    ros::Publisher next_steps_pub = n.advertise<airsim_ros_pkgs::multiDOF_array>("/next_steps", 1);
 
 	    ros::Subscriber panic_sub =  n.subscribe<std_msgs::Bool>("panic_topic", 1, panic_callback);
 	    ros::Subscriber panic_velocity_sub = n.subscribe<geometry_msgs::Vector3>("panic_velocity", 1, panic_velocity_callback);
 	    
 
 		ros::Subscriber slam_lost_sub = n.subscribe<std_msgs::Bool>("/slam_lost", 1, slam_loss_callback);
-	    ros::Subscriber trajectory_follower_sub = n.subscribe<cinematography::multiDOF_array>("multidoftraj", 1, callback_trajectory);
+	    ros::Subscriber trajectory_follower_sub = n.subscribe<airsim_ros_pkgs::multiDOF_array>("multidoftraj", 1, callback_trajectory);
 
         ros::Subscriber stop_fly_sub = 
             n.subscribe<std_msgs::Bool>("/stop_fly", 1, stop_fly_callback);

@@ -91,7 +91,7 @@ generate_messages(
 
 catkin_package(
   INCLUDE_DIRS include
-  # LIBRARIES airsim_ros
+  LIBRARIES airsim_ros common_mav
   CATKIN_DEPENDS message_runtime roscpp std_msgs # nodelet 
 )
 
@@ -116,7 +116,7 @@ add_dependencies(pd_position_controller_simple ${${PROJECT_NAME}_EXPORTED_TARGET
 add_dependencies(pd_position_controller_simple ${catkin_EXPORTED_TARGETS})
 
 add_library(airsim_ros src/airsim_ros_wrapper.cpp)
-add_dependencies(airsim_ros ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(airsim_ros ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
 target_link_libraries(airsim_ros ${catkin_LIBRARIES} ${OpenCV_LIBS} yaml-cpp AirLib airsim_settings_parser)
 
   # library created by feiyang jin
@@ -146,7 +146,7 @@ target_link_libraries(pd_position_controller_simple_node pd_position_controller_
   target_link_libraries(motion_planner_test ${catkin_LIBRARIES} libompl.so ${OCTOMAP_LIBRARIES})
 
   add_executable(motion_planner src/motion_planner.cpp)
-  target_link_libraries(motion_planner airsim_ros ${catkin_LIBRARIES} libompl.so ${OCTOMAP_LIBRARIES})
+  target_link_libraries(motion_planner airsim_ros ${catkin_LIBRARIES} libompl.so ${OCTOMAP_LIBRARIES} common_mav)
 
   add_executable(follow_trajectory src/follow_trajectory_node.cpp)
   target_link_libraries(follow_trajectory airsim_ros ${catkin_LIBRARIES} AirLib common_mav)

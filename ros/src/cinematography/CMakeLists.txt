@@ -49,35 +49,13 @@ find_package(catkin REQUIRED COMPONENTS
         tf2_ros
         mav_trajectory_generation
         mav_trajectory_generation_ros
+        airsim_ros_pkgs
         )
 
 add_message_files(
         FILES
-        GimbalAngleEulerCmd.msg
-        GimbalAngleQuatCmd.msg
-        GPSYaw.msg
-        VelCmd.msg
-        VelCmdGroup.msg
-        multiDOF.msg
-        multiDOF_array.msg
-        BoolPlusHeader.msg
         drone_state.msg
         artistic_spec.msg
-)
-
-add_service_files(
-        FILES
-        SetGPSPosition.srv
-        Takeoff.srv
-        TakeoffGroup.srv
-        Land.srv
-        LandGroup.srv
-        Reset.srv
-        SetLocalPosition.srv
-        get_trajectory.srv
-        follow_trajectory_status_srv.srv
-        profiling_data_srv.srv
-        start_profiling_srv.srv
 )
 
 generate_messages(
@@ -85,10 +63,10 @@ generate_messages(
         std_msgs
         geometry_msgs
         trajectory_msgs
+        airsim_ros_pkgs
 )
 
 catkin_package(
-        INCLUDE_DIRS include
         # LIBRARIES airsim_ros
         CATKIN_DEPENDS message_runtime roscpp std_msgs # nodelet
 )
@@ -106,32 +84,17 @@ include_directories(
         ${common_utility_src}
 )
 
-add_library(airsim_settings_parser src/airsim_settings_parser.cpp)
-target_link_libraries(airsim_settings_parser ${catkin_LIBRARIES} AirLib)
-
-add_library(pd_position_controller_simple src/pd_position_controller_simple.cpp)
-add_dependencies(pd_position_controller_simple ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-add_dependencies(pd_position_controller_simple ${catkin_EXPORTED_TARGETS})
-
-add_library(airsim_ros src/airsim_ros_wrapper.cpp)
-add_dependencies(airsim_ros ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(airsim_ros ${catkin_LIBRARIES} ${OpenCV_LIBS} yaml-cpp AirLib airsim_settings_parser)
-
-# library created by feiyang jin
-add_library(common_mav src/common_mav.cpp)
-target_link_libraries(common_mav airsim_ros ${catkin_LIBRARIES} ${OpenCV_LIBS} yaml-cpp AirLib airsim_settings_parser)
-
 add_executable(motion_planner src/motion_planner.cpp)
-target_link_libraries(motion_planner airsim_ros ${catkin_LIBRARIES} libompl.so ${OCTOMAP_LIBRARIES})
+add_dependencies(motion_planner ${PROJECT_NAME}_generate_messages_cpp)
+target_link_libraries(motion_planner ${catkin_LIBRARIES} libompl.so ${OCTOMAP_LIBRARIES})
 
 add_executable(follow_trajectory src/follow_trajectory_node.cpp)
-target_link_libraries(follow_trajectory airsim_ros ${catkin_LIBRARIES} AirLib common_mav)
+add_dependencies(follow_trajectory ${PROJECT_NAME}_generate_messages_cpp)
+target_link_libraries(follow_trajectory ${catkin_LIBRARIES} AirLib)
 
 
 install(TARGETS
         #list of shared libraries
-        airsim_ros
-        pd_position_controller_simple
         ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
         LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
         )
