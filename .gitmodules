@@ -1,0 +1,27 @@
+[submodule "ros2/src/darknet_vendor"]
+	path = ros2/src/darknet_vendor
+	url = https://github.com/ros2/darknet_vendor
+[submodule "ros/src/mav_trajectory_generation"]
+	path = ros/src/mav_trajectory_generation
+	url = https://github.com/ethz-asl/mav_trajectory_generation.git
+[submodule "ros/src/eigen_catkin"]
+	path = ros/src/eigen_catkin
+	url = https://github.com/ethz-asl/eigen_catkin.git
+[submodule "ros/src/eigen_checks"]
+	path = ros/src/eigen_checks
+	url = https://github.com/ethz-asl/eigen_checks.git
+[submodule "ros/src/glog_catkin"]
+	path = ros/src/glog_catkin
+	url = https://github.com/ethz-asl/glog_catkin.git
+[submodule "ros/src/mav_comm"]
+	path = ros/src/mav_comm
+	url = https://github.com/ethz-asl/mav_comm.git
+[submodule "ros/src/nlopt"]
+	path = ros/src/nlopt
+	url = https://github.com/ethz-asl/nlopt.git
+[submodule "ros/src/catkin_simple"]
+	path = ros/src/catkin_simple
+	url = git@github.com:catkin/catkin_simple.git
+[submodule "ros/src/yaml_cpp_catkin"]
+	path = ros/src/yaml_cpp_catkin
+	url = git@github.com:ethz-asl/yaml_cpp_catkin.git

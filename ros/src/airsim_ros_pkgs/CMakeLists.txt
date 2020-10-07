@@ -134,30 +134,38 @@ target_link_libraries(pd_position_controller_simple_node pd_position_controller_
   target_link_libraries(scanning_test ${catkin_LIBRARIES})
 
   add_executable(scanning_node src/scanning_node.cpp)
+  add_dependencies(scanning_node common_mav airsim_ros ${PROJECT_NAME}_generate_messages_cpp)
   target_link_libraries(scanning_node airsim_ros ${catkin_LIBRARIES} AirLib common_mav)
 
   add_executable(package_delivery_node src/package_delivery_node.cpp)
+  add_dependencies(package_delivery_node common_mav airsim_ros ${PROJECT_NAME}_generate_messages_cpp)
   target_link_libraries(package_delivery_node airsim_ros ${catkin_LIBRARIES} AirLib common_mav)
 
   add_executable(package_delivery_static src/package_delivery_withMap.cpp)
+  add_dependencies(package_delivery_static common_mav airsim_ros ${PROJECT_NAME}_generate_messages_cpp)
   target_link_libraries(package_delivery_static airsim_ros ${catkin_LIBRARIES} AirLib common_mav)
 
   add_executable(motion_planner_test src/motion_planner_test.cpp)
   target_link_libraries(motion_planner_test ${catkin_LIBRARIES} libompl.so ${OCTOMAP_LIBRARIES})
 
   add_executable(motion_planner src/motion_planner.cpp)
+  add_dependencies(motion_planner common_mav airsim_ros ${PROJECT_NAME}_generate_messages_cpp)
   target_link_libraries(motion_planner airsim_ros ${catkin_LIBRARIES} libompl.so ${OCTOMAP_LIBRARIES} common_mav)
 
   add_executable(follow_trajectory src/follow_trajectory_node.cpp)
+  add_dependencies(follow_trajectory common_mav airsim_ros ${PROJECT_NAME}_generate_messages_cpp)
   target_link_libraries(follow_trajectory airsim_ros ${catkin_LIBRARIES} AirLib common_mav)
 
   add_executable(follow_trajectory_static src/follow_trajectory_static.cpp)
+  add_dependencies(follow_trajectory_static common_mav airsim_ros ${PROJECT_NAME}_generate_messages_cpp)
   target_link_libraries(follow_trajectory_static airsim_ros ${catkin_LIBRARIES} AirLib common_mav)
 
   add_executable(panic_pcl ${common_utility_src}/panic_pcl.cpp)
+  add_dependencies(panic_pcl common_mav airsim_ros ${PROJECT_NAME}_generate_messages_cpp)
   target_link_libraries(panic_pcl ${catkin_LIBRARIES} AirLib MavLinkCom rpc pthread ${OpenCV_LIBS} common_mav ${PCL_LIBRARIES})
 
   add_executable(future_collision src/future_collision.cpp)
+  add_dependencies(panic_pcl airsim_ros ${PROJECT_NAME}_generate_messages_cpp)
   target_link_libraries(future_collision airsim_ros ${catkin_LIBRARIES} AirLib MavLinkCom rpc pthread ${OpenCV_LIBS} ${OCTOMAP_LIBRARIES})
 
   # profile manager
