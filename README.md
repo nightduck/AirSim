@@ -4,6 +4,24 @@ AirSim is a simulator for drones, cars and more, built on [Unreal Engine](https:
 
 Our goal is to develop AirSim as a platform for AI research to experiment with deep learning, computer vision and reinforcement learning algorithms for autonomous vehicles. For this purpose, AirSim also exposes APIs to retrieve data and control vehicles in a platform independent way.
 
+## ROS Build Instructions
+
+Execute the following to download this repo and build ROS packages
+
+    git clone https://github.com/nightduck/AirSim.git               # Clone this repo
+    cd AirSim
+    ./setup.sh                                                      # Build repo
+    ./build.sh
+    git submodule init                                              # Load all external sources
+    git submodule update
+    cd ros                                                          # Build ROS code
+    source /opt/ros/melodic/setup.bash
+    catkin build -DCMAKE_C_COMPILER=gcc-8 -DCMAKE_CXX_COMPILER=g++-8
+    cd ../ros2                                                      # Build ROS2 code
+    source /opt/ros/dashing/setup.bash
+    colcon build --cmake-args -DCMAKE_C_COMPILER=gcc-8 -DCMAKE_CXX_COMPILER=g++-8 --packages-select cinematography
+
+
 **Check out the quick 1.5 minute demo**
 
 Drones in AirSim
