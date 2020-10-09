@@ -7,6 +7,8 @@
 #include "geometry_msgs/msg/quaternion.hpp"
 #include "geometry_msgs/msg/pose.hpp"
 #include "nav_msgs/msg/odometry.hpp"
+#include <opencv2/opencv.hpp>
+#include <cv_bridge/cv_bridge.h>
 #include <math.h>
 
 using std::placeholders::_1;
@@ -22,9 +24,17 @@ private:
     geometry_msgs::msg::Pose drone_pose;
 
     void processImage(const cinematography_msgs::msg::BoundingBox::SharedPtr msg) {
-        //sensor_msgs::Image img = msg->data.image();
 
         // TODO: Pad image to 192x192 square with black bars
+        sensor_msgs::msg::Image img = msg->image;
+        cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(msg->image, sensor_msgs::image_encodings::BGR8);
+        if (cv_ptr->image.rows > cv_ptr->image.cols) {
+            // TODO: Add horizontal black bars to pad to square
+        } else if ((cv_ptr->image.rows < cv_ptr->image.cols)) {
+            // TODO: Add vertical black bars to pad to square
+        }
+
+
         // TODO: Pass through Model to get heading estimation
         float hde0 = 1;   // Output #1
         float hde1 = 1;   // Output #2
@@ -35,6 +45,8 @@ private:
         // TODO: (Optionally in parallel) Using actor position, camera FOV, and actor's position within frame, project the
         //       actor onto the ground plane and get their coordinates
         geometry_msgs::msg::Point actor_position;
+
+
 
         // Combine orientation and position into a single pose message and publish it
         geometry_msgs::msg::Pose actor_pose;

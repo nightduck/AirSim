@@ -121,11 +121,11 @@ SET(LIB_TYPE STATIC)
 # #rosidl_target_interfaces(airsim_ros ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
 add_executable(actor_detection src/actor_detection.cpp)
-ament_target_dependencies(actor_detection rclcpp filterImage cinematography_msgs sensor_msgs)
+ament_target_dependencies(actor_detection rclcpp filterImage cinematography_msgs sensor_msgs geometry_msgs cv_bridge)
 #rosidl_target_interfaces(actor_detection ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
 add_executable(heading_estimation src/heading_estimation.cpp)
-ament_target_dependencies(heading_estimation rclcpp filterImage cinematography_msgs sensor_msgs geometry_msgs nav_msgs)
+ament_target_dependencies(heading_estimation rclcpp filterImage cinematography_msgs sensor_msgs geometry_msgs nav_msgs cv_bridge)
 #rosidl_target_interfaces(heading_estimation ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
 if(BUILD_TESTING)

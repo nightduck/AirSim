@@ -1,8 +1,16 @@
 #include "rclcpp/rclcpp.hpp"
 #include "cinematography_msgs/msg/gimbal_angle_quat_cmd.hpp"
+#include "geometry_msgs/msg/quaternion.hpp"
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2/LinearMath/Vector3.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include "cinematography_msgs/msg/bounding_box.hpp"
 #include "sensor_msgs/msg/image.hpp"
 #include "sensor_msgs/msg/compressed_image.hpp"
+#include "builtin_interfaces/msg/time.hpp"
+#include <opencv2/opencv.hpp>
+#include <cv_bridge/cv_bridge.h>
+#include <math.h>
 
 using std::placeholders::_1;
 
@@ -11,6 +19,11 @@ private:
     rclcpp::Publisher<cinematography_msgs::msg::BoundingBox>::SharedPtr bb_pub;
     rclcpp::Publisher<cinematography_msgs::msg::GimbalAngleQuatCmd>::SharedPtr gimbal_control;
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr camera;
+    tf2::Quaternion gimbal_setpoint;
+    std::string camera_name = "front_center_custom";
+    std::string vehicle_name = "drone_1";
+    float fov = M_PI/2;
+    int gimbal_msg_count = 0;
 
     int difffilter(const std::vector<uint8_t> &v, std::vector<uint8_t> &w, int m, int n);
 
@@ -34,19 +47,39 @@ private:
         float width = array[2] / 1024.0;
         float height = array[3] / 1024.0;
 
-        // TODO: Use centering coordinates to move gimbal so actor is in center frame (OPTIONAL: Add parameter to specify
-        //       where in frame the actor should be)
+        //DEBUGGING
+        centerx = 0.4;
+        centery = 0.501;
+        width=0.15;
+        height=0.2;
 
-        // TODO: Extract subimage, package with centering coordinates, and publish to /bounding_box
+        // Use centering coordinates to move gimbal so actor is in center frame (OPTIONAL: Add parameter to specify
+        // where in frame the actor should be)
+        tf2::Quaternion horiz_adjustment = tf2::Quaternion(0, 0, sin(fov * (centerx - 0.5) / 2), cos(fov * (centerx - 0.5) / 2));
+        tf2::Quaternion vert_adjustment = tf2::Quaternion(sin(fov * (centery - 0.5) / 2), 0, 0, cos(fov * (centerx - 0.5) / 2));
+        gimbal_setpoint = horiz_adjustment * gimbal_setpoint * vert_adjustment;
+
+        cinematography_msgs::msg::GimbalAngleQuatCmd gb_msg;
+        gb_msg.header.frame_id = "world_ned";
+        gb_msg.header.stamp = this->now();
+        gb_msg.camera_name = camera_name;
+        gb_msg.vehicle_name = vehicle_name;
+        gb_msg.orientation = tf2::toMsg(gimbal_setpoint);
+
+        gimbal_control->publish(gb_msg);
+
+        // Extract subimage, package with centering coordinates, and publish to /bounding_box
         cinematography_msgs::msg::BoundingBox bb;
-        bb.left = centerx - width/2;
-        bb.bottom = centery + height/2;
+        bb.actor_direction = tf2::toMsg(gimbal_setpoint);
 
-        int px_left = bb.left * msg->width;
+        int px_left = (centerx - width/2) * msg->width;
         int px_top = (centery - height/2) * msg->height;
         int px_width = width * msg->width;
         int px_height = height * msg->height;
-        bb.image = *msg;
+        cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
+        cv::Mat cropped = cv_ptr->image(cv::Rect(px_left, px_top, px_width, px_height));
+        cv_ptr->image = cropped;
+        bb.image = *cv_ptr->toImageMsg();
 
         bb_pub->publish(bb);
     }
