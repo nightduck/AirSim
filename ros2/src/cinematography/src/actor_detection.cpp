@@ -1,9 +1,9 @@
 #include "rclcpp/rclcpp.hpp"
 #include "cinematography_msgs/msg/gimbal_angle_quat_cmd.hpp"
 #include "geometry_msgs/msg/quaternion.hpp"
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2/LinearMath/Vector3.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include "cinematography_msgs/msg/bounding_box.hpp"
 #include "sensor_msgs/msg/image.hpp"
 #include "sensor_msgs/msg/compressed_image.hpp"
@@ -35,6 +35,7 @@ private:
         array.reserve(msg->data.size());
         //difffilter(msg->data, array, msg->width, msg->height);
 
+        //=================DUMMY LOAD==========================
         uint8_t prev = msg->data[0];
         int len = msg->data.size();
         array[0] = prev;
@@ -42,6 +43,7 @@ private:
             array[i%len] = msg->data[i%len] * prev;
             prev = array[i%len];
         }
+        //==================DUMMY LOAD=========================
         float centerx = array[0] / 512.0 + 0.25;
         float centery = array[1] / 512.0 + 0.25;
         float width = array[2] / 1024.0;
@@ -56,15 +58,18 @@ private:
         // Use centering coordinates to move gimbal so actor is in center frame (OPTIONAL: Add parameter to specify
         // where in frame the actor should be)
         tf2::Quaternion horiz_adjustment = tf2::Quaternion(0, 0, sin(fov * (centerx - 0.5) / 2), cos(fov * (centerx - 0.5) / 2));
-        tf2::Quaternion vert_adjustment = tf2::Quaternion(sin(fov * (centery - 0.5) / 2), 0, 0, cos(fov * (centerx - 0.5) / 2));
-        gimbal_setpoint = horiz_adjustment * gimbal_setpoint * vert_adjustment;
+        tf2::Quaternion vert_adjustment = tf2::Quaternion(sin(fov * centery - height / 2), 0, 0, cos(fov * centery - height / 2));
+        tf2::Quaternion actor_direction = horiz_adjustment * gimbal_setpoint * vert_adjustment;   // Get the orientation in the direction of the actor (centered on bottom center)
+
+        vert_adjustment = tf2::Quaternion(sin(fov * (centery - 0.5) / 2), 0, 0, cos(fov * (centery - 0.5) / 2));
+        gimbal_setpoint = horiz_adjustment * gimbal_setpoint * vert_adjustment;             // Get new gimbal setpoint (centered on actor)
 
         cinematography_msgs::msg::GimbalAngleQuatCmd gb_msg;
         gb_msg.header.frame_id = "world_ned";
         gb_msg.header.stamp = this->now();
         gb_msg.camera_name = camera_name;
         gb_msg.vehicle_name = vehicle_name;
-        gb_msg.orientation = tf2::toMsg(gimbal_setpoint);
+        gb_msg.orientation = tf2::toMsg(actor_direction);
 
         gimbal_control->publish(gb_msg);
 

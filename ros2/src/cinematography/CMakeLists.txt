@@ -38,6 +38,7 @@ find_package(trajectory_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 find_package(cinematography_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
@@ -125,7 +126,7 @@ ament_target_dependencies(actor_detection rclcpp filterImage cinematography_msgs
 #rosidl_target_interfaces(actor_detection ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
 add_executable(heading_estimation src/heading_estimation.cpp)
-ament_target_dependencies(heading_estimation rclcpp filterImage cinematography_msgs sensor_msgs geometry_msgs nav_msgs cv_bridge)
+ament_target_dependencies(heading_estimation rclcpp filterImage cinematography_msgs sensor_msgs geometry_msgs nav_msgs cv_bridge tf2_geometry_msgs)
 #rosidl_target_interfaces(heading_estimation ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
 if(BUILD_TESTING)
