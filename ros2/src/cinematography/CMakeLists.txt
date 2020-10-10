@@ -55,6 +55,8 @@ link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
 
 find_package(CUDA REQUIRED)
+#find_package(CUDNN REQUIRED)
+#find_package(Darknet REQUIRED)
 
 # set(msgs
 # 	"msg/BoundingBox.msg"

@@ -22,6 +22,6 @@
 [submodule "ros/src/yaml_cpp_catkin"]
 	path = ros/src/yaml_cpp_catkin
 	url = git@github.com:ethz-asl/yaml_cpp_catkin.git
-[submodule "ros2/src/darknet_vendor"]
-	path = ros2/src/darknet_vendor
-	url = https://github.com/ros2/darknet_vendor.git
+[submodule "ros2/src/darknet"]
+	path = ros2/src/darknet
+	url = https://github.com/AlexeyAB/darknet.git
