@@ -1,0 +1,3 @@
+-
+  ros1_package_name: 'airsim_ros_pkgs'
+  ros2_package_name: 'cinematography_msgs'
