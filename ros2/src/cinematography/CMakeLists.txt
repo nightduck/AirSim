@@ -125,6 +125,7 @@ SET(LIB_TYPE STATIC)
 
 add_executable(actor_detection src/actor_detection.cpp)
 ament_target_dependencies(actor_detection rclcpp filterImage cinematography_msgs sensor_msgs geometry_msgs cv_bridge)
+target_link_libraries(actor_detection AirLib)
 #rosidl_target_interfaces(actor_detection ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
 add_executable(heading_estimation src/heading_estimation.cpp)

@@ -58,6 +58,10 @@ obj/
 .vs/
 .vscode/
 
+# Jetbrains
+.idea/
+cmake-build-debug/
+
 # MSTest test Results
 [Tt]est[Rr]esult*/
 [Bb]uild[Ll]og.*
