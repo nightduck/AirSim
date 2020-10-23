@@ -15,6 +15,9 @@
 #include <cv_bridge/cv_bridge.h>
 #include <math.h>
 
+// TODO: Make this adjustable as a ROS parameter
+#define IMAGE_RESOLUTION 192
+
 using std::placeholders::_1;
 
 class HeadingEstimation : public rclcpp::Node {
@@ -31,22 +34,29 @@ private:
     geometry_msgs::msg::QuaternionStamped unit_quat;
 
     void processImage(const cinematography_msgs::msg::BoundingBox::SharedPtr msg) {
-
         // Pad image to 192x192 square with black bars
         sensor_msgs::msg::Image img = msg->image;
         cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(msg->image, sensor_msgs::image_encodings::BGR8);
         cv::Mat new_img;
-        if (cv_ptr->image.rows != 192 && cv_ptr->image.cols != 192) {
-            RCLCPP_ERROR(this->get_logger(), "Image for HDE is not 192x192");
-            return;  
-        } else if (cv_ptr->image.rows != cv_ptr->image.cols) {
-            int vert_padding = (192-cv_ptr->image.cols)/2;
-            int horz_padding = (192-cv_ptr->image.rows)/2;
+
+        // Pad to square
+        if (cv_ptr->image.rows != cv_ptr->image.cols) {
+            int max_dim = (cv_ptr->image.rows > cv_ptr->image.cols) ? cv_ptr->image.rows : cv_ptr->image.cols;
+            int vert_padding = (max_dim-cv_ptr->image.cols)/2;
+            int horz_padding = (max_dim-cv_ptr->image.rows)/2;
             int right_px = (cv_ptr->image.cols % 2 != 0) ? 1 : 0;
             int bottom_px = (cv_ptr->image.rows % 2 != 0) ? 1 : 0;
             cv::copyMakeBorder(cv_ptr->image, new_img, horz_padding, horz_padding + bottom_px,
                     vert_padding, vert_padding + right_px, cv::BORDER_CONSTANT, cv::Scalar(0,0,0));
             cv_ptr->image = new_img;
+        }
+        
+        // If neither image is 192px, scale input image
+        if (cv_ptr->image.rows != 192 && cv_ptr->image.cols != 192) {
+            cv::Mat dest;
+            float scaling_factor = IMAGE_RESOLUTION / ((cv_ptr->image.rows > cv_ptr->image.cols) ? cv_ptr->image.rows : cv_ptr->image.cols);
+            cv::resize(cv_ptr->image, dest, cv::Size(IMAGE_RESOLUTION, IMAGE_RESOLUTION));
+            cv_ptr->image = dest;
         }
 
 
@@ -103,14 +113,14 @@ private:
     }
 
     void getCoordinates(const sensor_msgs::msg::NavSatFix::SharedPtr msg) {
-        drone_pose.pose.position.x = msg->latitude;
-        drone_pose.pose.position.y = msg->longitude;
-        drone_pose.pose.position.z = -1 * msg->longitude;
+        // TODO: Maybe implement this as a 2nd source, taking into account starting coordinates aren't (0,0,0)
+        // drone_pose.pose.position.x = msg->latitude;
+        // drone_pose.pose.position.y = msg->longitude;
+        // drone_pose.pose.position.z = -1 * msg->longitude;
     }
 
     void getOdometry(const nav_msgs::msg::Odometry::SharedPtr msg) {
-        drone_pose.pose.orientation = msg->pose.pose.orientation;
-        // drone_pose = msg->pose.pose;     # For use if the GPS proves unideal
+        drone_pose.pose = msg->pose.pose;
     }
 
 public:
@@ -119,7 +129,7 @@ public:
         unit_vect.vector.y = unit_vect.vector.z = unit_quat.quaternion.y = unit_quat.quaternion.z = 0;
 
         pose_pub = this->create_publisher<geometry_msgs::msg::Pose>("actor_pose", 50);
-        sat_sub = this->create_subscription<sensor_msgs::msg::NavSatFix>("satellite_pos", 1, std::bind(&HeadingEstimation::getCoordinates, this, _1));
+        sat_sub = this->create_subscription<sensor_msgs::msg::NavSatFix>("satellite_pose", 1, std::bind(&HeadingEstimation::getCoordinates, this, _1));
         odom_sub = this->create_subscription<nav_msgs::msg::Odometry>("odom_pos", 1, std::bind(&HeadingEstimation::getOdometry, this, _1));
         bb_sub = this->create_subscription<cinematography_msgs::msg::BoundingBox>("bounding_box", 50, std::bind(&HeadingEstimation::processImage, this, _1));
     }

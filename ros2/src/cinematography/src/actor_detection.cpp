@@ -19,7 +19,6 @@ using std::placeholders::_1;
 class ActorDetection : public rclcpp::Node {
 private:
     rclcpp::Publisher<cinematography_msgs::msg::BoundingBox>::SharedPtr bb_pub;
-    rclcpp::Publisher<cinematography_msgs::msg::GimbalAngleQuatCmd>::SharedPtr gimbal_control;
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr camera;
     msr::airlib::MultirotorRpcLibClient airsim_client;
     tf2::Quaternion gimbal_setpoint;
@@ -54,7 +53,7 @@ private:
 
         //DEBUGGING
         centerx = 0.45;
-        centery = 0.505;
+        centery = 0.5;
         width=0.15;
         height=0.2;
 
@@ -90,9 +89,8 @@ private:
 public:
     // TODO: Pass IP address of airsim as parameter
     ActorDetection() : Node("actor_detection"), airsim_client("localhost") {
-        gimbal_setpoint = tf2::Quaternion(0,0,0,1);
+        gimbal_setpoint = tf2::Quaternion(0,-0.259,0,0.966);
         bb_pub = this->create_publisher<cinematography_msgs::msg::BoundingBox>("bounding_box", 50);
-        gimbal_control = this->create_publisher<cinematography_msgs::msg::GimbalAngleQuatCmd>("gimbal", 1);
         camera = this->create_subscription<sensor_msgs::msg::Image>("camera", 50, std::bind(&ActorDetection::processImage, this, _1));
     }
 };
