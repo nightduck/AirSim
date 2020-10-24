@@ -7,6 +7,7 @@
 #include "geometry_msgs/msg/point.hpp"
 #include "geometry_msgs/msg/quaternion.hpp"
 #include "geometry_msgs/msg/pose.hpp"
+#include "geometry_msgs/msg/pose_stamped.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <tf2/LinearMath/Quaternion.h>
@@ -23,6 +24,7 @@ using std::placeholders::_1;
 class HeadingEstimation : public rclcpp::Node {
 private:
     rclcpp::Publisher<geometry_msgs::msg::Pose>::SharedPtr pose_pub;
+    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr rviz_pub;
     rclcpp::Subscription<sensor_msgs::msg::NavSatFix>::SharedPtr sat_sub;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub;
     rclcpp::Subscription<cinematography_msgs::msg::BoundingBox>::SharedPtr bb_sub;
@@ -32,6 +34,14 @@ private:
     geometry_msgs::msg::TransformStamped t;         // Dummy variable for math-ing
     geometry_msgs::msg::Vector3Stamped unit_vect;
     geometry_msgs::msg::QuaternionStamped unit_quat;
+
+    void flatten(tf2::Quaternion &quat) {
+        quat.setX(0);
+        quat.setY(0);
+        double length = sqrt(quat.w() * quat.w() + quat.z() * quat.z());
+        quat.setW(quat.w() / length);
+        quat.setZ(quat.z() / length);
+    }
 
     void processImage(const cinematography_msgs::msg::BoundingBox::SharedPtr msg) {
         // Pad image to 192x192 square with black bars
@@ -54,7 +64,7 @@ private:
         // If neither image is 192px, scale input image
         if (cv_ptr->image.rows != 192 && cv_ptr->image.cols != 192) {
             cv::Mat dest;
-            float scaling_factor = IMAGE_RESOLUTION / ((cv_ptr->image.rows > cv_ptr->image.cols) ? cv_ptr->image.rows : cv_ptr->image.cols);
+            double scaling_factor = IMAGE_RESOLUTION / ((cv_ptr->image.rows > cv_ptr->image.cols) ? cv_ptr->image.rows : cv_ptr->image.cols);
             cv::resize(cv_ptr->image, dest, cv::Size(IMAGE_RESOLUTION, IMAGE_RESOLUTION));
             cv_ptr->image = dest;
         }
@@ -67,49 +77,58 @@ private:
         uint8_t prev = msg->image.data[0];
         int len = msg->image.data.size();
         array[0] = prev;
-        for (int i = 1; i < 1000000; i++) {
-            array[i%len] = msg->image.data[i%len] * prev;
+        for (int i = 0; i < 1000000; i++) {
+            array[i%len] = msg->image.data[i%len] * prev + (i % 256);
             prev = array[i%len];
         }
         //================DUMMY LOAD============================
-        float hde0 = array[0] / 256.0;   // Output #1
-        float hde1 = array[1] / 256.0;   // Output #2
+        double hde0 = array[0] / 128.0 - 1;   // Output #1
+        double hde1 = array[1] / 128.0 - 1;   // Output #2
+        // TODO: Normalize to [-1,1] range
 
-        geometry_msgs::msg::Quaternion actor_orientation;
-        int angle = atan2(hde1, hde0);
-        actor_orientation.w = acos(cos(angle)/2);
-        actor_orientation.z = asin(sin(angle)/2);
+        // Get the rotation of the actor relative to camera
+        double angle = atan2(hde1, hde0);
+        tf2::Quaternion quat_actor_rel;
+        quat_actor_rel.setRPY(0, 0, angle);
 
-
-        t.transform.rotation = msg->actor_direction;
+        // Compute a unit vector pointing at the actor
+        tf2::Quaternion quat_gimbal, quat_drone, quat_actor_direction;
+        tf2::fromMsg(msg->actor_direction, quat_gimbal);
+        tf2::fromMsg(drone_pose.pose.orientation, quat_drone);
+        t.transform.rotation = tf2::toMsg(quat_drone * quat_gimbal);
+        t.transform.translation = geometry_msgs::msg::Vector3();
         geometry_msgs::msg::Vector3Stamped actor_ray;
         tf2::doTransform(unit_vect, actor_ray, t);
-        float scale = drone_pose.pose.position.z / actor_ray.vector.z;
+
+        // Project actor ray to ground, resulting vector being position of actor
+        double scale = abs(drone_pose.pose.position.z / actor_ray.vector.z);
         actor_ray.vector.x *= scale;
         actor_ray.vector.y *= scale;
         actor_ray.vector.z *= scale;
 
-        t.transform.translation = actor_ray.vector;
-        t.transform.rotation = actor_orientation;
+        // Flatten drone's quaternions (so they only represent yaw), and use that to calculate the
+        // actor's absolute rotation
+        flatten(quat_gimbal);
+        flatten(quat_drone);
+        tf2::Quaternion quat_actor_absolute = quat_actor_rel * quat_drone * quat_gimbal;
 
-        // // TODO: (Optionally in parallel) Using actor position, camera FOV, and actor's position within frame, project the
-        // //       actor onto the ground plane and get their coordinates
-        // geometry_msgs::msg::Point actor_position;
-        // tf2::Quaternion actor_quat;
-        // tf2::fromMsg(msg->actor_direction, actor_quat);                 // Get rotation needed to face actor from msg
-        // const tf2::Quaternion unit = tf2::Quaternion(1,0,0,0);
-        // actor_quat = actor_quat * unit * actor_quat.inverse();          // Rotate a unit vector in that direction. Actor_quat is now treated as 3D vector
-        // float scale = drone_pose.position.z / actor_quat.z();
-        // actor_quat *= scale;
-        // tf2::Vector3 thing = tf2::Vector3(actor_quat.x(), actor_quat.y(), actor_quat.z());
-        // actor_position = tf2::toMsg(thing);
+        // NOTE: RESUME HERE. Verify the actor's absolute rotation is being calcualted correctly from it's relative rotation
+        // Combine actor's position and rotation (adjusted from relative to absolute)
+        geometry_msgs::msg::Pose actor_pose;
+        actor_pose.position.x = actor_ray.vector.x + drone_pose.pose.position.x;
+        actor_pose.position.y = actor_ray.vector.y + drone_pose.pose.position.y;
+        actor_pose.position.z = actor_ray.vector.z + drone_pose.pose.position.z;
+        actor_pose.orientation = tf2::toMsg(quat_actor_absolute);
+        pose_pub->publish(actor_pose);
 
-        // Combine orientation and position into a single pose message and publish it
-        geometry_msgs::msg::PoseStamped actor_pose;
-        actor_pose.header.frame_id = "world_ned";
-        actor_pose.header.stamp = this->now();
-        tf2::doTransform(drone_pose, actor_pose, t);
-        pose_pub->publish(actor_pose.pose);
+        #ifndef NDEBUG
+        // Publish to rviz, as debugging step
+        geometry_msgs::msg::PoseStamped rviz_pose;
+        rviz_pose.header.frame_id = "world_ned";
+        rviz_pose.header.stamp = this->now();
+        rviz_pose.pose = actor_pose;
+        rviz_pub->publish(rviz_pose);
+        #endif
     }
 
     void getCoordinates(const sensor_msgs::msg::NavSatFix::SharedPtr msg) {
@@ -128,6 +147,7 @@ public:
         unit_vect.vector.x = unit_quat.quaternion.x = unit_quat.quaternion.w = 1;
         unit_vect.vector.y = unit_vect.vector.z = unit_quat.quaternion.y = unit_quat.quaternion.z = 0;
 
+        rviz_pub = this->create_publisher<geometry_msgs::msg::PoseStamped>("rviz_pose", 50);
         pose_pub = this->create_publisher<geometry_msgs::msg::Pose>("actor_pose", 50);
         sat_sub = this->create_subscription<sensor_msgs::msg::NavSatFix>("satellite_pose", 1, std::bind(&HeadingEstimation::getCoordinates, this, _1));
         odom_sub = this->create_subscription<nav_msgs::msg::Odometry>("odom_pos", 1, std::bind(&HeadingEstimation::getOdometry, this, _1));
