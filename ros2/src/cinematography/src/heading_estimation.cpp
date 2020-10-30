@@ -23,8 +23,7 @@ using std::placeholders::_1;
 
 class HeadingEstimation : public rclcpp::Node {
 private:
-    rclcpp::Publisher<geometry_msgs::msg::Pose>::SharedPtr pose_pub;
-    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr rviz_pub;
+    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_pub;
     rclcpp::Subscription<sensor_msgs::msg::NavSatFix>::SharedPtr sat_sub;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub;
     rclcpp::Subscription<cinematography_msgs::msg::BoundingBox>::SharedPtr bb_sub;
@@ -34,6 +33,8 @@ private:
     geometry_msgs::msg::TransformStamped t;         // Dummy variable for math-ing
     geometry_msgs::msg::Vector3Stamped unit_vect;
     geometry_msgs::msg::QuaternionStamped unit_quat;
+
+    rclcpp::Clock clock = rclcpp::Clock(RCL_SYSTEM_TIME);
 
     void flatten(tf2::Quaternion &quat) {
         quat.setX(0);
@@ -114,21 +115,16 @@ private:
 
         // NOTE: RESUME HERE. Verify the actor's absolute rotation is being calcualted correctly from it's relative rotation
         // Combine actor's position and rotation (adjusted from relative to absolute)
-        geometry_msgs::msg::Pose actor_pose;
-        actor_pose.position.x = actor_ray.vector.x + drone_pose.pose.position.x;
-        actor_pose.position.y = actor_ray.vector.y + drone_pose.pose.position.y;
-        actor_pose.position.z = actor_ray.vector.z + drone_pose.pose.position.z;
-        actor_pose.orientation = tf2::toMsg(quat_actor_absolute);
-        pose_pub->publish(actor_pose);
+        geometry_msgs::msg::PoseStamped actor_pose;
+        actor_pose.pose.position.x = actor_ray.vector.x + drone_pose.pose.position.x;
+        actor_pose.pose.position.y = actor_ray.vector.y + drone_pose.pose.position.y;
+        actor_pose.pose.position.z = actor_ray.vector.z + drone_pose.pose.position.z;
+        actor_pose.pose.orientation = tf2::toMsg(quat_actor_absolute);
 
-        #ifndef NDEBUG
-        // Publish to rviz, as debugging step
-        geometry_msgs::msg::PoseStamped rviz_pose;
-        rviz_pose.header.frame_id = "world_ned";
-        rviz_pose.header.stamp = this->now();
-        rviz_pose.pose = actor_pose;
-        rviz_pub->publish(rviz_pose);
-        #endif
+        // Publish to rviz, as debugging step rviz_pose;
+        actor_pose.header.frame_id = "world_ned";
+        actor_pose.header.stamp = clock.now();
+        pose_pub->publish(actor_pose);
     }
 
     void getCoordinates(const sensor_msgs::msg::NavSatFix::SharedPtr msg) {
@@ -147,8 +143,7 @@ public:
         unit_vect.vector.x = unit_quat.quaternion.x = unit_quat.quaternion.w = 1;
         unit_vect.vector.y = unit_vect.vector.z = unit_quat.quaternion.y = unit_quat.quaternion.z = 0;
 
-        rviz_pub = this->create_publisher<geometry_msgs::msg::PoseStamped>("rviz_pose", 50);
-        pose_pub = this->create_publisher<geometry_msgs::msg::Pose>("actor_pose", 50);
+        pose_pub = this->create_publisher<geometry_msgs::msg::PoseStamped>("actor_pose", 50);
         sat_sub = this->create_subscription<sensor_msgs::msg::NavSatFix>("satellite_pose", 1, std::bind(&HeadingEstimation::getCoordinates, this, _1));
         odom_sub = this->create_subscription<nav_msgs::msg::Odometry>("odom_pos", 1, std::bind(&HeadingEstimation::getOdometry, this, _1));
         bb_sub = this->create_subscription<cinematography_msgs::msg::BoundingBox>("bounding_box", 50, std::bind(&HeadingEstimation::processImage, this, _1));

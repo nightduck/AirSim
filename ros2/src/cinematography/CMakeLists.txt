@@ -39,8 +39,10 @@ find_package(std_srvs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+find_package(tf2_sensor_msgs REQUIRED)
 find_package(cinematography_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
+find_package(message_filters REQUIRED)
 
 # todo eigen3 in AirLib already
 # find_package(Eigen3 REQUIRED)
@@ -130,7 +132,10 @@ target_link_libraries(actor_detection AirLib)
 
 add_executable(heading_estimation src/heading_estimation.cpp)
 ament_target_dependencies(heading_estimation rclcpp filterImage cinematography_msgs sensor_msgs geometry_msgs nav_msgs cv_bridge tf2_geometry_msgs)
-#rosidl_target_interfaces(heading_estimation ${PROJECT_NAME} "rosidl_typesupport_cpp")
+
+add_executable(motion_forecasting src/motion_forecasting.cpp)
+ament_target_dependencies(motion_forecasting rclcpp geometry_msgs cinematography_msgs)
+target_link_libraries(motion_forecasting AirLib)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -144,7 +149,7 @@ if(BUILD_TESTING)
 endif()
 
 install(TARGETS
-        actor_detection heading_estimation
+        actor_detection heading_estimation motion_forecasting
         DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/
         DESTINATION include)
