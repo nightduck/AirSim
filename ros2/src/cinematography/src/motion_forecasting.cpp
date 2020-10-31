@@ -46,11 +46,12 @@ private:
 
         cinematography_msgs::msg::MultiDOFarray pred_traj;
         pred_traj.header.stamp = now;
-        pred_traj.points.reserve(FORECAST_WINDOW_SECS / duration.seconds() + 1);
 
+        pred_traj.points.reserve(FORECAST_WINDOW_SECS / duration.seconds() + 1);
         msr::airlib::Pose diff = (pose - lastPose);
         for(int i = 0; i < pred_traj.points.capacity(); i++) {
             cinematography_msgs::msg::MultiDOF point;
+            //trajectory_msgs::msg::MultiDOFJointTrajectoryPoint point;
             point.x = pose.position.x() + diff.position.x() * i;
             point.y = pose.position.y() + diff.position.y() * i;
             point.z = pose.position.z() + diff.position.z() * i;
@@ -62,7 +63,7 @@ private:
             point.az = 0;
             point.duration = duration.seconds();
             point.yaw = getYaw(pose.orientation) + getYaw(diff.orientation) * i;
-            pred_traj.points[i] = point;
+            pred_traj.points.push_back(point);
         }
 
         lastPose = pose;
