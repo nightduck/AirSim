@@ -1,3 +1,5 @@
 <launch>
-	<node pkg="cinematography" type="motion_planner" name="motion_planner" launch-prefix="xterm -e gdb --args"/>
+	<node pkg="cinematography" type="motion_planner" name="motion_planner" launch-prefix="xterm -e gdb --args">
+		<remap from="actor_traj" to="/auto_cinematography/planning/actor_traj"/>
+	</node>
 </launch>

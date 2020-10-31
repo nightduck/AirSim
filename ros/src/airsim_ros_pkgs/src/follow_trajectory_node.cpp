@@ -12,8 +12,8 @@
 #include <iostream>
 #include <fstream>
 #include <std_srvs/SetBool.h>
-#include <airsim_ros_pkgs/multiDOF.h>
-#include <airsim_ros_pkgs/multiDOF_array.h>
+#include <airsim_ros_pkgs/MultiDOF.h>
+#include <airsim_ros_pkgs/MultiDOFarray.h>
 #include <airsim_ros_pkgs/follow_trajectory_status_srv.h>
 #include <airsim_ros_pkgs/BoolPlusHeader.h>
 #include <airsim_ros_pkgs/profiling_data_srv.h>
@@ -73,7 +73,7 @@ void panic_velocity_callback(const geometry_msgs::Vector3::ConstPtr& msg) {
 }
 
 
-void callback_trajectory(const airsim_ros_pkgs::multiDOF_array::ConstPtr& msg)
+void callback_trajectory(const airsim_ros_pkgs::MultiDOFarray::ConstPtr& msg)
 {
     if (CLCT_DATA){ 
         g_recieved_traj_t = ros::Time::now();  
@@ -155,11 +155,11 @@ bool follow_trajectory_status_cb(airsim_ros_pkgs::follow_trajectory_status_srv::
 }
 
 
-airsim_ros_pkgs::multiDOF_array next_steps_msg(const trajectory_t& traj, const int true_id) {
-    airsim_ros_pkgs::multiDOF_array array_of_point_msg;
+airsim_ros_pkgs::MultiDOFarray next_steps_msg(const trajectory_t& traj, const int true_id) {
+    airsim_ros_pkgs::MultiDOFarray array_of_point_msg;
 
     for (const auto& point : traj){
-        airsim_ros_pkgs::multiDOF point_msg;
+        airsim_ros_pkgs::MultiDOF point_msg;
         point_msg.x = point.x;
         point_msg.y = point.y;
         point_msg.z = point.z;
@@ -272,14 +272,14 @@ int main(int argc, char **argv)
     //publisher and subscriber
 	    ros::ServiceServer trajectory_done_service = n.advertiseService("follow_trajectory_status", follow_trajectory_status_cb);
 
-	    ros::Publisher next_steps_pub = n.advertise<airsim_ros_pkgs::multiDOF_array>("/next_steps", 1);
+	    ros::Publisher next_steps_pub = n.advertise<airsim_ros_pkgs::MultiDOFarray>("/next_steps", 1);
 
 	    ros::Subscriber panic_sub =  n.subscribe<std_msgs::Bool>("panic_topic", 1, panic_callback);
 	    ros::Subscriber panic_velocity_sub = n.subscribe<geometry_msgs::Vector3>("panic_velocity", 1, panic_velocity_callback);
 	    
 
 		ros::Subscriber slam_lost_sub = n.subscribe<std_msgs::Bool>("/slam_lost", 1, slam_loss_callback);
-	    ros::Subscriber trajectory_follower_sub = n.subscribe<airsim_ros_pkgs::multiDOF_array>("normal_traj", 1, callback_trajectory);
+	    ros::Subscriber trajectory_follower_sub = n.subscribe<airsim_ros_pkgs::MultiDOFarray>("normal_traj", 1, callback_trajectory);
 
         ros::Publisher fly_back_pub = n.advertise<std_msgs::Bool>("/fly_back", 1);
 

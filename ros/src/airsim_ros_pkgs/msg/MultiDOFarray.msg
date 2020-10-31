@@ -1,3 +1,3 @@
-multiDOF[] points
+MultiDOF[] points
 int64 traj_id
 Header header

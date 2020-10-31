@@ -19,7 +19,7 @@
 
 // MAVBench headers
 #include <airsim_ros_pkgs/BoolPlusHeader.h>
-#include <airsim_ros_pkgs/multiDOF_array.h>
+#include <airsim_ros_pkgs/MultiDOFarray.h>
 
 // Octomap server headers
 #include <octomap_server/OctomapServer.h>
@@ -37,7 +37,7 @@ visualization_msgs::Marker collision_point;
 
 
 // Typedefs
-typedef airsim_ros_pkgs::multiDOF_array traj_msg_t;
+typedef airsim_ros_pkgs::MultiDOFarray traj_msg_t;
 typedef std::chrono::system_clock sys_clock;
 typedef std::chrono::time_point<sys_clock> sys_clock_time_point;
 static const sys_clock_time_point never = sys_clock_time_point::min();
@@ -254,7 +254,7 @@ bool check_for_collisions(AirsimROSWrapper& airsim_ros_wrapper, sys_clock_time_p
 }
 
 
-void callback_trajectory(const airsim_ros_pkgs::multiDOF_array::ConstPtr& msg){
+void callback_trajectory(const airsim_ros_pkgs::MultiDOFarray::ConstPtr& msg){
     g_got_new_traj = true;
     this_traj_already_has_collision = false;
     traj_timestamp = msg->header.stamp;
@@ -354,7 +354,7 @@ int main(int argc, char** argv)
     ros::Publisher col_coming_pub = nh.advertise<airsim_ros_pkgs::BoolPlusHeader>("/col_coming", 1);
 
     ros::Publisher marker_pub = nh.advertise<visualization_msgs::Marker>("collision_visualization_marker", 100);
-    ros::Subscriber trajectory_follower_sub = n.subscribe<airsim_ros_pkgs::multiDOF_array>("normal_traj", 1, callback_trajectory);
+    ros::Subscriber trajectory_follower_sub = n.subscribe<airsim_ros_pkgs::MultiDOFarray>("normal_traj", 1, callback_trajectory);
 
     State state, next_state;
     next_state = state = checking_for_collision;

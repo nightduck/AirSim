@@ -62,8 +62,8 @@ add_message_files(
   GPSYaw.msg
   VelCmd.msg
   VelCmdGroup.msg
-  multiDOF.msg
-  multiDOF_array.msg
+  MultiDOF.msg
+  MultiDOFarray.msg
   BoolPlusHeader.msg
 )
 

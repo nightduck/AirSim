@@ -3,8 +3,8 @@
 #include "common_mav.h"
 #include <visualization_msgs/Marker.h>
 #include "airsim_ros_pkgs/get_trajectory.h"
-#include <airsim_ros_pkgs/multiDOF.h>
-#include <airsim_ros_pkgs/multiDOF_array.h>
+#include <airsim_ros_pkgs/MultiDOF.h>
+#include <airsim_ros_pkgs/MultiDOFarray.h>
 #include <airsim_ros_pkgs/BoolPlusHeader.h>
 #include <airsim_ros_pkgs/follow_trajectory_status_srv.h>
 
@@ -128,7 +128,7 @@ int main(int argc, char **argv)
         ros::ServiceClient follow_trajectory_status_client = 
             nh.serviceClient<airsim_ros_pkgs::follow_trajectory_status_srv>("/follow_trajectory_status", true);
 
-        ros::Publisher trajectory_pub = nh.advertise <airsim_ros_pkgs::multiDOF_array>("normal_traj", 1);
+        ros::Publisher trajectory_pub = nh.advertise <airsim_ros_pkgs::MultiDOFarray>("normal_traj", 1);
 
         ros::Subscriber col_coming_sub = 
             nh.subscribe<airsim_ros_pkgs::BoolPlusHeader>("col_coming", 1, col_coming_callback);
@@ -223,9 +223,9 @@ int main(int argc, char **argv)
                 line_list.points.push_back(p);
             }
 
-            airsim_ros_pkgs::multiDOF_array array_of_point_msg;
+            airsim_ros_pkgs::MultiDOFarray array_of_point_msg;
             for (auto point : normal_traj){
-                airsim_ros_pkgs::multiDOF point_msg;
+                airsim_ros_pkgs::MultiDOF point_msg;
                 point_msg.x = point.x;
                 point_msg.y = point.y;
                 point_msg.z = point.z;
