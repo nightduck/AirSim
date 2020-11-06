@@ -383,6 +383,11 @@ ros2/build
 ros2/install
 ros2/log
 
+# ROS1 Bridge
+bridge_ws/build
+bridge_ws/install
+bridge_ws/log
+
 # docs
 docs/README.md
 build_docs/

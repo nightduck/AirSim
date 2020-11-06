@@ -4,6 +4,16 @@ AirSim is a simulator for drones, cars and more, built on [Unreal Engine](https:
 
 Our goal is to develop AirSim as a platform for AI research to experiment with deep learning, computer vision and reinforcement learning algorithms for autonomous vehicles. For this purpose, AirSim also exposes APIs to retrieve data and control vehicles in a platform independent way.
 
+**Check out the quick 1.5 minute demo**
+
+Drones in AirSim
+
+[![AirSim Drone Demo Video](docs/images/demo_video.png)](https://youtu.be/-WfTr1-OBGQ)
+
+Cars in AirSim
+
+[![AirSim Car Demo Video](docs/images/car_demo_video.png)](https://youtu.be/gnz1X3UNM5Y)
+
 ## ROS Build Instructions
 
 Execute the following to download this repo and build ROS packages
@@ -21,16 +31,10 @@ Execute the following to download this repo and build ROS packages
     source /opt/ros/dashing/setup.bash
     colcon build --cmake-args -DCMAKE_C_COMPILER=gcc-8 -DCMAKE_CXX_COMPILER=g++-8 --packages-select cinematography
 
+Then, in a new terminal, build the ROS1 bridge
 
-**Check out the quick 1.5 minute demo**
-
-Drones in AirSim
-
-[![AirSim Drone Demo Video](docs/images/demo_video.png)](https://youtu.be/-WfTr1-OBGQ)
-
-Cars in AirSim
-
-[![AirSim Car Demo Video](docs/images/car_demo_video.png)](https://youtu.be/gnz1X3UNM5Y)
+    cd AirSim/bridge_ws
+    ./build_bridge.sh
 
 ## What's New
 * A ROS wrapper for multirotors is available. See [airsim_ros_pkgs](https://github.com/microsoft/AirSim/blob/master/ros/src/airsim_ros_pkgs) for the ROS API, and [airsim_tutorial_pkgs](https://github.com/microsoft/AirSim/blob/master/ros/src/airsim_tutorial_pkgs) for tutorials.
