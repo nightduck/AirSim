@@ -61,7 +61,8 @@ using PointCloud = pcl::PointCloud<pcl::PointXYZ>;
 
 ros::Publisher traj_pub;
 ros::Publisher rviz_pub;
-ros::Publisher rviz_pose_pub;
+ros::Publisher rviz_actor_pub;
+ros::Publisher rviz_drone_pub;
 
 namespace ob = ompl::base;
 namespace og = ompl::geometric;
@@ -349,11 +350,11 @@ void generate_octomap(const octomap_msgs::Octomap& msg)
     }
 }
 
-void print_rviz_traj(piecewise_trajectory path, std::string name) {
+void print_rviz_traj(piecewise_trajectory path, std::string name, bool actor) {
     visualization_msgs::Marker rviz_path = visualization_msgs::Marker();
     rviz_path.header.seq = 0;
     rviz_path.header.stamp = ros::Time::now();
-    rviz_path.header.frame_id = "world_enu";
+    rviz_path.header.frame_id = "world_ned";
     rviz_path.ns = name;
     rviz_path.id = 0;
     rviz_path.type = visualization_msgs::Marker::POINTS;
@@ -363,7 +364,6 @@ void print_rviz_traj(piecewise_trajectory path, std::string name) {
     rviz_path.scale.y = 0.2;
     rviz_path.color.g = 1.0f;
     rviz_path.color.a = 1.0;
-    rviz_path.points.reserve(path.size());
     for(graph::node n : path) {
         geometry_msgs::Point p;
         p.x = n.x;
@@ -371,15 +371,17 @@ void print_rviz_traj(piecewise_trajectory path, std::string name) {
         p.z = n.z;
         rviz_path.points.push_back(p);
     }
-    rviz_pub.publish(rviz_path);
+    if (actor)
+        rviz_actor_pub.publish(rviz_path);
+    else
+        rviz_drone_pub.publish(rviz_path);
 }
 
-void print_rviz_traj(trajectory_msgs::MultiDOFJointTrajectory path, std::string name) {
+void print_rviz_traj(trajectory_msgs::MultiDOFJointTrajectory path, std::string name, bool actor) {
     geometry_msgs::PoseArray rviz_path = geometry_msgs::PoseArray();
     rviz_path.header.seq = 0;
     rviz_path.header.stamp = ros::Time::now();
-    rviz_path.header.frame_id = "world_enu";
-    rviz_path.poses.reserve(path.points.size());
+    rviz_path.header.frame_id = "world_ned";
     for(trajectory_msgs::MultiDOFJointTrajectoryPoint n : path.points) {
         geometry_msgs::Pose p;
         p.orientation = n.transforms.data()->rotation;
@@ -389,15 +391,17 @@ void print_rviz_traj(trajectory_msgs::MultiDOFJointTrajectory path, std::string 
         rviz_path.poses.push_back(p);
     }
 
-    rviz_pose_pub.publish(rviz_path);
+    if (actor)
+        rviz_actor_pub.publish(rviz_path);
+    else
+        rviz_drone_pub.publish(rviz_path);
 }
 
-void print_rviz_traj(airsim_ros_pkgs::multiDOF_array path, std::string name) {
+void print_rviz_traj(airsim_ros_pkgs::multiDOF_array path, std::string name, bool actor) {
     geometry_msgs::PoseArray rviz_path = geometry_msgs::PoseArray();
     rviz_path.header.seq = 0;
     rviz_path.header.stamp = ros::Time::now();
-    rviz_path.header.frame_id = "world_enu";
-    rviz_path.poses.reserve(path.points.size());
+    rviz_path.header.frame_id = "world_ned";
     for(airsim_ros_pkgs::multiDOF n : path.points) {
         geometry_msgs::Pose p;
         p.orientation = tf2::toMsg(tf2::Quaternion(0, 0, sin(n.yaw / 2), cos(n.yaw / 2)));
@@ -407,7 +411,10 @@ void print_rviz_traj(airsim_ros_pkgs::multiDOF_array path, std::string name) {
         rviz_path.poses.push_back(p);
     }
 
-    rviz_pose_pub.publish(rviz_path);
+    if (actor)
+        rviz_actor_pub.publish(rviz_path);
+    else
+        rviz_drone_pub.publish(rviz_path);
 }
 
 // Calculate an ideal drone trajectory using a given actor trajectory (both in NED and radians)
@@ -602,7 +609,7 @@ void get_actor_trajectory(const airsim_ros_pkgs::multiDOF_array& actor_traj)
         return;
     }
 
-    print_rviz_traj(actor_traj, "actor_traj");
+    print_rviz_traj(actor_traj, "actor_traj", true);
 
     airsim_ros_pkgs::multiDOF_array ideal_path;
     smooth_trajectory smooth_path;
@@ -614,7 +621,7 @@ void get_actor_trajectory(const airsim_ros_pkgs::multiDOF_array& actor_traj)
 
     ideal_path = calc_ideal_drone_traj(actor_traj);
 
-    print_rviz_traj(ideal_path, "drone_traj");
+    print_rviz_traj(ideal_path, "drone_traj", false);
 
     // TODO: Put in artificial load here to simulate optimizing
 
@@ -749,7 +756,8 @@ int main(int argc, char ** argv)
     ros::Subscriber art_spec_sub = nh.subscribe("artistic_specs", 1, get_artistic_specs);
     traj_pub = nh.advertise<airsim_ros_pkgs::multiDOF_array>("/multidoftraj", 1);
     rviz_pub = nh.advertise<visualization_msgs::Marker>("/scanning_visualization_marker", 1);
-    rviz_pose_pub = nh.advertise<geometry_msgs::PoseArray>("/poses", 1);
+    rviz_actor_pub = nh.advertise<geometry_msgs::PoseArray>("/rviz_actor_traj", 1);
+    rviz_drone_pub = nh.advertise<geometry_msgs::PoseArray>("/rviz_drone_traj", 1);
 
     // Sleep
     ros::spin();

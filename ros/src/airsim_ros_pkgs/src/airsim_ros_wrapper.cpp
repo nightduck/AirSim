@@ -157,9 +157,9 @@ bool AirsimROSWrapper::fly_velocity(double vx, double vy, double vz, float yaw, 
             auto drivetrain = msr::airlib::DrivetrainType::MaxDegreeOfFreedom;
             auto yawmode = msr::airlib::YawMode(true, yaw_rate);
 
-            airsim_client_.moveByVelocityAsync(vy, vx, -vz, duration, drivetrain, yawmode);
+            airsim_client_.moveByVelocityAsync(vx, vy, vz, duration, drivetrain, yawmode);
         } else {
-            airsim_client_.moveByVelocityAsync(vy, vx, -vz, duration);
+            airsim_client_.moveByVelocityAsync(vx, vy, vz, duration);
         }
     } catch(...) {
         std::cerr << "fly_velocity failed" << std::endl;
