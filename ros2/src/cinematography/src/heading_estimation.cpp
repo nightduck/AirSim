@@ -16,9 +16,6 @@
 #include <cv_bridge/cv_bridge.h>
 #include <math.h>
 
-// TODO: Make this adjustable as a ROS parameter
-#define IMAGE_RESOLUTION 192
-
 using std::placeholders::_1;
 
 class HeadingEstimation : public rclcpp::Node {
@@ -45,6 +42,9 @@ private:
     }
 
     void processImage(const cinematography_msgs::msg::BoundingBox::SharedPtr msg) {
+        int res;
+        get_parameter("resolution", res);
+
         // Pad image to 192x192 square with black bars
         sensor_msgs::msg::Image img = msg->image;
         cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(msg->image, sensor_msgs::image_encodings::BGR8);
@@ -65,8 +65,8 @@ private:
         // If neither image is 192px, scale input image
         if (cv_ptr->image.rows != 192 && cv_ptr->image.cols != 192) {
             cv::Mat dest;
-            double scaling_factor = IMAGE_RESOLUTION / ((cv_ptr->image.rows > cv_ptr->image.cols) ? cv_ptr->image.rows : cv_ptr->image.cols);
-            cv::resize(cv_ptr->image, dest, cv::Size(IMAGE_RESOLUTION, IMAGE_RESOLUTION));
+            double scaling_factor = res / ((cv_ptr->image.rows > cv_ptr->image.cols) ? cv_ptr->image.rows : cv_ptr->image.cols);
+            cv::resize(cv_ptr->image, dest, cv::Size(res, res));
             cv_ptr->image = dest;
         }
 
@@ -140,6 +140,8 @@ private:
 
 public:
     HeadingEstimation() : Node("heading_estimation") {
+        declare_parameter("resolution", 192);
+
         unit_vect.vector.x = unit_quat.quaternion.x = unit_quat.quaternion.w = 1;
         unit_vect.vector.y = unit_vect.vector.z = unit_quat.quaternion.y = unit_quat.quaternion.z = 0;
 

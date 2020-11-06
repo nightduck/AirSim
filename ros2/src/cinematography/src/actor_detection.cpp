@@ -20,12 +20,14 @@ class ActorDetection : public rclcpp::Node {
 private:
     rclcpp::Publisher<cinematography_msgs::msg::BoundingBox>::SharedPtr bb_pub;
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr camera;
-    msr::airlib::MultirotorRpcLibClient airsim_client;
+    msr::airlib::MultirotorRpcLibClient* airsim_client;
     tf2::Quaternion gimbal_setpoint;
-    std::string camera_name = "front_left_custom";  // TODO: Set these as parameters
+    std::string camera_name = "front_center_custom";  // TODO: Set these as parameters
     std::string vehicle_name = "drone_1";
     float fov = M_PI/2;
     int gimbal_msg_count = 0;
+
+    std::string airsim_hostname;
 
     int difffilter(const std::vector<uint8_t> &v, std::vector<uint8_t> &w, int m, int n);
 
@@ -68,7 +70,7 @@ private:
 
         msr::airlib::Quaternionr alq = msr::airlib::Quaternionr(gimbal_setpoint.w(),
                         gimbal_setpoint.x(), gimbal_setpoint.y(), gimbal_setpoint.z());
-        airsim_client.simSetCameraOrientation(camera_name, alq, vehicle_name);
+        airsim_client->simSetCameraOrientation(camera_name, alq, vehicle_name);
 
         // Extract subimage, package with centering coordinates, and publish to /bounding_box
         cinematography_msgs::msg::BoundingBox bb;
@@ -88,8 +90,12 @@ private:
 
 public:
     // TODO: Pass IP address of airsim as parameter
-    ActorDetection() : Node("actor_detection"), airsim_client("localhost") {
-        gimbal_setpoint = tf2::Quaternion(0,-0.259,0,0.966);
+    ActorDetection() : Node("actor_detection") {
+        declare_parameter<std::string>("airsim_hostname", "localhost");
+        get_parameter("airsim_hostname", airsim_hostname);
+        
+        airsim_client = new msr::airlib::MultirotorRpcLibClient(airsim_hostname);
+        gimbal_setpoint = tf2::Quaternion(0,0,0,1);
         bb_pub = this->create_publisher<cinematography_msgs::msg::BoundingBox>("bounding_box", 50);
         camera = this->create_subscription<sensor_msgs::msg::Image>("camera", 50, std::bind(&ActorDetection::processImage, this, _1));
     }

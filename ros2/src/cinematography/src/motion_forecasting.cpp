@@ -15,7 +15,7 @@ private:
     rclcpp::Publisher<cinematography_msgs::msg::MultiDOFarray>::SharedPtr predict_pub;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr pose_sub;
 
-    msr::airlib::MultirotorRpcLibClient airsim_client;
+    msr::airlib::MultirotorRpcLibClient* airsim_client;
 
     // TODO: Probably replace this with proper type
     msr::airlib::Pose lastPose;
@@ -38,7 +38,7 @@ private:
     void getActorPose(const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
         // TODO: Implement an actual EKF
 
-        msr::airlib::Pose pose = airsim_client.simGetObjectPose(DEER_NAME);
+        msr::airlib::Pose pose = airsim_client->simGetObjectPose(DEER_NAME);
         
         rclcpp::Time now = rclcpp::Time(msg->header.stamp, RCL_SYSTEM_TIME);
         rclcpp::Duration duration = now - lastPoseTimestamp;
@@ -47,22 +47,25 @@ private:
         cinematography_msgs::msg::MultiDOFarray pred_traj;
         pred_traj.header.stamp = now;
 
-        pred_traj.points.reserve(FORECAST_WINDOW_SECS / duration.seconds() + 1);
-        msr::airlib::Pose diff = (pose - lastPose);
+        int fws;
+        get_parameter("forecast_window_secs", fws);
+        pred_traj.points.reserve(fws / duration.seconds() + 1);
+        msr::airlib::Vector3r posDiff = pose.position - lastPose.position;
+        double yawDiff = getYaw(pose.orientation) - getYaw(lastPose.orientation);
         for(int i = 0; i < pred_traj.points.capacity(); i++) {
             cinematography_msgs::msg::MultiDOF point;
             //trajectory_msgs::msg::MultiDOFJointTrajectoryPoint point;
-            point.x = pose.position.x() + diff.position.x() * i;
-            point.y = pose.position.y() + diff.position.y() * i;
-            point.z = pose.position.z() + diff.position.z() * i;
-            point.vx = diff.position.x() / duration.seconds();
-            point.vy = diff.position.y() / duration.seconds();
-            point.vz = diff.position.z() / duration.seconds();
+            point.x = pose.position.x() + posDiff.x() * i;
+            point.y = pose.position.y() + posDiff.y() * i;
+            point.z = pose.position.z() + posDiff.z() * i;
+            point.vx = posDiff.x() / duration.seconds();
+            point.vy = posDiff.y() / duration.seconds();
+            point.vz = posDiff.z() / duration.seconds();
             point.ax = 0;
             point.ay = 0;
             point.az = 0;
             point.duration = duration.seconds();
-            point.yaw = getYaw(pose.orientation) + getYaw(diff.orientation) * i;
+            point.yaw = getYaw(pose.orientation) + yawDiff * i;
             pred_traj.points.push_back(point);
         }
 
@@ -72,8 +75,14 @@ private:
     }
 
 public:
-    // TODO: Pass IP address of airsim as parameter
-    MotionForecasting() : Node("motion_forecasting"), airsim_client("localhost") {
+    MotionForecasting() : Node("motion_forecasting") {
+        declare_parameter<int>("forecast_window_secs", 10);
+        std::string airsim_hostname;
+        declare_parameter<std::string>("airsim_hostname", "localhost");
+        get_parameter("airsim_hostname", airsim_hostname);
+
+        airsim_client = new msr::airlib::MultirotorRpcLibClient(airsim_hostname);
+
         lastPoseTimestamp = rclcpp::Time(0, 0, RCL_SYSTEM_TIME);
         predict_pub = this->create_publisher<cinematography_msgs::msg::MultiDOFarray>("pred_path", 1);
         pose_sub = this->create_subscription<geometry_msgs::msg::PoseStamped>("actor_pose", 50, std::bind(&MotionForecasting::getActorPose, this, _1));
