@@ -16,6 +16,7 @@ Cars in AirSim
 
 ## ROS Build Instructions
 
+This guide assumes you've installed ROS Melodic following the [instructions here](http://wiki.ros.org/melodic/Installation/Ubuntu), and ROS2 Dashing has been installed via package management as per the [instructions here](https://index.ros.org/doc/ros2/Installation/Dashing/Linux-Install-Debians/)
 Execute the following to download this repo and build ROS packages
 
     git clone https://github.com/nightduck/AirSim.git               # Clone this repo
@@ -24,16 +25,16 @@ Execute the following to download this repo and build ROS packages
     ./setup.sh                                                      # Build repo
     ./build.sh
 
-    # Install ROS1 and dependencies
-    sudo apt install ros-melodic-desktop python-catkin-tools ros-melodic-octomap ros-melodic-octomap-server ros-melodic-ompl ros-melodic-mavros-msgs ros-melodic-tf2-geometry-msgs libompl12 libompl-dev libcv-bridge1d
+    # Install ROS1 dependencies
+    sudo apt install python-catkin-tools ros-melodic-octomap ros-melodic-octomap-server ros-melodic-ompl ros-melodic-mavros-msgs ros-melodic-tf2-geometry-msgs libompl12 libompl-dev libcv-bridge1d
      gcc-8 g++-8
 
     cd ros                                                          # Build ROS code
     source /opt/ros/melodic/setup.bash
     catkin build -DCMAKE_C_COMPILER=gcc-8 -DCMAKE_CXX_COMPILER=g++-8
 
-    # Install ROS2 and dependencies
-    sudo apt install python3-colcon-common-extensions ros-dashing-tf2-sensor-msgs
+    # Install ROS2 dependencies
+    sudo apt install python3-colcon-common-extensions ros-dashing-tf2-sensor-msgs ros-dashing-launch-testing-ament-cmake
 
     cd ../ros2                                                      # Build ROS2 code
     source /opt/ros/dashing/setup.bash
@@ -43,6 +44,16 @@ Then, in a new terminal, build the ROS1 bridge
 
     cd AirSim/bridge_ws
     ./build_bridge.sh
+
+## Running on Jetson
+
+Cross compilation is not yet available, so this repo has to be built on the Jetson board, which will take several minutes for the ROS1 and ROS2 workspaces, and upwards of half an hour for the ROS1 bridge. ROS relies on hostnames to run on a distributed system. So be sure to entries to the /etc/hosts file for all machines involved. Eg if the desktop you're running airsim on is named "ubuntu-workstation" and has an IP of 192.168.0.14, then add the following line to /etc/hosts on your Jetson board.
+
+    192.168.0.14  ubuntu-workstation
+
+And vice-versa for the Jetson's hostname on the workstation's hosts file. A machine's hostname can be found by running `hostname`.
+
+The ROS launch files in `ros/launch/planning_pipeline.launch` and `ros2/launch/vision_pipeline.launch.py` specify the hostname of the machine running AirSim as ros parameters. These will have to be updated for your own machine.
 
 ## What's New
 * A ROS wrapper for multirotors is available. See [airsim_ros_pkgs](https://github.com/microsoft/AirSim/blob/master/ros/src/airsim_ros_pkgs) for the ROS API, and [airsim_tutorial_pkgs](https://github.com/microsoft/AirSim/blob/master/ros/src/airsim_tutorial_pkgs) for tutorials.

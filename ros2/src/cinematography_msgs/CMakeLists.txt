@@ -62,10 +62,6 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   ADD_LINTER_TESTS
 )
 
-install(DIRECTORY include/${PROJECT_NAME}/
-  DESTINATION include/${PROJECT_NAME}
-)
-
 install(
 	FILES GimbalAngleQuatCmd_mapping_rule.yaml
 	DESTINATION share/${PROJECT_NAME})

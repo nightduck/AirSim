@@ -13,7 +13,7 @@ def generate_launch_description():
                 ("bounding_box", "/auto_cinematography/vision/bounding_box")
             ],
             parameters=[
-                {"airsim_hostname" : "192.168.0.13"}
+                {"airsim_hostname" : "ubuntu-workstation"}
             ]
         ),
         Node(
@@ -37,7 +37,7 @@ def generate_launch_description():
                 ("actor_pose", "/auto_cinematography/vision/actor_pose")
             ],
             parameters=[
-                {"airsim_hostname": "192.168.0.13"}
+                {"airsim_hostname": "ubuntu-workstation"}
             ]
         )
     ])

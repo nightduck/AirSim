@@ -207,7 +207,8 @@ int main(int argc, char **argv)
 	ros::init(argc, argv, "follow_trajectory", ros::init_options::NoSigintHandler);
     ros::NodeHandle n;
     ros::NodeHandle n_private("~");
-    std::string host_ip = "localhost";
+    std::string host_ip;
+    n.param<std::string>("airsim_hostname", host_ip, "localhost");
     airsim_ros_wrapper = new AirsimROSWrapper(n, n_private, host_ip);
 
     // airsim setup

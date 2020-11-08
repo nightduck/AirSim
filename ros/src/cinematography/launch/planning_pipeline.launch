@@ -1,6 +1,7 @@
 <launch>
     <node pkg="cinematography" type="motion_planner" name="motion_planner">
 		<remap from="/actor_traj" to="/auto_cinematography/planning/actor_traj"/>
+        <param name="airsim_hostname" type="string" value="ubuntu-workstation"/>
 	</node>
     <node pkg="cinematography" type="follow_trajectory" name="follow_trajectory"/>
 </launch>
