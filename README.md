@@ -20,13 +20,20 @@ Execute the following to download this repo and build ROS packages
 
     git clone https://github.com/nightduck/AirSim.git               # Clone this repo
     cd AirSim
+    git submodule update --init --recusrive                         # Load all external sources
     ./setup.sh                                                      # Build repo
     ./build.sh
-    git submodule init                                              # Load all external sources
-    git submodule update
+
+    # Install ROS1 and dependencies
+    sudo apt install ros-melodic-desktop python-catkin-tools ros-melodic-octomap ros-melodic-octomap-server ros-melodic-ompl ros-melodic-mavros-msgs libcv-bridge1drob gcc-8 g++-8
+
     cd ros                                                          # Build ROS code
     source /opt/ros/melodic/setup.bash
     catkin build -DCMAKE_C_COMPILER=gcc-8 -DCMAKE_CXX_COMPILER=g++-8
+
+    # Install ROS2 and dependencies
+    sudo apt install python3-colcon-common-extensions ros-dashing-tf2-sensor-msgs
+
     cd ../ros2                                                      # Build ROS2 code
     source /opt/ros/dashing/setup.bash
     colcon build --cmake-args -DCMAKE_C_COMPILER=gcc-8 -DCMAKE_CXX_COMPILER=g++-8 --packages-select cinematography

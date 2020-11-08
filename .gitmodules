@@ -18,10 +18,10 @@
 	url = https://github.com/ethz-asl/nlopt.git
 [submodule "ros/src/catkin_simple"]
 	path = ros/src/catkin_simple
-	url = git@github.com:catkin/catkin_simple.git
+	url = https://github.com/catkin/catkin_simple.git
 [submodule "ros/src/yaml_cpp_catkin"]
 	path = ros/src/yaml_cpp_catkin
-	url = git@github.com:ethz-asl/yaml_cpp_catkin.git
+	url = https://github.com/ethz-asl/yaml_cpp_catkin.git
 [submodule "bridge_ws/src/ros1_bridge"]
 	path = bridge_ws/src/ros1_bridge
 	url = https://github.com/ros2/ros1_bridge.git
