@@ -19,7 +19,7 @@
 #include "graph.h"
 #include "airsim_ros_pkgs/get_trajectory.h"
 #include "cinematography/drone_state.h"
-#include "airsim_ros_pkgs/multiDOF_array.h"
+#include "airsim_ros_pkgs/MultiDOFarray.h"
 #include "cinematography/artistic_spec.h"
 #include "visualization_msgs/Marker.h"
 #include <tf2/LinearMath/Quaternion.h>
@@ -82,7 +82,7 @@ float g_planning_budget = 4;
 std::string motion_planning_core_str;
 
 octomap::OcTree * octree = nullptr;
-airsim_ros_pkgs::multiDOF_array traj_topic;
+airsim_ros_pkgs::MultiDOFarray traj_topic;
 bool g_requested_trajectory = false;
 bool path_found = false;
 
@@ -105,7 +105,7 @@ smooth_trajectory smoothen_the_shortest_path(piecewise_trajectory& piecewise_pat
 
 
 // ***F:DN Build the response to the service from the smooth_path
-airsim_ros_pkgs::multiDOF_array create_traj_msg(smooth_trajectory& smooth_path);
+airsim_ros_pkgs::MultiDOFarray create_traj_msg(smooth_trajectory& smooth_path);
 
 
 // ***F:DN Use the PRM sampling method to find a piecewise path
@@ -397,12 +397,12 @@ void print_rviz_traj(trajectory_msgs::MultiDOFJointTrajectory path, std::string 
         rviz_drone_pub.publish(rviz_path);
 }
 
-void print_rviz_traj(airsim_ros_pkgs::multiDOF_array path, std::string name, bool actor) {
+void print_rviz_traj(airsim_ros_pkgs::MultiDOFarray path, std::string name, bool actor) {
     geometry_msgs::PoseArray rviz_path = geometry_msgs::PoseArray();
     rviz_path.header.seq = 0;
     rviz_path.header.stamp = ros::Time::now();
     rviz_path.header.frame_id = "world_ned";
-    for(airsim_ros_pkgs::multiDOF n : path.points) {
+    for(airsim_ros_pkgs::MultiDOF n : path.points) {
         geometry_msgs::Pose p;
         p.orientation = tf2::toMsg(tf2::Quaternion(0, 0, sin(n.yaw / 2), cos(n.yaw / 2)));
         p.position.x = n.x;
@@ -418,16 +418,16 @@ void print_rviz_traj(airsim_ros_pkgs::multiDOF_array path, std::string name, boo
 }
 
 // Calculate an ideal drone trajectory using a given actor trajectory (both in NED and radians)
-airsim_ros_pkgs::multiDOF_array calc_ideal_drone_traj(airsim_ros_pkgs::multiDOF_array actor_traj) {
-    airsim_ros_pkgs::multiDOF_array drone_traj;
+airsim_ros_pkgs::MultiDOFarray calc_ideal_drone_traj(airsim_ros_pkgs::MultiDOFarray actor_traj) {
+    airsim_ros_pkgs::MultiDOFarray drone_traj;
     drone_traj.points.reserve(actor_traj.points.size());
 
     float horiz_dist = cos(viewport_pitch) * viewport_distance;
     float height = sin(viewport_pitch) * viewport_distance;
 
     // For each point in the actor's trajectory...
-    for (airsim_ros_pkgs::multiDOF point : actor_traj.points) {
-        airsim_ros_pkgs::multiDOF n;
+    for (airsim_ros_pkgs::MultiDOF point : actor_traj.points) {
+        airsim_ros_pkgs::MultiDOF n;
 
         // Center p on the actor to get the drone's ideal coordinates
         n.x = point.x + cos(viewport_heading + point.yaw) * horiz_dist;
@@ -444,13 +444,13 @@ airsim_ros_pkgs::multiDOF_array calc_ideal_drone_traj(airsim_ros_pkgs::multiDOF_
     return drone_traj;
 }
 
-void face_actor(airsim_ros_pkgs::multiDOF_array& drone_traj, const airsim_ros_pkgs::multiDOF_array& actor_traj) {
+void face_actor(airsim_ros_pkgs::MultiDOFarray& drone_traj, const airsim_ros_pkgs::MultiDOFarray& actor_traj) {
     if (drone_traj.points.size() != actor_traj.points.size()) {
         ROS_ERROR("Cannot face actor. Two trajectories don't match in number of points");
     }
 
-    std::vector<airsim_ros_pkgs::multiDOF>::iterator dit = drone_traj.points.begin();
-    std::vector<airsim_ros_pkgs::multiDOF>::const_iterator ait = actor_traj.points.begin();
+    std::vector<airsim_ros_pkgs::MultiDOF>::iterator dit = drone_traj.points.begin();
+    std::vector<airsim_ros_pkgs::MultiDOF>::const_iterator ait = actor_traj.points.begin();
 
     double d_time = dit->duration, a_time = 0;
     for(; ait < actor_traj.points.end(); ait++) {
@@ -602,7 +602,7 @@ smooth_trajectory smoothen_the_shortest_path(piecewise_trajectory& piecewise_pat
 
 //bool get_trajectory_fun(airsim_ros_pkgs::get_trajectory::Request &req, airsim_ros_pkgs::get_trajectory::Response &res)
 // Get actor's predicted trajectory (in NED and radians)
-void get_actor_trajectory(const airsim_ros_pkgs::multiDOF_array& actor_traj)
+void get_actor_trajectory(const airsim_ros_pkgs::MultiDOFarray& actor_traj)
 {
     if (actor_traj.points.size() == 0) {
         ROS_ERROR("Received empty actor path");
@@ -611,7 +611,7 @@ void get_actor_trajectory(const airsim_ros_pkgs::multiDOF_array& actor_traj)
 
     print_rviz_traj(actor_traj, "actor_traj", true);
 
-    airsim_ros_pkgs::multiDOF_array ideal_path;
+    airsim_ros_pkgs::MultiDOFarray ideal_path;
     smooth_trajectory smooth_path;
 
     geometry_msgs::Point start;
@@ -641,10 +641,10 @@ void get_actor_trajectory(const airsim_ros_pkgs::multiDOF_array& actor_traj)
 }
 
 
-airsim_ros_pkgs::multiDOF_array create_traj_msg(smooth_trajectory& smooth_path)
+airsim_ros_pkgs::MultiDOFarray create_traj_msg(smooth_trajectory& smooth_path)
 {
     const double safe_radius = 1.0;
-    airsim_ros_pkgs::multiDOF_array multiDOFtrajectory = airsim_ros_pkgs::multiDOF_array();
+    airsim_ros_pkgs::MultiDOFarray multiDOFtrajectory = airsim_ros_pkgs::MultiDOFarray();
 
     multiDOFtrajectory.header.seq = 0;
     multiDOFtrajectory.header.stamp = ros::Time::now(); //DEBUGGING. Should be 0
@@ -664,7 +664,7 @@ airsim_ros_pkgs::multiDOF_array create_traj_msg(smooth_trajectory& smooth_path)
     int state_index = 0;
 
     for (const auto& s : states) {
-        airsim_ros_pkgs::multiDOF point;
+        airsim_ros_pkgs::MultiDOF point;
 
         geometry_msgs::Transform pos;
         graph::node current;
@@ -754,7 +754,7 @@ int main(int argc, char ** argv)
     ros::Subscriber octomap_sub = nh.subscribe("/octomap_binary", 1, generate_octomap);
     ros::Subscriber drone_state_sub = nh.subscribe("/drone_state", 1, get_drone_state);
     ros::Subscriber art_spec_sub = nh.subscribe("artistic_specs", 1, get_artistic_specs);
-    traj_pub = nh.advertise<airsim_ros_pkgs::multiDOF_array>("/multidoftraj", 1);
+    traj_pub = nh.advertise<airsim_ros_pkgs::MultiDOFarray>("/multidoftraj", 1);
     rviz_pub = nh.advertise<visualization_msgs::Marker>("/scanning_visualization_marker", 1);
     rviz_actor_pub = nh.advertise<geometry_msgs::PoseArray>("/rviz_actor_traj", 1);
     rviz_drone_pub = nh.advertise<geometry_msgs::PoseArray>("/rviz_drone_traj", 1);

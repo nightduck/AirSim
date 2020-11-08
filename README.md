@@ -25,7 +25,8 @@ Execute the following to download this repo and build ROS packages
     ./build.sh
 
     # Install ROS1 and dependencies
-    sudo apt install ros-melodic-desktop python-catkin-tools ros-melodic-octomap ros-melodic-octomap-server ros-melodic-ompl ros-melodic-mavros-msgs libcv-bridge1drob gcc-8 g++-8
+    sudo apt install ros-melodic-desktop python-catkin-tools ros-melodic-octomap ros-melodic-octomap-server ros-melodic-ompl ros-melodic-mavros-msgs ros-melodic-tf2-geometry-msgs libompl12 libompl-dev libcv-bridge1d
+     gcc-8 g++-8
 
     cd ros                                                          # Build ROS code
     source /opt/ros/melodic/setup.bash
