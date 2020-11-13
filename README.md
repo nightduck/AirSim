@@ -26,19 +26,21 @@ Execute the following to download this repo and build ROS packages
     ./build.sh
 
     # Install ROS1 dependencies
-    sudo apt install python-catkin-tools ros-melodic-octomap ros-melodic-octomap-server ros-melodic-ompl ros-melodic-mavros-msgs ros-melodic-tf2-geometry-msgs libompl12 libompl-dev libcv-bridge1d
-     gcc-8 g++-8
+    sudo apt install python-catkin-tools ros-melodic-octomap ros-melodic-octomap-server \
+    ros-melodic-ompl ros-melodic-mavros-msgs ros-melodic-tf2-geometry-msgs libompl12 \
+    libompl-dev libcv-bridge1d gcc-8 g++-8
 
     cd ros                                                          # Build ROS code
     source /opt/ros/melodic/setup.bash
     catkin build -DCMAKE_C_COMPILER=gcc-8 -DCMAKE_CXX_COMPILER=g++-8
 
     # Install ROS2 dependencies
-    sudo apt install python3-colcon-common-extensions ros-dashing-tf2-sensor-msgs ros-dashing-launch-testing-ament-cmake
+    sudo apt install python3-colcon-common-extensions ros-dashing-tf2-sensor-msgs \
+    ros-dashing-launch-testing-ament-cmake
 
     cd ../ros2                                                      # Build ROS2 code
     source /opt/ros/dashing/setup.bash
-    colcon build --cmake-args -DCMAKE_C_COMPILER=gcc-8 -DCMAKE_CXX_COMPILER=g++-8 --packages-select cinematography
+    colcon build --cmake-args -DCMAKE_C_COMPILER=gcc-8 -DCMAKE_CXX_COMPILER=g++-8
 
 Then, in a new terminal, build the ROS1 bridge
 
