@@ -16,13 +16,17 @@
 
 #include <iostream>
 #include <vector>
-#include "tkdnn.h"
-#include "DarknetParser.h"
+#include "tkDNN/tkdnn.h"
+#include "tkDNN/Yolo3Detection.h"
 
 using std::placeholders::_1;
 
+#define CV_RES cv::Size(192, 192)
+#define ACTOR_CLASS 1
+
 class ActorDetection : public rclcpp::Node {
 private:
+    rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr objdet_pub;
     rclcpp::Publisher<cinematography_msgs::msg::BoundingBox>::SharedPtr bb_pub;
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr camera;
     msr::airlib::MultirotorRpcLibClient* airsim_client;
@@ -31,7 +35,10 @@ private:
     std::string vehicle_name = "drone_1";
     float fov = M_PI/2;
     int gimbal_msg_count = 0;
+
+    tk::dnn::Yolo3Detection *detNN;
     tk::dnn::Network *net;
+    std::vector<tk::dnn::Layer*> outputs;
 
     std::string airsim_hostname;
 
@@ -45,17 +52,57 @@ private:
         array.reserve(msg->data.size());
         //difffilter(msg->data, array, msg->width, msg->height);
 
-        // TODO: Scale image to 192x192, and figure out int8 inference
-        net->infer(net->input_dim, (float *)msg->data.data());
-        //=================DUMMY LOAD==========================
-        uint8_t prev = msg->data[0];
-        int len = msg->data.size();
-        array[0] = prev;
-        for (int i = 1; i < 1000000; i++) {
-            array[i%len] = msg->data[i%len] * prev;
-            prev = array[i%len];
+        // Scale image to 192x192 square with black bars
+        cv::Mat dest;
+        cv_bridge::CvImagePtr cv_ptr_in = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
+        cv::resize(cv_ptr_in->image, dest, CV_RES);
+        
+
+        // Perform inference
+        std::vector<cv::Mat> dnn_input;
+        dnn_input.push_back(cv_ptr_in->image);
+        detNN->update(dnn_input);
+
+        // Draw on boxes and publish for debugging purposes
+        detNN->draw(dnn_input);
+        cv_ptr_in->image = dnn_input[0];
+        objdet_pub->publish(cv_ptr_in->toImageMsg());
+
+        tk::dnn::box mostLikely;
+        mostLikely.cl = -1;
+        mostLikely.prob = 0;
+        for(auto b: detNN->detected) {
+            if (b.cl == ACTOR_CLASS && b.prob > mostLikely.prob) {
+                mostLikely = b;
+            }
         }
-        //==================DUMMY LOAD=========================
+
+
+        return;
+
+        // // Get 
+        // for(auto d:detected){
+        //     if(checkClass(d.cl, cam->dataset)){
+        //         convertCameraPixelsToMapMeters((d.x + d.w / 2)*scale_x, (d.y + d.h)*scale_y, d.cl, *cam, north, east);
+        //         tracking::obj_m obj;
+        //         obj.frame   = 0;
+        //         obj.cl      = d.cl;
+        //         obj.x       = north;
+        //         obj.y       = east;
+        //         cur_frame.push_back(obj);
+        //     }
+        // }
+
+
+        // //=================DUMMY LOAD==========================
+        // uint8_t prev = msg->data[0];
+        // int len = msg->data.size();
+        // array[0] = prev;
+        // for (int i = 1; i < 1000000; i++) {
+        //     array[i%len] = msg->data[i%len] * prev;
+        //     prev = array[i%len];
+        // }
+        // //==================DUMMY LOAD=========================
         float centerx = array[0] / 512.0 + 0.25;
         float centery = array[1] / 512.0 + 0.25;
         float width = array[2] / 1024.0;
@@ -80,7 +127,7 @@ private:
                         gimbal_setpoint.x(), gimbal_setpoint.y(), gimbal_setpoint.z());
         airsim_client->simSetCameraOrientation(camera_name, alq, vehicle_name);
 
-        // Extract subimage, package with centering coordinates, and publish to /bounding_box
+        // Extract stk::dnn::Yolo3Detection *detNNubimage, package with centering coordinates, and publish to /bounding_box
         cinematography_msgs::msg::BoundingBox bb;
         bb.actor_direction = tf2::toMsg(actor_direction);
 
@@ -105,9 +152,26 @@ public:
         airsim_client = new msr::airlib::MultirotorRpcLibClient(airsim_hostname);
         gimbal_setpoint = tf2::Quaternion(0,0,0,1);
         bb_pub = this->create_publisher<cinematography_msgs::msg::BoundingBox>("bounding_box", 50);
+        objdet_pub = this->create_publisher<sensor_msgs::msg::Image>("obj_detect_output", 50);
         camera = this->create_subscription<sensor_msgs::msg::Image>("camera", 50, std::bind(&ActorDetection::processImage, this, _1));
 
-        net = tk::dnn::darknetParser("yolo4/yolo-deer.cfg", "yolo4/layers", "yolo4/classes.name");
+        // // Load in Yolo4 network
+        // net = tk::dnn::darknetParser("yolo4/yolo-deer.cfg", "yolo4/layers", "yolo4/classes.names");
+        
+        // tk::dnn::NetworkRT *netRT = new tk::dnn::NetworkRT(net, net->getNetworkRTName("yolo4/yolo-deer.rt"));
+        detNN = new tk::dnn::Yolo3Detection();
+        detNN->init("yolo4/yolo3_fp32.rt", 2, 1);
+
+
+        // // Generate list of output layers 
+        // for(int i=0; i<net->num_layers; i++) {
+        //     if(net->layers[i]->final)
+        //         outputs.push_back(net->layers[i]);
+        // }
+        // // no final layers, set last as output
+        // if(outputs.size() == 0) {
+        //     outputs.push_back(net->layers[net->num_layers-1]);
+        // }
     }
 
     ~ActorDetection() {

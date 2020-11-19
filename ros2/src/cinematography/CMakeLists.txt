@@ -61,9 +61,13 @@ include_directories(${catkin_INCLUDE_DIRS}  ${PCL_INCLUDE_DIRS} )
 link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
 
-#find_package(CUDA 9.0 REQUIRED)
-#find_package(CUDNN REQUIRED)
-#find_package(Darknet REQUIRED)
+#-------------------------------------------------------------------------------
+# CUDA
+#-------------------------------------------------------------------------------
+find_package(CUDA 9.0 REQUIRED)
+SET(CUDA_SEPARABLE_COMPILATION ON)
+#set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -arch=sm_30 --compiler-options '-fPIC'")
+set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS})
 
 # set(msgs
 # 	"msg/BoundingBox.msg"
@@ -110,9 +114,11 @@ include_directories(
         ${OpenCV_INCLUDE_DIRS}
         ${Boost_INCLUDE_DIRS}
         ${common_utility_src}
-        ${tkDNN_INCLUDE_DIRS}
-        /usr/local/include/tkDNN
+        tkDNN/include
 )
+include_directories(${CUDA_INCLUDE_DIRS} ${OPENCV_INCLUDE_DIRS} ${NVINFER_INCLUDES} ${CUDNN_INCLUDE_DIRS})
+
+add_subdirectory(tkDNN)
 
 # #-------------------------------------------------------------------------------
 # # CUDA
@@ -152,7 +158,7 @@ include_directories(
 
 add_executable(actor_detection src/actor_detection.cpp)
 ament_target_dependencies(actor_detection rclcpp filterImage cinematography_msgs sensor_msgs geometry_msgs cv_bridge)
-target_link_libraries(actor_detection AirLib tkDNN)
+target_link_libraries(actor_detection AirLib tkDNN ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES} ${CUDNN_LIBRARIES} ${OpenCV_LIBS})
 #rosidl_target_interfaces(actor_detection ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
 add_executable(heading_estimation src/heading_estimation.cpp)

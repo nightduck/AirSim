@@ -30,5 +30,5 @@
 	path = ros2/src/ros_tsdf
 	url = https://github.com/naraharip2017/ros_tsdf.git
 [submodule "ros2/tkDNN"]
-	path = ros2/src/tkDNN
+	path = ros2/src/cinematography/tkDNN
 	url = https://github.com/nightduck/tkDNN.git
