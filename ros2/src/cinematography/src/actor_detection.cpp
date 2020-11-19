@@ -14,6 +14,11 @@
 //#include <darknet/include/darknet.h>
 #include <math.h>
 
+#include <iostream>
+#include <vector>
+#include "tkdnn.h"
+#include "DarknetParser.h"
+
 using std::placeholders::_1;
 
 class ActorDetection : public rclcpp::Node {
@@ -26,6 +31,7 @@ private:
     std::string vehicle_name = "drone_1";
     float fov = M_PI/2;
     int gimbal_msg_count = 0;
+    tk::dnn::Network *net;
 
     std::string airsim_hostname;
 
@@ -39,6 +45,8 @@ private:
         array.reserve(msg->data.size());
         //difffilter(msg->data, array, msg->width, msg->height);
 
+        // TODO: Scale image to 192x192, and figure out int8 inference
+        net->infer(net->input_dim, (float *)msg->data.data());
         //=================DUMMY LOAD==========================
         uint8_t prev = msg->data[0];
         int len = msg->data.size();
@@ -98,6 +106,13 @@ public:
         gimbal_setpoint = tf2::Quaternion(0,0,0,1);
         bb_pub = this->create_publisher<cinematography_msgs::msg::BoundingBox>("bounding_box", 50);
         camera = this->create_subscription<sensor_msgs::msg::Image>("camera", 50, std::bind(&ActorDetection::processImage, this, _1));
+
+        net = tk::dnn::darknetParser("yolo4/yolo-deer.cfg", "yolo4/layers", "yolo4/classes.name");
+    }
+
+    ~ActorDetection() {
+        delete net;
+        delete airsim_client;
     }
 };
 

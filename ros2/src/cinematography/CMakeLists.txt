@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.10.0)
 project(cinematography)
 
+
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/tkDNN/cmake)
+
 # set this to path to AirSim root folder if you want your catkin workspace in a custom directory
 set(AIRSIM_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../../../AirSim/)
 set (common_utility_src ${AIRSIM_ROOT}/ros/src/common)
@@ -43,11 +46,13 @@ find_package(tf2_sensor_msgs REQUIRED)
 find_package(cinematography_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(message_filters REQUIRED)
+find_package(tkDNN REQUIRED)
 
-# todo eigen3 in AirLib already
+# TODO eigen3 in AirLib already
 # find_package(Eigen3 REQUIRED)
 find_package(Boost REQUIRED)
 find_package(OpenCV REQUIRED)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DOPENCV")
 
 # package add by feiyang jin
 # pcl is for octomap_server
@@ -56,7 +61,7 @@ include_directories(${catkin_INCLUDE_DIRS}  ${PCL_INCLUDE_DIRS} )
 link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
 
-find_package(CUDA REQUIRED)
+#find_package(CUDA 9.0 REQUIRED)
 #find_package(CUDNN REQUIRED)
 #find_package(Darknet REQUIRED)
 
@@ -94,6 +99,7 @@ find_package(CUDA REQUIRED)
 #         DEPENDENCIES std_msgs geometry_msgs trajectory_msgs sensor_msgs
 # )
 
+
 include_directories(
         include
         ${AIRSIM_ROOT}/AirLib/deps/eigen3
@@ -104,30 +110,49 @@ include_directories(
         ${OpenCV_INCLUDE_DIRS}
         ${Boost_INCLUDE_DIRS}
         ${common_utility_src}
+        ${tkDNN_INCLUDE_DIRS}
+        /usr/local/include/tkDNN
 )
 
-CUDA_SELECT_NVCC_ARCH_FLAGS(ARCH_FLAGS Auto)
-SET(CUDA_NVCC_FLAGS ${ARCH_FLAGS} CACHE STRING "nvcc flags" FORCE)
-SET (CUDA_VERBOSE_BUILD ON CACHE BOOL "nvcc verbose" FORCE)
-SET(LIB_TYPE STATIC)
+# #-------------------------------------------------------------------------------
+# # CUDA
+# #-------------------------------------------------------------------------------
+# find_package(CUDA 9.0 REQUIRED)
+# SET(CUDA_SEPARABLE_COMPILATION ON)
+# #set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -arch=sm_30 --compiler-options '-fPIC'")
+# set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} --maxrregcount=32)
 
-# cuda compile GPU_CODE for executable
-#cuda_add_library(filterImage src/filterImage.cu)
+# find_package(CUDNN REQUIRED)
+# include_directories(${CUDNN_INCLUDE_DIR})
 
-#set(CUDA_NVCC_FLAGS "-arch=compute_30" CACHE STRING "nvcc flags" FORCE)
-#set(CUDA_VERBOSE_BUILD ON CACHE BOOL "nvcc verbose" FORCE)
-#set(LIB_TYPE STATIC)
 
-# add_library(airsim_settings_parser src/airsim_settings_parser.cpp)
-# ament_target_dependencies(airsim_settings_parser AirLib)
+# # compile
+# file(GLOB tkdnn_CUSRC "tkDNN/src/kernels/*.cu" "tkDNN/src/sorting.cu")
+# cuda_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include ${CUDA_INCLUDE_DIRS} ${CUDNN_INCLUDE_DIRS})
+# cuda_add_library(kernels SHARED ${tkdnn_CUSRC})
 
-# add_library(airsim_ros src/airsim_ros_wrapper.cpp)
-# ament_target_dependencies(airsim_ros rclcpp ${OpenCV_LIBS} yaml-cpp AirLib airsim_settings_parser cinematography_msgs)
-# #rosidl_target_interfaces(airsim_ros ${PROJECT_NAME} "rosidl_typesupport_cpp")
+
+# #-------------------------------------------------------------------------------
+# # Build Libraries
+# #-------------------------------------------------------------------------------
+
+# include_directories(${CMAKE_CURRENT_SOURCE_DIR}/tkDNN/include/tkDNN)
+# file(GLOB tkdnn_SRC "tkDNN/src/*.cpp")
+# set(tkdnn_LIBS kernels ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES} ${CUDNN_LIBRARIES} ${OpenCV_LIBS} yaml-cpp)
+
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+# include_directories(${CMAKE_CURRENT_SOURCE_DIR}/tkDNN/include ${CUDA_INCLUDE_DIRS} ${OPENCV_INCLUDE_DIRS} ${NVINFER_INCLUDES})
+# add_library(tkDNN SHARED ${tkdnn_SRC})
+# target_link_libraries(tkDNN ${tkdnn_LIBS})
+
+
+#-------------------------------------------------------------------------------
+# Build ROS2 Nodes
+#-------------------------------------------------------------------------------
 
 add_executable(actor_detection src/actor_detection.cpp)
 ament_target_dependencies(actor_detection rclcpp filterImage cinematography_msgs sensor_msgs geometry_msgs cv_bridge)
-target_link_libraries(actor_detection AirLib)
+target_link_libraries(actor_detection AirLib tkDNN)
 #rosidl_target_interfaces(actor_detection ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
 add_executable(heading_estimation src/heading_estimation.cpp)

@@ -26,3 +26,9 @@
 	path = bridge_ws/src/ros1_bridge
 	url = https://github.com/ros2/ros1_bridge.git
 	branch = dashing
+[submodule "ros2/src/ros_tsdf"]
+	path = ros2/src/ros_tsdf
+	url = https://github.com/naraharip2017/ros_tsdf.git
+[submodule "ros2/tkDNN"]
+	path = ros2/src/tkDNN
+	url = https://github.com/nightduck/tkDNN.git
