@@ -444,3 +444,6 @@ qtcreator-*
 # Catkin custom files
 CATKIN_IGNORE
 Unreal/Environments/Blocks/Blocks.code-workspace
+
+# AI
+*.rt
