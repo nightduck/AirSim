@@ -418,7 +418,7 @@ void print_rviz_traj(airsim_ros_pkgs::MultiDOFarray path, std::string name, bool
 }
 
 // Calculate an ideal drone trajectory using a given actor trajectory (both in NED and radians)
-airsim_ros_pkgs::MultiDOFarray calc_ideal_drone_traj(airsim_ros_pkgs::MultiDOFarray actor_traj) {
+airsim_ros_pkgs::MultiDOFarray calc_ideal_drone_traj(const airsim_ros_pkgs::MultiDOFarray& actor_traj) {
     airsim_ros_pkgs::MultiDOFarray drone_traj;
     drone_traj.points.reserve(actor_traj.points.size());
 
@@ -498,6 +498,43 @@ void face_actor(airsim_ros_pkgs::MultiDOFarray& drone_traj, const airsim_ros_pkg
 
     return;
 }
+
+//======================VVV==Cost functions==VVV====================================
+
+double traj_smoothness(const airsim_ros_pkgs::MultiDOFarray& drone_traj) {
+    return 1;
+}
+
+double shot_quality(const airsim_ros_pkgs::MultiDOFarray& drone_traj, airsim_ros_pkgs::MultiDOFarray& ideal_traj) {
+    return 1;
+}
+
+double obstacle_avoidance(const airsim_ros_pkgs::MultiDOFarray& drone_traj) {   // TODO: Add 2nd argument for TSDF
+    return 1;
+}
+
+double occlusion_avoidance(const airsim_ros_pkgs::MultiDOFarray& drone_traj, airsim_ros_pkgs::MultiDOFarray& actor_traj) {   // TODO: Add 3rd argument for TSDF
+    return 1;
+}
+
+double traj_cost_function(const airsim_ros_pkgs::MultiDOFarray& drone_traj, airsim_ros_pkgs::MultiDOFarray& actor_traj, airsim_ros_pkgs::MultiDOFarray& ideal_traj) {      // TODO: Add 4th argument for TSDF
+    double LAMBDA_1, LAMBDA_2, LAMBDA_3 = 1;    // TODO: Have these specified as ROS parameters
+
+    return traj_smoothness(drone_traj) + LAMBDA_1 * obstacle_avoidance(drone_traj) + LAMBDA_2 * occlusion_avoidance(drone_traj, actor_traj) + LAMBDA_3 * shot_quality(drone_traj, ideal_traj);
+}
+
+// TODO: Implement gradient equivalents of all the above, and hessian approximations (A_smooth + delta_1 * A_shot)
+
+void optimize_trajectory(const airsim_ros_pkgs::MultiDOFarray& drone_traj, airsim_ros_pkgs::MultiDOFarray& actor_traj) {
+    airsim_ros_pkgs::MultiDOFarray ideal_traj = calc_ideal_drone_traj(actor_traj);     // ξ_shot when calculating shot quality
+
+    int MAX_ITERATIONS;     // TODO: Make this a ROS parameter
+    for(int i = 0; i < 1000; i++) {
+        
+    }
+}
+
+//======================^^^==Cost functions==^^^====================================
 
 smooth_trajectory smoothen_the_shortest_path(piecewise_trajectory& piecewise_path, octomap::OcTree* octree, Eigen::Vector3d initial_velocity, Eigen::Vector3d initial_acceleration)
 {
