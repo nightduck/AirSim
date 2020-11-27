@@ -19,24 +19,31 @@
 #include "tkDNN/tkdnn.h"
 #include "tkDNN/Yolo3Detection.h"
 
+using namespace std::chrono_literals;
 using std::placeholders::_1;
 
 #define CV_RES cv::Size(192, 192)
 #define ACTOR_CLASS 0
 #define PROB_THRESHHOLD 0.8
 #define GIMBAL_DAMPING_FACTOR   0.8       // Don't immediately face actor, but ease camera in their direction. That way, false positive don't swivel the camera so real actor's out of frame
+#define PERIOD 250ms
 
 class ActorDetection : public rclcpp::Node {
 private:
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr objdet_pub;
     rclcpp::Publisher<cinematography_msgs::msg::BoundingBox>::SharedPtr bb_pub;
-    rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr camera;
+
+    rclcpp::TimerBase::SharedPtr timer_infr;
+    rclcpp::TimerBase::SharedPtr timer_img;
     msr::airlib::MultirotorRpcLibClient* airsim_client;
     tf2::Quaternion gimbal_setpoint;
     std::string camera_name = "front_center_custom";  // TODO: Set these 3 as parameters
     std::string vehicle_name = "drone_1";
     float fov = M_PI/2;
     int gimbal_msg_count = 0;
+
+    cv::Mat lastFrame;
+    std::mutex m;
 
     tk::dnn::Yolo3Detection *detNN;
     tk::dnn::Network *net;
@@ -46,21 +53,41 @@ private:
 
     int difffilter(const std::vector<uint8_t> &v, std::vector<uint8_t> &w, int m, int n);
 
-    void processImage(const sensor_msgs::msg::Image::SharedPtr msg) {
+    void fetchImage() {
+        RCLCPP_INFO(this->get_logger(), "Fetching Image, time=%f", now().seconds());
+        std::vector<ImageCaptureBase::ImageRequest> request = {
+            ImageCaptureBase::ImageRequest(camera_name, ImageCaptureBase::ImageType::Scene, false, false)
+        };
+        ImageCaptureBase::ImageResponse response = airsim_client->simGetImages(request, vehicle_name)[0];
+        //std::vector<uint8_t> img_png = airsim_client->simGetImage(camera_name, msr::airlib::ImageCaptureBase::ImageType::Scene, vehicle_name);
+        m.lock();
+        lastFrame = cv::Mat(response.width, response.height, CV_8UC3, response.image_data_uint8.data());
+        m.unlock();
+    }
+
+    void processImage() {
+        RCLCPP_INFO(this->get_logger(), "Processing Image, time=%f", now().seconds());
         // TODO: Add parameter to specify which type our actor is (deer, car, person, etc)
         // TODO: Run image through YOLO model and get bounding box coordiantes of object that is most confidently our actor
 
+        m.lock();
+        cv::Mat img = lastFrame.clone();    // TODO: Make this line thread safe with a semaphore
+        m.unlock();
+
         // Perform inference
-        cv_bridge::CvImagePtr cv_ptr_in = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
         std::vector<cv::Mat> frame_array;
-        frame_array.push_back(cv_ptr_in->image);
+        frame_array.push_back(img);
         detNN->update(frame_array);
 
         // Draw on boxes and publish for debugging purposes
-        frame_array[0] = cv_ptr_in->image;
+        frame_array[0] = img;
         detNN->draw(frame_array);
-        cv_ptr_in->image = frame_array[0];
-        objdet_pub->publish(cv_ptr_in->toImageMsg());
+        cv_bridge::CvImage cv_msg;
+        cv_msg.header.frame_id = "world_ned";
+        cv_msg.header.stamp = this->now();
+        cv_msg.encoding = sensor_msgs::image_encodings::BGR8;
+        cv_msg.image = frame_array[0];
+        objdet_pub->publish(cv_msg.toImageMsg());
 
         // Sort through found objects, and pick the one that's most likely our actor
         tk::dnn::box mostLikely;
@@ -86,10 +113,10 @@ private:
             return;
         }
 
-        centerx = (mostLikely.x + mostLikely.w/2) / msg->width;
-        centery = (mostLikely.y + mostLikely.h/2) / msg->height;
-        width = mostLikely.w / msg->width;
-        height = mostLikely.h / msg->height;
+        centerx = (mostLikely.x + mostLikely.w/2) / img.cols;
+        centery = (mostLikely.y + mostLikely.h/2) / img.rows;
+        width = mostLikely.w / img.cols;
+        height = mostLikely.h / img.rows;
 
         // If the actor is too small, assume it's incorrect. False positives are often in the distance
         if (width < 0.05 && height < 0.05) {
@@ -116,16 +143,25 @@ private:
         cinematography_msgs::msg::BoundingBox bb;
         bb.actor_direction = tf2::toMsg(actor_direction);
 
-        int px_left = (centerx - width/2) * msg->width;
-        int px_top = (centery - height/2) * msg->height;
-        int px_width = width * msg->width;
-        int px_height = height * msg->height;
-        cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
-        cv::Mat cropped = cv_ptr->image(cv::Rect(px_left, px_top, px_width, px_height));
-        cv_ptr->image = cropped;
-        bb.image = *cv_ptr->toImageMsg();
+        int px_left = (centerx - width/2) * img.cols;
+        int px_top = (centery - height/2) * img.rows;
+        int px_width = width * img.cols;
+        int px_height = height * img.rows;
+        cv_msg.image = img;
+        try {
+            cv::Mat cropped = cv_msg.image(cv::Rect((px_left < 0) ? 0 : px_left, (px_top < 0) ? 0 : px_top,
+                    (px_width + px_left > img.cols) ? img.cols - px_left : px_width,
+                    (px_height + px_top > img.rows) ? img.rows - px_top : px_height));
+            cv_msg.image = cropped;
+            bb.image = *cv_msg.toImageMsg();
 
-        bb_pub->publish(bb);
+            bb_pub->publish(bb);
+        } catch (cv::Exception& err) {
+            const char* err_msg = err.what();
+            std::cout << "exception caught: " << err_msg << std::endl;
+        }
+
+        return;
     }
 
 public:
@@ -139,11 +175,17 @@ public:
         //airsim_client->simGetCameraInfo(camera_name, vehicle_name).pose.orientation;
         bb_pub = this->create_publisher<cinematography_msgs::msg::BoundingBox>("bounding_box", 50);
         objdet_pub = this->create_publisher<sensor_msgs::msg::Image>("obj_detect_output", 50);
-        camera = this->create_subscription<sensor_msgs::msg::Image>("camera", 1, std::bind(&ActorDetection::processImage, this, _1));
+        timer_img = create_wall_timer(PERIOD, std::bind(&ActorDetection::fetchImage, this));
+        timer_infr = create_wall_timer(PERIOD, std::bind(&ActorDetection::processImage, this));
+        //camera = this->create_subscription<sensor_msgs::msg::Image>("camera", 1, std::bind(&ActorDetection::processImage, this, _1));
 
         // tk::dnn::NetworkRT *netRT = new tk::dnn::NetworkRT(net, net->getNetworkRTName("yolo4/yolo-deer.rt"));
         detNN = new tk::dnn::Yolo3Detection();
-        detNN->init("yolo4_airsim.rt", 2, 1);
+        if (!detNN->init("yolo4_airsim.rt", 2, 1)) {
+            RCLCPP_ERROR(this->get_logger(), "Cannot find yolo4_airsim.rt! Please place in present directory");
+        };
+
+        fetchImage();   // Fetch at least 1 so lastFrame isn't empty
     }
 
     ~ActorDetection() {
@@ -154,7 +196,10 @@ public:
 
 int main(int argc, char **argv) {
     rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<ActorDetection>());
+    rclcpp::executors::MultiThreadedExecutor exec;
+    auto actor_detection = std::make_shared<ActorDetection>();
+    exec.add_node(actor_detection);
+    exec.spin();
     rclcpp::shutdown();
 
     return 0;
