@@ -25,7 +25,7 @@ def generate_launch_description():
                 ("actor_pose", "/auto_cinematography/vision/actor_pose"),
                 ("bounding_box", "/auto_cinematography/vision/bounding_box"),
                 ("satellite_pose", "/airsim_node/drone_1/global_gps"),
-                ("odom_pos", "/airsim_node/drone_1/odom_local_ned"),
+                ("odom_pos", "/airsim_node/drone_1/odom_local_ned")
             ]
         ),
         Node(

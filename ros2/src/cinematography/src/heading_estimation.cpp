@@ -16,6 +16,11 @@
 #include <cv_bridge/cv_bridge.h>
 #include <math.h>
 
+#include "tkDNN/tkdnn.h"
+#include "tkDNN/NetworkRT.h"
+
+#define BATCH_SIZE 1
+
 using std::placeholders::_1;
 
 class HeadingEstimation : public rclcpp::Node {
@@ -33,12 +38,83 @@ private:
 
     rclcpp::Clock clock = rclcpp::Clock(RCL_SYSTEM_TIME);
 
+    tk::dnn::NetworkRT netRT;
+
+    #ifdef OPENCV_CUDACONTRIB
+        cv::cuda::GpuMat bgr[3];
+        cv::cuda::GpuMat imagePreproc;
+    #else
+        cv::Mat bgr[3];
+        cv::Mat imagePreproc;
+        dnnType *input;
+    #endif
+
     void flatten(tf2::Quaternion &quat) {
         quat.setX(0);
         quat.setY(0);
         double length = sqrt(quat.w() * quat.w() + quat.z() * quat.z());
         quat.setW(quat.w() / length);
         quat.setZ(quat.z() / length);
+    }
+
+    float* infer(cv::Mat in) {
+        tk::dnn::dataDim_t idim = netRT.buffersDIM[0];
+        tk::dnn::dataDim_t odim = netRT.buffersDIM[1];
+        idim.n = BATCH_SIZE;
+        odim.n = BATCH_SIZE;
+
+        if (idim.h != in.rows || idim.w != in.cols) {
+            RCLCPP_ERROR(this->get_logger(), "Size mismatch in HDE model input\n");
+        }
+
+        dnnType *input = new float[idim.tot()];
+        dnnType *output = new float[odim.tot()];
+        dnnType *input_d;
+        checkCuda( cudaMalloc(&input_d, idim.tot()*sizeof(dnnType)));
+
+        cv::resize(in, in, cv::Size(idim.w, idim.h));
+        in.convertTo(imagePreproc, CV_32FC3, 1/255.0); 
+
+        //split channels
+        cv::split(imagePreproc,bgr);//split source
+
+        //write channels
+        for(int i=0; i<netRT.input_dim.c; i++) {
+            int idx = i*imagePreproc.rows*imagePreproc.cols;
+            int ch = netRT.input_dim.c-1 -i;
+            memcpy((void*)&input[idx + netRT.input_dim.tot()], (void*)bgr[ch].data, imagePreproc.rows*imagePreproc.cols*sizeof(dnnType));     
+        }
+        checkCuda(cudaMemcpyAsync(input_d + netRT.input_dim.tot(), input + netRT.input_dim.tot(), netRT.input_dim.tot()*sizeof(dnnType), cudaMemcpyHostToDevice, netRT.stream));
+
+
+        int ret_tensorrt = 0; 
+        std::cout<<"Testing with batchsize: "<<BATCH_SIZE<<"\n";
+        printCenteredTitle(" TENSORRT inference ", '=', 30); 
+        float total_time = 0;
+        
+
+        tk::dnn::dataDim_t dim = idim;
+        TKDNN_TSTART
+        netRT.infer(dim, input_d);  // TODO: Extract the 4 important cuda lines from here and do inference without tkDNN
+        TKDNN_TSTOP
+        total_time+= t_ns;
+
+        // control output
+        std::cout<<"Output Buffers: "<<netRT.getBuffersN()-1<<"\n";
+        for(int o=1; o<netRT.getBuffersN(); o++) {
+            for(int b=1; b<BATCH_SIZE; b++) {
+                dnnType *out_d = (dnnType*) netRT.buffersRT[o];
+                dnnType *out0_d = out_d;
+                dnnType *outI_d = out_d + netRT.buffersDIM[o].tot()*b;
+                ret_tensorrt |= checkResult(netRT.buffersDIM[o].tot(), outI_d, out0_d) == 0 ? 0 : ERROR_TENSORRT;
+            }
+        }
+
+        int o_last = netRT.getBuffersN() - 1;
+        dnnType *out_d = (dnnType*) netRT.buffersRT[o_last];
+        dnnType *out0_d = out_d;
+        dnnType *outI_d = out_d + netRT.buffersDIM[o_last].tot();
+        return out_d;
     }
 
     void processImage(const cinematography_msgs::msg::BoundingBox::SharedPtr msg) {
@@ -61,14 +137,8 @@ private:
                     vert_padding, vert_padding + right_px, cv::BORDER_CONSTANT, cv::Scalar(0,0,0));
             cv_ptr->image = new_img;
         }
-        
-        // If neither image is 192px, scale input image
-        if (cv_ptr->image.rows != 192 && cv_ptr->image.cols != 192) {
-            cv::Mat dest;
-            double scaling_factor = res / ((cv_ptr->image.rows > cv_ptr->image.cols) ? cv_ptr->image.rows : cv_ptr->image.cols);
-            cv::resize(cv_ptr->image, dest, cv::Size(res, res));
-            cv_ptr->image = dest;
-        }
+
+        infer(cv_ptr->image);
 
 
         // TODO: Pass through Model to get heading estimation
@@ -139,7 +209,7 @@ private:
     }
 
 public:
-    HeadingEstimation() : Node("heading_estimation") {
+    HeadingEstimation() : Node("heading_estimation"), netRT(NULL, "hde_deer_airsim.rt") {
         declare_parameter("resolution", 192);
 
         unit_vect.vector.x = unit_quat.quaternion.x = unit_quat.quaternion.w = 1;

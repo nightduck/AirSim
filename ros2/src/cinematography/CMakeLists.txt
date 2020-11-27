@@ -157,12 +157,13 @@ add_subdirectory(tkDNN)
 #-------------------------------------------------------------------------------
 
 add_executable(actor_detection src/actor_detection.cpp)
-ament_target_dependencies(actor_detection rclcpp filterImage cinematography_msgs sensor_msgs geometry_msgs cv_bridge)
+ament_target_dependencies(actor_detection rclcpp cinematography_msgs sensor_msgs geometry_msgs cv_bridge)
 target_link_libraries(actor_detection AirLib tkDNN ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES} ${CUDNN_LIBRARIES} ${OpenCV_LIBS})
 #rosidl_target_interfaces(actor_detection ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
 add_executable(heading_estimation src/heading_estimation.cpp)
-ament_target_dependencies(heading_estimation rclcpp filterImage cinematography_msgs sensor_msgs geometry_msgs nav_msgs cv_bridge tf2_geometry_msgs)
+ament_target_dependencies(heading_estimation rclcpp cinematography_msgs sensor_msgs geometry_msgs nav_msgs
+        cv_bridge tf2_geometry_msgs tkDNN ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES} ${CUDNN_LIBRARIES} ${OpenCV_LIBS})
 
 add_executable(motion_forecasting src/motion_forecasting.cpp)
 ament_target_dependencies(motion_forecasting rclcpp geometry_msgs cinematography_msgs)
