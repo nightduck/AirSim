@@ -19,6 +19,7 @@
 #include <trajectory_msgs/MultiDOFJointTrajectory.h>
 #include <trajectory_msgs/MultiDOFJointTrajectoryPoint.h>
 #include <nav_msgs/Odometry.h>
+#include "vehicles/multirotor/api/MultirotorRpcLibClient.hpp"
 
 #define FREQ 5
 #define MARGIN 0.01     // Used as a margin of error to prevent the call to follow_trajectory from going over the node's period
@@ -27,6 +28,8 @@
 #define DAMPING_FACTOR_Z 0.15
 #define likely(x)      __builtin_expect(!!(x), 1)
 #define unlikely(x)    __builtin_expect(!!(x), 0)
+
+#define MAX_YAW_RATE    90
 
 using namespace std;
 
@@ -61,43 +64,7 @@ int rviz_id = 0;
 
 int traj_id = 0;
 
-AirsimROSWrapper* airsim_ros_wrapper;
-
-void slam_loss_callback (const std_msgs::Bool::ConstPtr& msg) {
-    slam_lost = msg->data;
-
-    // slam lost
-    if (slam_lost) {
-        ROS_WARN("SLAM lost!");
-        if (!created_slam_loss_traj) {
-            slam_loss_traj = create_slam_loss_trajectory(*airsim_ros_wrapper, normal_traj, rev_normal_traj);
-            copy_slam_loss_traj = true;
-        }
-        created_slam_loss_traj = true;
-    }
-    else {
-        slam_loss_traj.clear();
-        created_slam_loss_traj = false;
-    }
-}
-
-void panic_callback(const std_msgs::Bool::ConstPtr& msg) {
-    should_panic = msg->data;
-
-    if (should_panic) {
-        ROS_INFO("Panicking!");
-        ROS_INFO("Panicking!");
-        ROS_INFO("Panicking!");
-        ROS_INFO("Panicking!");
-
-        panic_traj = create_panic_trajectory(*airsim_ros_wrapper, panic_velocity);
-        normal_traj.clear(); // Replan a path once we're done
-    }
-}
-
-void panic_velocity_callback(const geometry_msgs::Vector3::ConstPtr& msg) {
-    panic_velocity = *msg;
-}
+msr::airlib::MultirotorRpcLibClient* airsim_client;
 
 
 void callback_trajectory(const airsim_ros_pkgs::MultiDOFarray::ConstPtr& msg)
@@ -209,20 +176,9 @@ int main(int argc, char **argv)
     ros::NodeHandle n_private("~");
     std::string host_ip;
     n.param<std::string>("airsim_hostname", host_ip, "localhost");
-    airsim_ros_wrapper = new AirsimROSWrapper(n, n_private, host_ip);
 
-    // airsim setup
-        if (airsim_ros_wrapper->is_used_img_timer_cb_queue_)
-        {
-            airsim_ros_wrapper->img_async_spinner_.start();
-        }
-
-        if (airsim_ros_wrapper->is_used_lidar_timer_cb_queue_)
-        {
-            airsim_ros_wrapper->lidar_async_spinner_.start();
-        }
-
-    airsim_ros_wrapper->takeoff_jin();
+    airsim_client = new msr::airlib::MultirotorRpcLibClient(host_ip);
+    airsim_client->takeoffAsync(5)->waitOnLastTask();
 
     //variable
 	    std::string localization_method; 
@@ -238,16 +194,9 @@ int main(int argc, char **argv)
 	    ros::ServiceServer trajectory_done_service = n.advertiseService("follow_trajectory_status", follow_trajectory_status_cb);
 
 	    ros::Publisher next_steps_pub = n.advertise<airsim_ros_pkgs::MultiDOFarray>("/next_steps", 1);
-
-	    ros::Subscriber panic_sub =  n.subscribe<std_msgs::Bool>("panic_topic", 1, panic_callback);
-	    ros::Subscriber panic_velocity_sub = n.subscribe<geometry_msgs::Vector3>("panic_velocity", 1, panic_velocity_callback);
-	    
-
-		ros::Subscriber slam_lost_sub = n.subscribe<std_msgs::Bool>("/slam_lost", 1, slam_loss_callback);
 	    ros::Subscriber trajectory_follower_sub = n.subscribe<airsim_ros_pkgs::MultiDOFarray>("multidoftraj", 1, callback_trajectory);
 
-        ros::Subscriber stop_fly_sub = 
-            n.subscribe<std_msgs::Bool>("/stop_fly", 1, stop_fly_callback);
+        ros::Subscriber stop_fly_sub = n.subscribe<std_msgs::Bool>("/stop_fly", 1, stop_fly_callback);
 
         // DEBUGGING
         rviz_vel_pub = n.advertise<nav_msgs::Odometry>("velocities", 1);
@@ -275,10 +224,6 @@ int main(int argc, char **argv)
         else if (copy_normal_traj) {
             traj = &normal_traj;
             copy_normal_traj = false;
-
-//            // DEBUGGING
-//            airsim_ros_wrapper->moveTo(traj->front().y, traj->front().x, -1*traj->front().z, 1.0);
-//            airsim_ros_wrapper->set_yaw((traj->front().yaw*-180/M_PI) + 90);
         }
 
         // If there's a trajectory to follow and we haven't been commanded to halt,
@@ -312,7 +257,7 @@ int main(int argc, char **argv)
                 double v_z = p.vz;
                 float yaw = p.yaw*180/M_PI;
 
-                Vector3r pos = airsim_ros_wrapper->getPosition();
+                Vector3r pos = airsim_client->getMultirotorState().getPosition();
                 double posx = pos.x();
                 double posy = pos.y();
                 double posz = pos.z();
@@ -337,7 +282,27 @@ int main(int argc, char **argv)
 
                 // Wait until the the last point finishes processing, then tackle this point
                 std::this_thread::sleep_until(sleep_time);
-                airsim_ros_wrapper->fly_velocity(v_x, v_y, v_z, yaw, scaled_flight_time.count());
+                                
+                auto q = airsim_client->getMultirotorState().getOrientation();
+                float pitch, roll, current_yaw;
+                msr::airlib::VectorMath::toEulerianAngle(q, pitch, current_yaw, roll);
+                current_yaw = yaw*180 / M_PI;
+
+                float yaw_diff = (int(yaw - current_yaw) + 360) % 360;
+                yaw_diff = yaw_diff <= 180 ? yaw_diff : yaw_diff - 360;
+                
+                float yaw_rate = yaw_diff / scaled_flight_time.count();
+
+                if (yaw_rate > MAX_YAW_RATE)
+                    yaw_rate = MAX_YAW_RATE;
+                else if (yaw_rate < -MAX_YAW_RATE)
+                    yaw_rate = -MAX_YAW_RATE;
+
+                auto drivetrain = msr::airlib::DrivetrainType::MaxDegreeOfFreedom;
+                auto yawmode = msr::airlib::YawMode(true, yaw_rate);
+
+                airsim_client->moveByVelocityAsync(v_x, v_y, v_z, scaled_flight_time.count(), drivetrain, yawmode);
+
                 print_rviz_vel(pos.y(), pos.x(), -1*pos.z(), v_x, v_y, v_z);
                 ROS_INFO("Flying at (%f, %f, %f) for %f seconds", v_x, v_y, v_z, p.duration);
 
