@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10.0)
+cmake_minimum_required(VERSION 3.15.0)
 project(cinematography)
 
 
@@ -46,7 +46,6 @@ find_package(tf2_sensor_msgs REQUIRED)
 find_package(cinematography_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(message_filters REQUIRED)
-find_package(tkDNN REQUIRED)
 
 # TODO eigen3 in AirLib already
 # find_package(Eigen3 REQUIRED)
@@ -162,8 +161,8 @@ target_link_libraries(actor_detection AirLib tkDNN ${CUDA_LIBRARIES} ${CUDA_CUBL
 #rosidl_target_interfaces(actor_detection ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
 add_executable(heading_estimation src/heading_estimation.cpp)
-ament_target_dependencies(heading_estimation rclcpp cinematography_msgs sensor_msgs geometry_msgs nav_msgs
-        cv_bridge tf2_geometry_msgs tkDNN ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES} ${CUDNN_LIBRARIES} ${OpenCV_LIBS})
+ament_target_dependencies(heading_estimation rclcpp cinematography_msgs sensor_msgs geometry_msgs nav_msgs cv_bridge tf2_geometry_msgs)
+target_link_libraries(heading_estimation tkDNN ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES} ${CUDNN_LIBRARIES} ${OpenCV_LIBS})
 
 add_executable(motion_forecasting src/motion_forecasting.cpp)
 ament_target_dependencies(motion_forecasting rclcpp geometry_msgs cinematography_msgs)
