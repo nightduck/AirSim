@@ -168,6 +168,13 @@ add_executable(motion_forecasting src/motion_forecasting.cpp)
 ament_target_dependencies(motion_forecasting rclcpp geometry_msgs cinematography_msgs)
 target_link_libraries(motion_forecasting AirLib)
 
+add_executable(motion_planner src/motion_planner.cpp)
+ament_target_dependencies(motion_planner rclcpp geometry_msgs cinematography_msgs tf2_geometry_msgs)
+
+add_executable(follow_trajectory src/follow_trajectory.cpp)
+ament_target_dependencies(follow_trajectory rclcpp geometry_msgs cinematography_msgs tf2_geometry_msgs nav_msgs)
+target_link_libraries(follow_trajectory AirLib)
+
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   # the following line skips the linter which checks for copyrights
@@ -180,7 +187,7 @@ if(BUILD_TESTING)
 endif()
 
 install(TARGETS
-        actor_detection heading_estimation motion_forecasting
+        actor_detection heading_estimation motion_forecasting motion_planner follow_trajectory
         DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/
         DESTINATION include)
