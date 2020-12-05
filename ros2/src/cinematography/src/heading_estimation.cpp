@@ -1,6 +1,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp/logging.hpp"
 #include "cinematography_msgs/msg/bounding_box.hpp"
+#include "cinematography_msgs/msg/vision_measurements.hpp"
 #include "sensor_msgs/msg/image.hpp"
 #include "sensor_msgs/msg/compressed_image.hpp"
 #include "sensor_msgs/msg/nav_sat_fix.hpp"
@@ -25,20 +26,22 @@ using std::placeholders::_1;
 
 class HeadingEstimation : public rclcpp::Node {
 private:
-    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_pub;
+    rclcpp::Publisher<cinematography_msgs::msg::VisionMeasurements>::SharedPtr hde_pub;
     rclcpp::Subscription<sensor_msgs::msg::NavSatFix>::SharedPtr sat_sub;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub;
     rclcpp::Subscription<cinematography_msgs::msg::BoundingBox>::SharedPtr bb_sub;
 
     // NOTE: These variables makes this node not safe for multithreaded spinning
-    geometry_msgs::msg::PoseStamped drone_pose;
     geometry_msgs::msg::TransformStamped t;         // Dummy variable for math-ing
     geometry_msgs::msg::Vector3Stamped unit_vect;
     geometry_msgs::msg::QuaternionStamped unit_quat;
 
     rclcpp::Clock clock = rclcpp::Clock(RCL_SYSTEM_TIME);
 
-    tk::dnn::NetworkRT netRT;
+    tk::dnn::NetworkRT* netRT;
+    dnnType *input_d;
+    dnnType *out_d;
+    const int nBatches = 1;
 
     #ifdef OPENCV_CUDACONTRIB
         cv::cuda::GpuMat bgr[3];
@@ -57,63 +60,42 @@ private:
         quat.setZ(quat.z() / length);
     }
 
+    void preprocess(cv::Mat &frame, const int bi) {
+        //resize image, remove mean, divide by std
+        cv::Mat frame_nomean;
+        resize(frame, frame, cv::Size(netRT->input_dim.w, netRT->input_dim.h));
+        frame.convertTo(frame_nomean, CV_32FC3, 1, -127);
+        frame_nomean.convertTo(imagePreproc, CV_32FC3, 1 / 128.0, 0);
+
+        //copy image into tensor and copy it into GPU
+        cv::split(imagePreproc, bgr);
+        for (int i = 0; i < netRT->input_dim.c; i++){
+            int idx = i * imagePreproc.rows * imagePreproc.cols;
+            memcpy((void *)&input[idx + netRT->input_dim.tot()*bi], (void *)bgr[i].data, imagePreproc.rows * imagePreproc.cols * sizeof(dnnType));
+        }
+        checkCuda(cudaMemcpyAsync(input_d+ netRT->input_dim.tot()*bi, input + netRT->input_dim.tot()*bi, netRT->input_dim.tot() * sizeof(dnnType), cudaMemcpyHostToDevice, netRT->stream));
+    }
+
+    void postprocess(){
+        out_d = (float*)malloc(netRT->output_dim.tot() * sizeof(dnnType));
+        checkCuda(cudaMemcpy(out_d, netRT->output, netRT->output_dim.tot() * sizeof(dnnType), cudaMemcpyDeviceToHost));
+
+        out_d[0] = (out_d[0] * 2) - 1;
+        out_d[1] = (out_d[1] * 2) - 1;
+    }
+
+
     float* infer(cv::Mat in) {
-        tk::dnn::dataDim_t idim = netRT.buffersDIM[0];
-        tk::dnn::dataDim_t odim = netRT.buffersDIM[1];
-        idim.n = BATCH_SIZE;
-        odim.n = BATCH_SIZE;
+        preprocess(in, 0);
 
-        if (idim.h != in.rows || idim.w != in.cols) {
-            RCLCPP_ERROR(this->get_logger(), "Size mismatch in HDE model input\n");
-        }
-
-        dnnType *input = new float[idim.tot()];
-        dnnType *output = new float[odim.tot()];
-        dnnType *input_d;
-        checkCuda( cudaMalloc(&input_d, idim.tot()*sizeof(dnnType)));
-
-        cv::resize(in, in, cv::Size(idim.w, idim.h));
-        in.convertTo(imagePreproc, CV_32FC3, 1/255.0); 
-
-        //split channels
-        cv::split(imagePreproc,bgr);//split source
-
-        //write channels
-        for(int i=0; i<netRT.input_dim.c; i++) {
-            int idx = i*imagePreproc.rows*imagePreproc.cols;
-            int ch = netRT.input_dim.c-1 -i;
-            memcpy((void*)&input[idx + netRT.input_dim.tot()], (void*)bgr[ch].data, imagePreproc.rows*imagePreproc.cols*sizeof(dnnType));     
-        }
-        checkCuda(cudaMemcpyAsync(input_d + netRT.input_dim.tot(), input + netRT.input_dim.tot(), netRT.input_dim.tot()*sizeof(dnnType), cudaMemcpyHostToDevice, netRT.stream));
-
-
-        int ret_tensorrt = 0; 
-        std::cout<<"Testing with batchsize: "<<BATCH_SIZE<<"\n";
-        printCenteredTitle(" TENSORRT inference ", '=', 30); 
         float total_time = 0;
-        
-
-        tk::dnn::dataDim_t dim = idim;
         TKDNN_TSTART
-        netRT.infer(dim, input_d);  // TODO: Extract the 4 important cuda lines from here and do inference without tkDNN
+        netRT->infer(netRT->input_dim, input_d);
         TKDNN_TSTOP
         total_time+= t_ns;
 
-        // control output
-        std::cout<<"Output Buffers: "<<netRT.getBuffersN()-1<<"\n";
-        for(int o=1; o<netRT.getBuffersN(); o++) {
-            for(int b=1; b<BATCH_SIZE; b++) {
-                dnnType *out_d = (dnnType*) netRT.buffersRT[o];
-                dnnType *out0_d = out_d;
-                dnnType *outI_d = out_d + netRT.buffersDIM[o].tot()*b;
-                ret_tensorrt |= checkResult(netRT.buffersDIM[o].tot(), outI_d, out0_d) == 0 ? 0 : ERROR_TENSORRT;
-            }
-        }
+        postprocess();
 
-        int o_last = netRT.getBuffersN() - 1;
-        dnnType *out_d = (dnnType*) netRT.buffersRT[o_last];
-        dnnType *out0_d = out_d;
-        dnnType *outI_d = out_d + netRT.buffersDIM[o_last].tot();
         return out_d;
     }
 
@@ -138,93 +120,94 @@ private:
             cv_ptr->image = new_img;
         }
 
-        infer(cv_ptr->image);
+        float* array = infer(cv_ptr->image);
 
-
-        // TODO: Pass through Model to get heading estimation
-        //==================DUMMY LOAD===========================
-        std::vector<uint8_t> array;
-        array.reserve(msg->image.data.size());
-        uint8_t prev = msg->image.data[0];
-        int len = msg->image.data.size();
-        array[0] = prev;
-        for (int i = 0; i < 1000000; i++) {
-            array[i%len] = msg->image.data[i%len] * prev + (i % 256);
-            prev = array[i%len];
-        }
-        //================DUMMY LOAD============================
-        double hde0 = array[0] / 128.0 - 1;   // Output #1
-        double hde1 = array[1] / 128.0 - 1;   // Output #2
+        double hde0 = array[0];   // Output #1
+        double hde1 = array[1];   // Output #2
         // TODO: Normalize to [-1,1] range
 
         // Get the rotation of the actor relative to camera
         double angle = atan2(hde1, hde0);
-        tf2::Quaternion quat_actor_rel;
-        quat_actor_rel.setRPY(0, 0, angle);
+        // tf2::Quaternion quat_actor_rel;
+        // quat_actor_rel.setRPY(0, 0, angle);
 
-        // Compute a unit vector pointing at the actor
-        tf2::Quaternion quat_gimbal, quat_drone, quat_actor_direction;
-        tf2::fromMsg(msg->actor_direction, quat_gimbal);
-        tf2::fromMsg(drone_pose.pose.orientation, quat_drone);
-        t.transform.rotation = tf2::toMsg(quat_drone * quat_gimbal);
-        t.transform.translation = geometry_msgs::msg::Vector3();
-        geometry_msgs::msg::Vector3Stamped actor_ray;
-        tf2::doTransform(unit_vect, actor_ray, t);
+        // // Convert drone's orientation to usable format
+        // tf2::Quaternion quat_drone;
+        // tf2::fromMsg(msg->drone_pose.orientation, quat_drone);
 
-        // Project actor ray to ground, resulting vector being position of actor
-        double scale = abs(drone_pose.pose.position.z / actor_ray.vector.z);
-        actor_ray.vector.x *= scale;
-        actor_ray.vector.y *= scale;
-        actor_ray.vector.z *= scale;
+        // // Express the drone's offset within frame as quaternion rotations
+        // tf2::Quaternion horiz_offset = tf2::Quaternion(0, 0, sin(msg->fov * (msg->centerx - 0.5) / 2), cos(msg->fov * (msg->centerx - 0.5) / 2));
+        // tf2::Quaternion vert_offset = tf2::Quaternion(0, sin(msg->fov * (msg->centery + msg->height/2 - 0.5) / -2), 0, cos(msg->fov * (msg->centery + msg->height/2 - 0.5) / -2));
+        // tf2::Quaternion actor_direction = horiz_offset * quat_drone * vert_offset;   // Get the orientation in the direction of the actor (centered on bottom center)
 
-        // Flatten drone's quaternions (so they only represent yaw), and use that to calculate the
-        // actor's absolute rotation
-        flatten(quat_gimbal);
-        flatten(quat_drone);
-        tf2::Quaternion quat_actor_absolute = quat_actor_rel * quat_drone * quat_gimbal;
+        // // Compute a unit vector pointing at the actor
+        // t.transform.rotation = tf2::toMsg(actor_direction);
+        // t.transform.translation = geometry_msgs::msg::Vector3();
+        // geometry_msgs::msg::Vector3Stamped actor_ray;
+        // tf2::doTransform(unit_vect, actor_ray, t);
+
+        // // Project actor ray to ground, resulting vector being position of actor
+        // double scale = abs(msg->drone_pose.position.z / actor_ray.vector.z);
+        // actor_ray.vector.x *= scale;
+        // actor_ray.vector.y *= scale;
+        // actor_ray.vector.z *= scale;
+
+        // // Flatten drone's quaternions (so they only represent yaw), and use that to calculate the
+        // // actor's absolute rotation
+        // flatten(actor_direction);
+        // flatten(quat_drone);
+        // tf2::Quaternion quat_actor_absolute = actor_direction * quat_drone;
+
 
         // NOTE: RESUME HERE. Verify the actor's absolute rotation is being calcualted correctly from it's relative rotation
         // Combine actor's position and rotation (adjusted from relative to absolute)
-        geometry_msgs::msg::PoseStamped actor_pose;
-        actor_pose.pose.position.x = actor_ray.vector.x + drone_pose.pose.position.x;
-        actor_pose.pose.position.y = actor_ray.vector.y + drone_pose.pose.position.y;
-        actor_pose.pose.position.z = actor_ray.vector.z + drone_pose.pose.position.z;
-        actor_pose.pose.orientation = tf2::toMsg(quat_actor_absolute);
+        cinematography_msgs::msg::VisionMeasurements vm;
+        vm.hde = angle;
+        vm.centerx = msg->centerx;
+        vm.centery = msg->centery;
+        vm.width = msg->width;
+        vm.height = msg->height;
+        vm.fov = msg->fov;
+        vm.drone_pose = msg->drone_pose;
 
-        // Publish to rviz, as debugging step rviz_pose;
-        actor_pose.header.frame_id = "world_ned";
-        actor_pose.header.stamp = clock.now();
-        pose_pub->publish(actor_pose);
+        // geometry_msgs::msg::PoseStamped actor_pose;
+        // actor_pose.pose.position.x = actor_ray.vector.x + msg->drone_pose.position.x;
+        // actor_pose.pose.position.y = actor_ray.vector.y + msg->drone_pose.position.y;
+        // actor_pose.pose.position.z = actor_ray.vector.z + msg->drone_pose.position.z;
+        // actor_pose.pose.orientation = tf2::toMsg(quat_actor_absolute);
+
+        // // Publish to rviz, as debugging step rviz_pose;
+        // actor_pose.header.frame_id = "world_ned";
+        // actor_pose.header.stamp = clock.now();
+        hde_pub->publish(vm);
     }
 
-    void getCoordinates(const sensor_msgs::msg::NavSatFix::SharedPtr msg) {
-        // TODO: Maybe implement this as a 2nd source, taking into account starting coordinates aren't (0,0,0)
-        // drone_pose.pose.position.x = msg->latitude;
-        // drone_pose.pose.position.y = msg->longitude;
-        // drone_pose.pose.position.z = -1 * msg->longitude;
-    }
-
-    void getOdometry(const nav_msgs::msg::Odometry::SharedPtr msg) {
-        drone_pose.pose = msg->pose.pose;
-    }
 
 public:
-    HeadingEstimation() : Node("heading_estimation"), netRT(NULL, "hde_deer_airsim.rt") {
+    HeadingEstimation() : Node("heading_estimation") {
         declare_parameter("resolution", 192);
 
         unit_vect.vector.x = unit_quat.quaternion.x = unit_quat.quaternion.w = 1;
         unit_vect.vector.y = unit_vect.vector.z = unit_quat.quaternion.y = unit_quat.quaternion.z = 0;
 
-        pose_pub = this->create_publisher<geometry_msgs::msg::PoseStamped>("actor_pose", 50);
-        sat_sub = this->create_subscription<sensor_msgs::msg::NavSatFix>("satellite_pose", 1, std::bind(&HeadingEstimation::getCoordinates, this, _1));
-        odom_sub = this->create_subscription<nav_msgs::msg::Odometry>("odom_pos", 1, std::bind(&HeadingEstimation::getOdometry, this, _1));
+        hde_pub = this->create_publisher<cinematography_msgs::msg::VisionMeasurements>("vision_measurements", 50);
         bb_sub = this->create_subscription<cinematography_msgs::msg::BoundingBox>("bounding_box", 50, std::bind(&HeadingEstimation::processImage, this, _1));
+
+        netRT = new tk::dnn::NetworkRT(NULL, "hde_deer_airsim.rt");
+        // These 3 lines fix a bug in the NetworkRT constructor
+        // netRT->input_dim = tk::dnn::dataDim_t(1, 3, 192, 192, 1);
+        netRT->output_dim.w = 1;    // There's a bug where this will be set to zero. It should be 1 minimum
+        
+        // Allocate memory for input buffers
+        checkCuda(cudaMallocHost(&input, sizeof(dnnType) * netRT->input_dim.tot() * nBatches));
+        checkCuda(cudaMalloc(&input_d, sizeof(dnnType) * netRT->input_dim.tot() * nBatches));
     }
 };
 
 
 int main(int argc, char **argv) {
     rclcpp::init(argc, argv);
+    sleep(10);
     rclcpp::spin(std::make_shared<HeadingEstimation>());
     rclcpp::shutdown();
 

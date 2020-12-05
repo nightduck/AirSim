@@ -21,7 +21,7 @@ Execute the following to download this repo and build ROS packages
 
     git clone https://github.com/nightduck/AirSim.git               # Clone this repo
     cd AirSim
-    git submodule update --init --recusrive                         # Load all external sources
+    git submodule update --init --recursive                         # Load all external sources
     ./setup.sh                                                      # Build repo
     ./build.sh
 

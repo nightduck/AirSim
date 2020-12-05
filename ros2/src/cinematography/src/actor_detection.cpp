@@ -7,6 +7,9 @@
 #include "cinematography_msgs/msg/bounding_box.hpp"
 #include "sensor_msgs/msg/image.hpp"
 #include "sensor_msgs/msg/compressed_image.hpp"
+#include "geometry_msgs/msg/point.hpp"
+#include "geometry_msgs/msg/quaternion.hpp"
+#include "geometry_msgs/msg/pose.hpp"
 #include "builtin_interfaces/msg/time.hpp"
 #include <opencv2/opencv.hpp>
 #include <cv_bridge/cv_bridge.h>
@@ -43,6 +46,7 @@ private:
     int gimbal_msg_count = 0;
 
     cv::Mat lastFrame;
+    geometry_msgs::msg::Pose drone_pose;
     std::mutex m;
 
     tk::dnn::Yolo3Detection *detNN;
@@ -54,15 +58,27 @@ private:
     int difffilter(const std::vector<uint8_t> &v, std::vector<uint8_t> &w, int m, int n);
 
     void fetchImage() {
+    //cv::Mat fetchImage() {
         RCLCPP_INFO(this->get_logger(), "Fetching Image, time=%f", now().seconds());
         std::vector<ImageCaptureBase::ImageRequest> request = {
             ImageCaptureBase::ImageRequest(camera_name, ImageCaptureBase::ImageType::Scene, false, false)
         };
         ImageCaptureBase::ImageResponse response = airsim_client->simGetImages(request, vehicle_name)[0];
+        msr::airlib::CameraInfo ci = airsim_client->simGetCameraInfo(camera_name, vehicle_name);
+        msr::airlib::Pose dp = airsim_client->simGetVehiclePose(vehicle_name) + ci.pose;
         //std::vector<uint8_t> img_png = airsim_client->simGetImage(camera_name, msr::airlib::ImageCaptureBase::ImageType::Scene, vehicle_name);
         m.lock();
         lastFrame = cv::Mat(response.width, response.height, CV_8UC3, response.image_data_uint8.data());
+        drone_pose.position.x = dp.position.x();
+        drone_pose.position.y = dp.position.y();
+        drone_pose.position.z = dp.position.z();
+        drone_pose.orientation.x = dp.orientation.x();
+        drone_pose.orientation.y = dp.orientation.y();
+        drone_pose.orientation.z = dp.orientation.z();
+        drone_pose.orientation.w = dp.orientation.w();
+        fov = ci.fov * M_PI / 180;
         m.unlock();
+        //return cv::Mat(response.width, response.height, CV_8UC3, response.image_data_uint8.data());
     }
 
     void processImage() {
@@ -70,17 +86,21 @@ private:
         // TODO: Add parameter to specify which type our actor is (deer, car, person, etc)
         // TODO: Run image through YOLO model and get bounding box coordiantes of object that is most confidently our actor
 
+        cinematography_msgs::msg::BoundingBox bb;   // Contains subimage, position in frame, and camera pose at the moment the image was taken
+
         m.lock();
-        cv::Mat img = lastFrame.clone();    // TODO: Make this line thread safe with a semaphore
+        cv::Mat img = lastFrame.clone();
+        bb.drone_pose = drone_pose;
         m.unlock();
 
         // Perform inference
         std::vector<cv::Mat> frame_array;
-        frame_array.push_back(img);
+        frame_array.push_back(img.clone());
         detNN->update(frame_array);
 
         // Draw on boxes and publish for debugging purposes
-        frame_array[0] = img;
+        frame_array.clear();
+        frame_array.push_back(img.clone());
         detNN->draw(frame_array);
         cv_bridge::CvImage cv_msg;
         cv_msg.header.frame_id = "world_ned";
@@ -123,25 +143,21 @@ private:
             return;
         }
 
-
-        // Use centering coordinates to move gimbal so actor is in center frame (OPTIONAL: Add parameter to specify
-        // where in frame the actor should be)
-        msr::airlib::Quaternionr cq = airsim_client->simGetCameraInfo(camera_name, vehicle_name).pose.orientation;
-        tf2::Quaternion horiz_adjustment = tf2::Quaternion(0, 0, sin(fov * (centerx - 0.5) / 2), cos(fov * (centerx - 0.5) / 2));
-        tf2::Quaternion vert_adjustment = tf2::Quaternion(0, sin(fov * (centery + height/2 - 0.5) / -2), 0, cos(fov * (centery + height/2 - 0.5) / -2));
-        tf2::Quaternion actor_direction = horiz_adjustment * tf2::Quaternion(cq.x(), cq.y(), cq.z(), cq.w()) * vert_adjustment;   // Get the orientation in the direction of the actor (centered on bottom center)
-
-        horiz_adjustment = tf2::Quaternion(0, 0, sin(fov * (centerx - 0.5) / 2 * GIMBAL_DAMPING_FACTOR), cos(fov * (centerx - 0.5) / 2 * GIMBAL_DAMPING_FACTOR));
-        vert_adjustment = tf2::Quaternion(0, sin(fov * (centery - 0.5) / -2 * GIMBAL_DAMPING_FACTOR), 0, cos(fov * (centery - 0.5) / -2 * GIMBAL_DAMPING_FACTOR));
-        gimbal_setpoint = horiz_adjustment * gimbal_setpoint * vert_adjustment;             // Get new gimbal setpoint (centered on actor)
+        tf2::Quaternion vert_adjustment;
+        vert_adjustment.setRPY(0, fov * (0.5 - centery) * GIMBAL_DAMPING_FACTOR, 0);
+        gimbal_setpoint = gimbal_setpoint * vert_adjustment;             // Get new gimbal setpoint (so actor is vertically centered)
 
         msr::airlib::Quaternionr alq = msr::airlib::Quaternionr(gimbal_setpoint.w(),
                         gimbal_setpoint.x(), gimbal_setpoint.y(), gimbal_setpoint.z());
         airsim_client->simSetCameraOrientation(camera_name, alq, vehicle_name);
 
         // Extract subimage, package with centering coordinates, and publish to /bounding_box
-        cinematography_msgs::msg::BoundingBox bb;
-        bb.actor_direction = tf2::toMsg(actor_direction);
+        bb.fov = fov;
+        bb.centerx = centerx;
+        bb.centery = centery;
+        bb.width = width;
+        bb.height = height;
+        // bb.drone_pose was copied in the thread safe portion at the top of this function
 
         int px_left = (centerx - width/2) * img.cols;
         int px_top = (centery - height/2) * img.rows;
@@ -200,6 +216,7 @@ int main(int argc, char **argv) {
     auto actor_detection = std::make_shared<ActorDetection>();
     exec.add_node(actor_detection);
     exec.spin();
+    //rclcpp::spin(actor_detection);
     rclcpp::shutdown();
 
     return 0;

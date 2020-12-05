@@ -39,6 +39,7 @@ set(msgs
 	"msg/BoolPlusHeader.msg"
 	"msg/DroneState.msg"
 	"msg/ArtisticSpec.msg"
+	"msg/VisionMeasurements.msg"
 )
 
 set(srvs
@@ -52,7 +53,7 @@ set(srvs
 	"srv/GetTrajectory.srv"
 	"srv/FollowTrajectoryStatusSrv.srv"
 	"srv/ProfilingDataSrv.srv"
-  "srv/StartProfilingSrv.srv"
+  	"srv/StartProfilingSrv.srv"
 )
 
 rosidl_generate_interfaces(${PROJECT_NAME}
