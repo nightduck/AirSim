@@ -23,6 +23,8 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <geometry_msgs/msg/pose_array.hpp>
 
+#include "vehicles/multirotor/api/MultirotorRpcLibClient.hpp"
+
 #define DEG_TO_RAD(d)   d*M_PI/180
 #define RAD_TO_DEG(r)   r*180/M_PI
 
@@ -54,7 +56,11 @@ double viewport_distance = 5;
 rclcpp::Node::SharedPtr node;
 rclcpp::Clock::SharedPtr clock_;
 
-void print_rviz_traj(cinematography_msgs::msg::MultiDOFarray path, std::string name, bool actor) {
+msr::airlib::MultirotorRpcLibClient* airsim_client;
+std::string airsim_hostname;
+std::string vehicle_name = "drone_1";
+
+void print_rviz_traj(cinematography_msgs::msg::MultiDOFarray& path, std::string name, bool actor) {
     geometry_msgs::msg::PoseArray rviz_path = geometry_msgs::msg::PoseArray();
     rviz_path.header.stamp = clock_->now();
     rviz_path.header.frame_id = "world_ned";
@@ -100,6 +106,81 @@ cinematography_msgs::msg::MultiDOFarray calc_ideal_drone_traj(const cinematograp
     return drone_traj;
 }
 
+// Moves the starting point to the drone's current position, leave the final point in place, and all the intermediate points are stretched in between
+void move_traj_start(cinematography_msgs::msg::MultiDOFarray& drone_traj, cinematography_msgs::msg::MultiDOF& drone_pose) {
+    cinematography_msgs::msg::MultiDOF traj_offset;
+    traj_offset.x = drone_traj.points[0].x - drone_pose.x;
+    traj_offset.x = drone_traj.points[0].y - drone_pose.y;
+    traj_offset.x = drone_traj.points[0].z - drone_pose.z;
+
+
+    for(int i = 0; i < drone_traj.points.size(); i++) {
+        float weight = 1 - (i / (drone_traj.points.size() - 1));    // Fraction of the offset to subtract
+        drone_traj.points[i].x -= weight * (traj_offset.x);
+        drone_traj.points[i].y -= weight * (traj_offset.y);
+        drone_traj.points[i].z -= weight * (traj_offset.z);
+        drone_traj.points[i].vx = drone_traj.points[i].vy = drone_traj.points[i].vz
+         = drone_traj.points[i].ax = drone_traj.points[i].ay = drone_traj.points[i].az;
+    }
+
+    // First point has current velocity. Note that if you sum up velocity and acceleration of a point
+    // according to actual physics, you will not get the correct next point. It's very approximative
+    drone_traj.points[0].vx = drone_pose.vx;
+    drone_traj.points[0].vy = drone_pose.vy;
+    drone_traj.points[0].vz = drone_pose.vz;
+    for(int i = 1; i < drone_traj.points.size() - 1; i++) {
+        drone_traj.points[i].vx = (drone_traj.points[i+1].x - drone_traj.points[i].x) / drone_traj.points[i].duration;
+        drone_traj.points[i].vy = (drone_traj.points[i+1].y - drone_traj.points[i].y) / drone_traj.points[i].duration;
+        drone_traj.points[i].vz = (drone_traj.points[i+1].z - drone_traj.points[i].z) / drone_traj.points[i].duration;
+        drone_traj.points[i-1].ax = (drone_traj.points[i+1].vx - drone_traj.points[i].vx) / drone_traj.points[i].duration;
+        drone_traj.points[i-1].ay = (drone_traj.points[i+1].vy - drone_traj.points[i].vy) / drone_traj.points[i].duration;
+        drone_traj.points[i-1].az = (drone_traj.points[i+1].vz - drone_traj.points[i].vz) / drone_traj.points[i].duration;
+    }
+
+    // Add acceleration and velocity to final points. Velocity stays constant, and acceleration goes to zero
+    cinematography_msgs::msg::MultiDOF penultimitePoint = drone_traj.points[drone_traj.points.size() - 2];
+    penultimitePoint.ax = penultimitePoint.ay = penultimitePoint.az = 0;
+    cinematography_msgs::msg::MultiDOF finalPoint = drone_traj.points[drone_traj.points.size() - 1];
+    finalPoint.vx = penultimitePoint.vx;
+    finalPoint.vy = penultimitePoint.vy;
+    finalPoint.vz = penultimitePoint.vz;
+    finalPoint.ax = finalPoint.ay = finalPoint.az = 0;
+
+    return;
+}
+
+void face_actor(cinematography_msgs::msg::MultiDOFarray& drone_traj, const cinematography_msgs::msg::MultiDOFarray& actor_traj) {
+    if (drone_traj.points.size() != actor_traj.points.size()) {
+        //RCLCPP_ERROR("Cannot face actor. Two trajectories don't match in number of points");
+        return;
+    }
+
+    std::vector<cinematography_msgs::msg::MultiDOF>::iterator dit = drone_traj.points.begin();
+    std::vector<cinematography_msgs::msg::MultiDOF>::const_iterator ait = actor_traj.points.begin();
+
+    double d_time = dit->duration, a_time = 0;
+    for(; dit < drone_traj.points.end(); ait++,dit++) {
+        // Get the vector difference (just x and y, since we only care about the yaw of the drone)
+        tf2::Vector3 diff = tf2::Vector3(ait->x, ait->y, 0) - tf2::Vector3(dit->x, dit->y, 0);
+
+        // Get the angle
+        double angle = atan(diff.y() / diff.x());
+
+        // Double check which cartesian quadrant you're in and add/subtract a 180 offset if necessary
+        if (diff.x() < 0) {
+            if (diff.y() < 0) {
+                angle -= M_PI;
+            } else {
+                angle += M_PI;
+            }
+        }
+
+        dit->yaw = angle;
+    }
+
+    return;
+}
+
 //======================VVV==Cost functions==VVV====================================
 
 double traj_smoothness(const cinematography_msgs::msg::MultiDOFarray& drone_traj) {
@@ -126,7 +207,7 @@ double traj_cost_function(const cinematography_msgs::msg::MultiDOFarray& drone_t
 
 // TODO: Implement gradient equivalents of all the above, and hessian approximations (A_smooth + delta_1 * A_shot)
 
-void optimize_trajectory(const cinematography_msgs::msg::MultiDOFarray& drone_traj, cinematography_msgs::msg::MultiDOFarray& actor_traj) {
+void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, const cinematography_msgs::msg::MultiDOFarray& actor_traj) {
     cinematography_msgs::msg::MultiDOFarray ideal_traj = calc_ideal_drone_traj(actor_traj);     // ξ_shot when calculating shot quality
 
     int MAX_ITERATIONS;     // TODO: Make this a ROS parameter
@@ -148,29 +229,30 @@ void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr act
 
     print_rviz_traj(*actor_traj, "actor_traj", true);
 
-    cinematography_msgs::msg::MultiDOFarray ideal_path;
+    // TODO: Get this further up in the vision pipeline and pass it down. Also get velocity and acceleration info
+    msr::airlib::Pose currentPose = airsim_client->simGetVehiclePose(vehicle_name);
+    cinematography_msgs::msg::MultiDOF currentState;
+    currentState.x = currentPose.position.x();
+    currentState.y = currentPose.position.y();
+    currentState.z = currentPose.position.z();
+    currentState.vx = currentState.vy = currentState.vz = currentState.ax = currentState.ay = currentState.az = 0;
 
-    ideal_path = calc_ideal_drone_traj(*actor_traj);
+    cinematography_msgs::msg::MultiDOFarray drone_path;
+    drone_path = calc_ideal_drone_traj(*actor_traj);        // Calculate the ideal observation point for every point in actor trajectory
+    move_traj_start(drone_path, currentState);              // Skew ideal path, so it starts at the drone's current position
+    face_actor(drone_path, *actor_traj);                    // Set all yaws to fact their corresponding point in the actor trajectory
     
-    print_rviz_traj(ideal_path, "drone_traj", false);
+    print_rviz_traj(drone_path, "drone_traj", false);
 
-    // TODO: Put in artificial load here to simulate optimizing
-
-    //optimize_trajectory(ideal_path, *actor_traj);
-
-    for(int i = 1; i < ideal_path.points.size(); i++) {
-        ideal_path.points[i-1].vx = (ideal_path.points[i].x - ideal_path.points[i-1].x) / ideal_path.points[i-1].duration;
-        ideal_path.points[i-1].vy = (ideal_path.points[i].y - ideal_path.points[i-1].y) / ideal_path.points[i-1].duration;
-        ideal_path.points[i-1].vz = (ideal_path.points[i].z - ideal_path.points[i-1].z) / ideal_path.points[i-1].duration;
-    }
+    optimize_trajectory(drone_path, *actor_traj);
 
     // Publish the trajectory (for debugging purposes)
-    ideal_path.header.stamp = clock_->now();
+    drone_path.header.stamp = clock_->now();
     path_found = true;
 
     RCLCPP_INFO(node->get_logger(), "Publishing drone trajectory");
 
-    traj_pub->publish(ideal_path);
+    traj_pub->publish(drone_path);
 }
 
 
@@ -179,6 +261,10 @@ int main(int argc, char ** argv)
     rclcpp::init(argc, argv);
     node = rclcpp::Node::make_shared("/motion_planner");
     clock_ = node->get_clock();
+
+    node->declare_parameter<std::string>("airsim_hostname", "localhost");
+    node->get_parameter("airsim_hostname", airsim_hostname);
+    airsim_client = new msr::airlib::MultirotorRpcLibClient(airsim_hostname);
 
     auto actor_traj_sub = node->create_subscription<cinematography_msgs::msg::MultiDOFarray>("/actor_traj", 1, get_actor_trajectory); 
 

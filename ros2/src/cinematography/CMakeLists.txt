@@ -170,6 +170,7 @@ target_link_libraries(motion_forecasting AirLib)
 
 add_executable(motion_planner src/motion_planner.cpp)
 ament_target_dependencies(motion_planner rclcpp geometry_msgs cinematography_msgs tf2_geometry_msgs)
+target_link_libraries(motion_planner AirLib)
 
 add_executable(follow_trajectory src/follow_trajectory.cpp)
 ament_target_dependencies(follow_trajectory rclcpp geometry_msgs cinematography_msgs tf2_geometry_msgs nav_msgs)
