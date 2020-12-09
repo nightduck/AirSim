@@ -4,6 +4,7 @@
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <cinematography_msgs/msg/multi_do_farray.hpp>
 #include <cinematography_msgs/msg/multi_dof.hpp>
+#include "cinematography_msgs/msg/vision_measurements.hpp"
 #include "vehicles/multirotor/api/MultirotorRpcLibClient.hpp"
 
 using std::placeholders::_1;
@@ -11,9 +12,10 @@ using std::placeholders::_1;
 class MotionForecasting : public rclcpp::Node {
 private:
     const double FORECAST_WINDOW_SECS = 10; // TODO: Make this a parameter
+    std::string deer_name;
 
     rclcpp::Publisher<cinematography_msgs::msg::MultiDOFarray>::SharedPtr predict_pub;
-    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr pose_sub;
+    rclcpp::Subscription<cinematography_msgs::msg::VisionMeasurements>::SharedPtr pose_sub;
 
     msr::airlib::MultirotorRpcLibClient* airsim_client;
 
@@ -21,7 +23,6 @@ private:
     msr::airlib::Pose lastPose;
     rclcpp::Time lastPoseTimestamp;
 
-    const std::string DEER_NAME = "DeerBothBP2_19";
 
     Eigen::Quaternion<float, 2> flatten(Eigen::Quaternion<float, 2> quat) {
         double length = sqrt(quat.w() * quat.w() + quat.z() * quat.z());
@@ -35,10 +36,10 @@ private:
         return std::atan2(siny_cosp, cosy_cosp);
     }
 
-    void getActorPose(const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
+    void getVisionMeasurements(const cinematography_msgs::msg::VisionMeasurements::SharedPtr msg) {
         // TODO: Implement an actual EKF
 
-        msr::airlib::Pose pose = airsim_client->simGetObjectPose(DEER_NAME);
+        msr::airlib::Pose pose = airsim_client->simGetObjectPose(deer_name);
         
         rclcpp::Time now = rclcpp::Time(msg->header.stamp, RCL_SYSTEM_TIME);
         rclcpp::Duration duration = now - lastPoseTimestamp;
@@ -76,8 +77,10 @@ private:
 
 public:
     MotionForecasting() : Node("motion_forecasting") {
-        declare_parameter<int>("forecast_window_secs", 10);
         std::string airsim_hostname;
+        declare_parameter<int>("forecast_window_secs", 10);
+        declare_parameter<std::string>("actor_name", "DeerBothBP2_19");
+        get_parameter("actor_name", deer_name);
         declare_parameter<std::string>("airsim_hostname", "localhost");
         get_parameter("airsim_hostname", airsim_hostname);
 
@@ -85,7 +88,7 @@ public:
 
         lastPoseTimestamp = rclcpp::Time(0, 0, RCL_SYSTEM_TIME);
         predict_pub = this->create_publisher<cinematography_msgs::msg::MultiDOFarray>("pred_path", 1);
-        pose_sub = this->create_subscription<geometry_msgs::msg::PoseStamped>("actor_pose", 50, std::bind(&MotionForecasting::getActorPose, this, _1));
+        pose_sub = this->create_subscription<cinematography_msgs::msg::VisionMeasurements>("vision_measurements", 50, std::bind(&MotionForecasting::getVisionMeasurements, this, _1));
     }
 };
 

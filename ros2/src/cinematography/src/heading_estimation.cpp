@@ -162,6 +162,8 @@ private:
         // NOTE: RESUME HERE. Verify the actor's absolute rotation is being calcualted correctly from it's relative rotation
         // Combine actor's position and rotation (adjusted from relative to absolute)
         cinematography_msgs::msg::VisionMeasurements vm;
+        vm.header.frame_id = "world_ned";
+        vm.header.stamp = clock.now();
         vm.hde = angle;
         vm.centerx = msg->centerx;
         vm.centery = msg->centery;
@@ -177,8 +179,7 @@ private:
         // actor_pose.pose.orientation = tf2::toMsg(quat_actor_absolute);
 
         // // Publish to rviz, as debugging step rviz_pose;
-        // actor_pose.header.frame_id = "world_ned";
-        // actor_pose.header.stamp = clock.now();
+       
         hde_pub->publish(vm);
     }
 

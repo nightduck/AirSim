@@ -1,3 +1,4 @@
+std_msgs/Header header
 float32 hde                 # Range [-pi,pi]. Rotation relative to actor
 float32 centerx				# 0 is pinned on left edge, 1 is pinned right
 float32 centery				# 0 is pinned to top edge, 1 is pinned to bottom
