@@ -46,6 +46,7 @@ find_package(tf2_sensor_msgs REQUIRED)
 find_package(cinematography_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(message_filters REQUIRED)
+find_package(tsdf_package_msgs REQUIRED)
 
 # TODO eigen3 in AirLib already
 # find_package(Eigen3 REQUIRED)
@@ -169,7 +170,7 @@ ament_target_dependencies(motion_forecasting rclcpp geometry_msgs cinematography
 target_link_libraries(motion_forecasting AirLib)
 
 add_executable(motion_planner src/motion_planner.cpp)
-ament_target_dependencies(motion_planner rclcpp geometry_msgs cinematography_msgs tf2_geometry_msgs)
+ament_target_dependencies(motion_planner rclcpp geometry_msgs cinematography_msgs tf2_geometry_msgs tsdf_package_msgs)
 target_link_libraries(motion_planner AirLib)
 
 add_executable(follow_trajectory src/follow_trajectory.cpp)
