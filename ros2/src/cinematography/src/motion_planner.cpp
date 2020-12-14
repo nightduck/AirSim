@@ -23,6 +23,13 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <geometry_msgs/msg/pose_array.hpp>
 
+#include <ompl/geometric/PathGeometric.h>
+#include <ompl/base/State.h>
+#include <ompl/base/spaces/TimeStateSpace.h>
+
+#include <Eigen/Dense>
+
+
 #include "vehicles/multirotor/api/MultirotorRpcLibClient.hpp"
 
 #define DEG_TO_RAD(d)   d*M_PI/180
@@ -183,12 +190,64 @@ void face_actor(cinematography_msgs::msg::MultiDOFarray& drone_traj, const cinem
 
 //======================VVV==Cost functions==VVV====================================
 
-double traj_smoothness(const cinematography_msgs::msg::MultiDOFarray& drone_traj) {
-    return 1;
+double traj_smoothness(const cinematography_msgs::msg::MultiDOFarray& drone_traj, int delta_t) {
+    int a0 = 1, a1 = 0.5, a2 = 0;       // TODO: Fix these somehow
+
+    int n = drone_traj.points.size();
+    Eigen::MatrixXd q(n-1, 3);
+    Eigen::MatrixXd K = Eigen::MatrixXd::Identity(n-1,n-1);
+
+    for(int i = 0; i < n-1; i++) {
+        q(i,0) = drone_traj.points[i+1].x;      // Initialize matrix for drone trajectory
+        q(i,1) = drone_traj.points[i+1].y;
+        q(i,2) = drone_traj.points[i+1].z;
+        K(i,i+1) = -1;                            // Initialize K (n-1,n-1) as -I
+    }
+
+    Eigen::MatrixXd e = Eigen::MatrixXd::Zero(n-1,3);
+    e(0,0) = -1 * drone_traj.points[0].x;
+    e(0,1) = -1 * drone_traj.points[0].y;
+    e(0,2) = -1 * drone_traj.points[0].z;
+
+    Eigen::MatrixXd K0 = K / delta_t;
+    Eigen::MatrixXd K1 = K.array().pow(2) / pow(delta_t,2);
+    Eigen::MatrixXd K2 = K.array().pow(3) / pow(delta_t,3);
+    Eigen::MatrixXd e0 = e / delta_t;
+    Eigen::MatrixXd e1 = e / delta_t;
+    Eigen::MatrixXd e2 = e / delta_t;
+
+    Eigen::MatrixXd A = a0 * K0.transpose() * K0 + a1 * K1.transpose() * K1 + a2 * K2.transpose() * K2;  // NOTE: This is always the same
+    Eigen::MatrixXd b = a0 * K0.transpose() * e0 + a1 * K1.transpose() * e1 + a2 * K2.transpose() * e2;
+    Eigen::MatrixXd c = a0 * e0.transpose() * e0 + a1 * e1.transpose() * e1 + a2 * e2.transpose() * e2;
+
+    double sum = (q.transpose()*A*q + 2*q.transpose()*b + c).trace();
+
+    return sum / (2*(n-1));
 }
 
 double shot_quality(const cinematography_msgs::msg::MultiDOFarray& drone_traj, cinematography_msgs::msg::MultiDOFarray& ideal_traj) {
-    return 1;
+    int n = drone_traj.points.size();
+    Eigen::MatrixXd q(n-1, 3);
+    Eigen::MatrixXd shot(n-1, 3);
+    Eigen::MatrixXd K = Eigen::MatrixXd::Zero(n-1,n-1);
+
+    for(int i = 0; i < n-1; i++) {
+        q(i,0) = drone_traj.points[i+1].x;      // Initialize matrix for drone trajectory
+        q(i,1) = drone_traj.points[i+1].y;
+        q(i,2) = drone_traj.points[i+1].z;
+        shot(i,0) = ideal_traj.points[i+1].x;   // Initialize matrix for ideal shot trajectory
+        shot(i,1) = ideal_traj.points[i+1].y;
+        shot(i,2) = ideal_traj.points[i+1].z;
+        K(i,i) = -1;                            // Initialize K (n-1,n-1) as -I
+    }
+
+    Eigen::MatrixXd A = Eigen::MatrixXd::Identity(n-1,n-1);
+    Eigen::MatrixXd b = K.transpose() * shot;
+    Eigen::MatrixXd c = shot.transpose() * shot;
+
+    Eigen::MatrixXd sum = q.transpose() * A * q + 2 * q.transpose() * b + c;
+    double trace = sum.trace();
+    return trace / (2 * (n-1));
 }
 
 double obstacle_avoidance(const cinematography_msgs::msg::MultiDOFarray& drone_traj) {   // TODO: Add 2nd argument for TSDF
@@ -199,16 +258,86 @@ double occlusion_avoidance(const cinematography_msgs::msg::MultiDOFarray& drone_
     return 1;
 }
 
-double traj_cost_function(const cinematography_msgs::msg::MultiDOFarray& drone_traj, cinematography_msgs::msg::MultiDOFarray& actor_traj, cinematography_msgs::msg::MultiDOFarray& ideal_traj) {      // TODO: Add 4th argument for TSDF
+double traj_cost_function(const cinematography_msgs::msg::MultiDOFarray& drone_traj, cinematography_msgs::msg::MultiDOFarray& actor_traj, cinematography_msgs::msg::MultiDOFarray& ideal_traj, double t) {      // TODO: Add 4th argument for TSDF
     double LAMBDA_1, LAMBDA_2, LAMBDA_3 = 1;    // TODO: Have these specified as ROS parameters
 
-    return traj_smoothness(drone_traj) + LAMBDA_1 * obstacle_avoidance(drone_traj) + LAMBDA_2 * occlusion_avoidance(drone_traj, actor_traj) + LAMBDA_3 * shot_quality(drone_traj, ideal_traj);
+    return traj_smoothness(drone_traj, t) + LAMBDA_1 * obstacle_avoidance(drone_traj) + LAMBDA_2 * occlusion_avoidance(drone_traj, actor_traj) + LAMBDA_3 * shot_quality(drone_traj, ideal_traj);
 }
 
 // TODO: Implement gradient equivalents of all the above, and hessian approximations (A_smooth + delta_1 * A_shot)
+Eigen::MatrixXd traj_smoothness_gradient(const cinematography_msgs::msg::MultiDOFarray& drone_traj, double delta_t) {
+    int a0 = 1, a1 = 0.5, a2 = 0;       // TODO: Fix these somehow
+
+    int n = drone_traj.points.size();
+    Eigen::MatrixXd q(n-1, 3);
+    Eigen::MatrixXd K = Eigen::MatrixXd::Identity(n-1,n-1);
+
+    for(int i = 0; i < n-1; i++) {
+        q(i,0) = drone_traj.points[i+1].x;      // Initialize matrix for drone trajectory
+        q(i,1) = drone_traj.points[i+1].y;
+        q(i,2) = drone_traj.points[i+1].z;
+        K(i,i+1) = -1;                            // Initialize K (n-1,n-1) as -I
+    }
+
+    Eigen::MatrixXd e = Eigen::MatrixXd::Zero(n-1,3);
+    e(0,0) = -1 * drone_traj.points[0].x;
+    e(0,1) = -1 * drone_traj.points[0].y;
+    e(0,2) = -1 * drone_traj.points[0].z;
+
+    Eigen::MatrixXd K0 = K / delta_t;
+    Eigen::MatrixXd K1 = K.array().pow(2) / pow(delta_t,2);
+    Eigen::MatrixXd K2 = K.array().pow(3) / pow(delta_t,3);
+    Eigen::MatrixXd e0 = e / delta_t;
+    Eigen::MatrixXd e1 = e / delta_t;
+    Eigen::MatrixXd e2 = e / delta_t;
+
+    Eigen::MatrixXd A = a0 * K0.transpose() * K0 + a1 * K1.transpose() * K1 + a2 * K2.transpose() * K2;  // NOTE: This is always the same
+    Eigen::MatrixXd b = a0 * K0.transpose() * e0 + a1 * K1.transpose() * e1 + a2 * K2.transpose() * e2;
+
+    Eigen::MatrixXd sum = A*q + b;
+
+    return sum / (n-1);
+}
+
+Eigen::MatrixXd shot_quality_gradient(const cinematography_msgs::msg::MultiDOFarray& drone_traj, cinematography_msgs::msg::MultiDOFarray& ideal_traj) {
+    int n = drone_traj.points.size();
+    Eigen::MatrixXd q(3, n-1);
+    Eigen::MatrixXd shot(3, n-1);
+    Eigen::MatrixXd K = Eigen::MatrixXd::Zero(n-1,n-1);
+
+    for(int i = 0; i < n-1; i++) {
+        q(i,0) = drone_traj.points[i+1].x;      // Initialize matrix for drone trajectory
+        q(i,1) = drone_traj.points[i+1].y;
+        q(i,2) = drone_traj.points[i+1].z;
+        shot(i,0) = ideal_traj.points[i+1].x;   // Initialize matrix for ideal shot trajectory
+        shot(i,1) = ideal_traj.points[i+1].y;
+        shot(i,2) = ideal_traj.points[i+1].z;
+        K(i,i) = -1;                            // Initialize K (n-1,n-1) as -I
+    }
+
+    Eigen::MatrixXd A = Eigen::MatrixXd::Identity(n-1,n-1);
+    Eigen::MatrixXd b = K.transpose() * shot;
+
+    Eigen::MatrixXd sum = A * q + b;
+    return sum / (n-1);
+}
+
+Eigen::MatrixXd obstacle_avoidance_gradient(const cinematography_msgs::msg::MultiDOFarray& drone_traj) {
+    return Eigen::MatrixXd::Zero(3,drone_traj.points.size() - 1);
+}
+
+Eigen::MatrixXd obstacle_avoidance_gradient(const cinematography_msgs::msg::MultiDOFarray& drone_traj, cinematography_msgs::msg::MultiDOFarray& actor_traj) {
+    return Eigen::MatrixXd::Zero(3,drone_traj.points.size() - 1);
+}
 
 void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, const cinematography_msgs::msg::MultiDOFarray& actor_traj) {
     cinematography_msgs::msg::MultiDOFarray ideal_traj = calc_ideal_drone_traj(actor_traj);     // ξ_shot when calculating shot quality
+
+    double t = 0;
+    for(cinematography_msgs::msg::MultiDOF p : actor_traj.points) {
+        t += p.duration;
+    }
+    t /= actor_traj.points.size();
 
     int MAX_ITERATIONS;     // TODO: Make this a ROS parameter
     for(int i = 0; i < 1000; i++) {
@@ -240,11 +369,12 @@ void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr act
     cinematography_msgs::msg::MultiDOFarray drone_path;
     drone_path = calc_ideal_drone_traj(*actor_traj);        // Calculate the ideal observation point for every point in actor trajectory
     move_traj_start(drone_path, currentState);              // Skew ideal path, so it starts at the drone's current position
-    face_actor(drone_path, *actor_traj);                    // Set all yaws to fact their corresponding point in the actor trajectory
     
     print_rviz_traj(drone_path, "drone_traj", false);
 
     optimize_trajectory(drone_path, *actor_traj);
+
+    face_actor(drone_path, *actor_traj);                    // Set all yaws to fact their corresponding point in the actor trajectory
 
     // Publish the trajectory (for debugging purposes)
     drone_path.header.stamp = clock_->now();
