@@ -27,6 +27,7 @@
 #include <geometry_msgs/msg/pose_array.hpp>
 #include "tsdf_package_msgs/msg/tsdf.hpp"
 #include "tsdf_package_msgs/msg/voxel.hpp"
+#include "optimize_drone_path.cuh"
 
 #include <ompl/geometric/PathGeometric.h>
 #include <ompl/base/State.h>
@@ -75,36 +76,37 @@ double VOXEL_SIZE = .5; //todo: add this to tsdf msg
 double HALF_VOXEL_SIZE = VOXEL_SIZE / 2;
 
 double truncation_distance;
+std::vector<Voxel> voxels_list;
 
-struct Key{
-    double x;
-    double y;
-    double z;
+// struct Key{
+//     double x;
+//     double y;
+//     double z;
 
-    Key(double x, double y, double z){
-        this->x = x;
-        this->y = y;
-        this->z = z;                                                                       
-    }
+//     Key(double x, double y, double z){
+//         this->x = x;
+//         this->y = y;
+//         this->z = z;                                                                       
+//     }
 
-    bool operator==(const Key &other) const{
-        return (x == other.x && y==other.y && z==other.z);
-    }
-};
+//     bool operator==(const Key &other) const{
+//         return (x == other.x && y==other.y && z==other.z);
+//     }
+// };
 
-namespace std {
-    template<>
-    struct hash<Key>{
-        std::size_t operator()(const Key& k) const
-        {
-            using std::size_t;
-            using std::hash;
-            return(hash<double>()(k.x) ^ hash<double>()(k.y) ^ hash<double>()(k.z));
-        }
-    };
-}
+// namespace std {
+//     template<>
+//     struct hash<Key>{
+//         std::size_t operator()(const Key& k) const
+//         {
+//             using std::size_t;
+//             using std::hash;
+//             return(hash<double>()(k.x) ^ hash<double>()(k.y) ^ hash<double>()(k.z));
+//         }
+//     };
+// }
 
-std::unordered_map<Key, tsdf_package_msgs::msg::Voxel> voxel_map;
+std::unordered_map<Key, Voxel> voxel_map;
 
 void print_rviz_traj(cinematography_msgs::msg::MultiDOFarray& path, std::string name, bool actor) {
     geometry_msgs::msg::PoseArray rviz_path = geometry_msgs::msg::PoseArray();
@@ -409,11 +411,11 @@ inline double get_cost(const double & sdf){
 }
 
 inline double get_voxel_cost(const Key k){
-    std::unordered_map<Key,tsdf_package_msgs::msg::Voxel>::const_iterator it;
+    std::unordered_map<Key,Voxel>::const_iterator it;
     it = voxel_map.find (k); //look for voxel if it exists, then it lies within truncation distance of a surface
     if ( it != voxel_map.end() )
     {
-        tsdf_package_msgs::msg::Voxel voxel = it->second;
+        Voxel voxel = it->second;
         return get_cost(voxel.sdf);
     }
     return 0; //voxel does not exist so it is in free space(or inside an object) and return 0 cost
@@ -709,6 +711,9 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
 
     int normalization = 1; // change
 
+    std::vector<MultiDOF> drone_traj_cuda;
+    std::vector<MultiDOF> actor_traj_cuda;
+
     double t = 0;
     for(cinematography_msgs::msg::MultiDOF p : actor_traj.points) {
         t += p.duration;
@@ -720,6 +725,20 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
     //Intializing A_smooth
     int a0 = 1, a1 = 0.5, a2 = 0;  // TODO: Fix these somehow
     int n = drone_traj.points.size();
+
+    std::vector<cinematography_msgs::msg::MultiDOF> drone_points = drone_traj.points;
+    std::vector<cinematography_msgs::msg::MultiDOF> actor_points = actor_traj.points;
+    for(size_t i=0; i<n; ++i){
+        cinematography_msgs::msg::MultiDOF p_d = drone_points[i];
+        cinematography_msgs::msg::MultiDOF p_a = actor_points[i];
+        MultiDOF drone_cuda_pt(p_d.x,p_d.y,p_d.z,p_d.vx,p_d.vy,p_d.vz,p_d.ax,p_d.ay,p_d.az,p_d.yaw,p_d.duration);
+        MultiDOF actor_cuda_pt(p_a.x,p_a.y,p_a.z,p_a.vx,p_a.vy,p_a.vz,p_a.ax,p_a.ay,p_a.az,p_a.yaw,p_a.duration);
+        drone_traj_cuda.push_back(drone_cuda_pt);
+        actor_traj_cuda.push_back(actor_cuda_pt);
+    }
+
+    optimize_trajectory_cuda(drone_traj_cuda, actor_traj_cuda, voxels_list);
+
     Eigen::MatrixXd K = Eigen::MatrixXd::Identity(n-1,n-1);
     for(int i = 0; i < n-1; i++) {
         K(i,i) = -1;                            // Initialize K (n-1,n-1) as -I
@@ -739,9 +758,9 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
     for(int i = 0; i < 1; i++) {
         Eigen::MatrixXd smooth_grad = traj_smoothness_gradient(drone_traj, t, K0, K1, K2, A_smooth);
         Eigen::MatrixXd shot_grad = shot_quality_gradient(drone_traj, ideal_traj, A_shot);
-        Eigen::MatrixXd obs_grad = obstacle_avoidance_gradient(drone_traj);
-        Eigen::MatrixXd occ_grad = occlusion_avoidance_gradient(drone_traj, actor_traj);
-        Eigen::MatrixXd j_grad = smooth_grad + LAMBDA_1 * obs_grad + LAMBDA_2 * occ_grad + LAMBDA_3 * shot_grad;
+        // Eigen::MatrixXd obs_grad = obstacle_avoidance_gradient(drone_traj);
+        // Eigen::MatrixXd occ_grad = occlusion_avoidance_gradient(drone_traj, actor_traj);
+        Eigen::MatrixXd j_grad = smooth_grad + LAMBDA_3 * shot_grad;
 
         //Todo:
         // if((j_grad.transpose()*M_inv * j_grad).array().pow(2) / 2 < e0){
@@ -771,14 +790,14 @@ void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr act
     print_rviz_traj(*actor_traj, "actor_traj", true);
 
     // TODO: Get this further up in the vision pipeline and pass it down. Also get velocity and acceleration info
-    msr::airlib::Pose currentPose = airsim_client->simGetVehiclePose(vehicle_name);
+    // msr::airlib::Pose currentPose = airsim_client->simGetVehiclePose(vehicle_name);
     cinematography_msgs::msg::MultiDOF currentState;
-    currentState.x = currentPose.position.x();
-    currentState.y = currentPose.position.y();
-    currentState.z = currentPose.position.z();
-    // currentState.x = 0;
-    // currentState.y = 0;
-    // currentState.z = 0;
+    // currentState.x = currentPose.position.x();
+    // currentState.y = currentPose.position.y();
+    // currentState.z = currentPose.position.z();
+    currentState.x = 0;
+    currentState.y = 0;
+    currentState.z = 0;
     currentState.vx = currentState.vy = currentState.vz = currentState.ax = currentState.ay = currentState.az = 0;
 
     cinematography_msgs::msg::MultiDOFarray drone_path;
@@ -802,11 +821,15 @@ void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr act
 
 void tsdf_callback(tsdf_package_msgs::msg::Tsdf::SharedPtr tsdf){
     voxel_map.clear();
+    voxels_list.clear();
     std::vector<tsdf_package_msgs::msg::Voxel> voxels = tsdf->voxels;
     for (tsdf_package_msgs::msg::Voxel v : voxels){
         Key k(v.x, v.y, v.z);
-        voxel_map[k] = v;
+        Voxel val(v.sdf, v.x, v.y, v.z);
+        voxel_map[k] = val;
+        voxels_list.push_back(val);
     }
+
     truncation_distance = tsdf->truncation_distance;
 }
 

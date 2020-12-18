@@ -67,6 +67,7 @@ add_definitions(${PCL_DEFINITIONS})
 find_package(CUDA 9.0 REQUIRED)
 SET(CUDA_SEPARABLE_COMPILATION ON)
 #set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -arch=sm_30 --compiler-options '-fPIC'")
+CUDA_SELECT_NVCC_ARCH_FLAGS(ARCH_FLAGS Auto)
 set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS})
 
 # set(msgs
@@ -137,6 +138,20 @@ add_subdirectory(tkDNN)
 # cuda_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include ${CUDA_INCLUDE_DIRS} ${CUDNN_INCLUDE_DIRS})
 # cuda_add_library(kernels SHARED ${tkdnn_CUSRC})
 
+cuda_add_library(motion_planner_cuda SHARED
+  src/optimize_drone_path.cu
+  OPTIONS -g -shared -Xcompiler -fPIC -rdc=true
+)
+
+install(
+  TARGETS motion_planner_cuda
+  EXPORT motion_planner_cuda
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+  RUNTIME DESTINATION bin
+  INCLUDES DESTINATION include
+)
+
 
 # #-------------------------------------------------------------------------------
 # # Build Libraries
@@ -171,7 +186,7 @@ target_link_libraries(motion_forecasting AirLib)
 
 add_executable(motion_planner src/motion_planner.cpp)
 ament_target_dependencies(motion_planner rclcpp geometry_msgs cinematography_msgs tf2_geometry_msgs tsdf_package_msgs)
-target_link_libraries(motion_planner AirLib)
+target_link_libraries(motion_planner AirLib motion_planner_cuda)
 
 add_executable(follow_trajectory src/follow_trajectory.cpp)
 ament_target_dependencies(follow_trajectory rclcpp geometry_msgs cinematography_msgs tf2_geometry_msgs nav_msgs)
