@@ -6,13 +6,14 @@
 #include <cinematography_msgs/msg/multi_dof.hpp>
 #include "cinematography_msgs/msg/vision_measurements.hpp"
 #include "vehicles/multirotor/api/MultirotorRpcLibClient.hpp"
+#include <Eigen/Dense>
 
 using std::placeholders::_1;
 
 class MotionForecasting : public rclcpp::Node {
 private:
-    const double FORECAST_WINDOW_SECS = 10; // TODO: Make this a parameter
-    std::string deer_name;
+    double FORECAST_WINDOW_SECS;
+    std::string ACTOR_NAME;
 
     rclcpp::Publisher<cinematography_msgs::msg::MultiDOFarray>::SharedPtr predict_pub;
     rclcpp::Subscription<cinematography_msgs::msg::VisionMeasurements>::SharedPtr pose_sub;
@@ -39,7 +40,7 @@ private:
     void getVisionMeasurements(const cinematography_msgs::msg::VisionMeasurements::SharedPtr msg) {
         // TODO: Implement an actual EKF
 
-        msr::airlib::Pose pose = airsim_client->simGetObjectPose(deer_name);
+        msr::airlib::Pose pose = airsim_client->simGetObjectPose(ACTOR_NAME);
         
         rclcpp::Time now = rclcpp::Time(msg->header.stamp, RCL_SYSTEM_TIME);
         rclcpp::Duration duration = now - lastPoseTimestamp;
@@ -79,8 +80,9 @@ public:
     MotionForecasting() : Node("motion_forecasting") {
         std::string airsim_hostname;
         declare_parameter<int>("forecast_window_secs", 10);
+        get_parameter("forecast_window_secs", FORECAST_WINDOW_SECS);
         declare_parameter<std::string>("actor_name", "DeerBothBP2_19");
-        get_parameter("actor_name", deer_name);
+        get_parameter("actor_name", ACTOR_NAME);
         declare_parameter<std::string>("airsim_hostname", "localhost");
         get_parameter("airsim_hostname", airsim_hostname);
 

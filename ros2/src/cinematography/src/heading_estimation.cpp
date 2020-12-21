@@ -108,6 +108,18 @@ private:
         cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(msg->image, sensor_msgs::image_encodings::BGR8);
         cv::Mat new_img;
 
+
+        // Combine actor's position and rotation (adjusted from relative to absolute)
+        cinematography_msgs::msg::VisionMeasurements vm;
+        vm.header.frame_id = "world_ned";
+        vm.header.stamp = clock.now();
+        vm.centerx = msg->centerx;
+        vm.centery = msg->centery;
+        vm.width = msg->width;
+        vm.height = msg->height;
+        vm.fov = msg->fov;
+        vm.drone_pose = msg->drone_pose;
+
         // Pad to square
         if (cv_ptr->image.rows != cv_ptr->image.cols) {
             int max_dim = (cv_ptr->image.rows > cv_ptr->image.cols) ? cv_ptr->image.rows : cv_ptr->image.cols;
@@ -120,67 +132,23 @@ private:
             cv_ptr->image = new_img;
         }
 
+        if (cv_ptr->image.cols == 0) {      // If no actors were detected in the last step, skip inference here
+            vm.hde = 0;
+            hde_pub->publish(vm);
+            return;
+        }
+
         float* array = infer(cv_ptr->image);
 
         double hde0 = array[0];   // Output #1
         double hde1 = array[1];   // Output #2
-        // TODO: Normalize to [-1,1] range
 
         // Get the rotation of the actor relative to camera
         double angle = atan2(hde1, hde0);
-        // tf2::Quaternion quat_actor_rel;
-        // quat_actor_rel.setRPY(0, 0, angle);
-
-        // // Convert drone's orientation to usable format
-        // tf2::Quaternion quat_drone;
-        // tf2::fromMsg(msg->drone_pose.orientation, quat_drone);
-
-        // // Express the drone's offset within frame as quaternion rotations
-        // tf2::Quaternion horiz_offset = tf2::Quaternion(0, 0, sin(msg->fov * (msg->centerx - 0.5) / 2), cos(msg->fov * (msg->centerx - 0.5) / 2));
-        // tf2::Quaternion vert_offset = tf2::Quaternion(0, sin(msg->fov * (msg->centery + msg->height/2 - 0.5) / -2), 0, cos(msg->fov * (msg->centery + msg->height/2 - 0.5) / -2));
-        // tf2::Quaternion actor_direction = horiz_offset * quat_drone * vert_offset;   // Get the orientation in the direction of the actor (centered on bottom center)
-
-        // // Compute a unit vector pointing at the actor
-        // t.transform.rotation = tf2::toMsg(actor_direction);
-        // t.transform.translation = geometry_msgs::msg::Vector3();
-        // geometry_msgs::msg::Vector3Stamped actor_ray;
-        // tf2::doTransform(unit_vect, actor_ray, t);
-
-        // // Project actor ray to ground, resulting vector being position of actor
-        // double scale = abs(msg->drone_pose.position.z / actor_ray.vector.z);
-        // actor_ray.vector.x *= scale;
-        // actor_ray.vector.y *= scale;
-        // actor_ray.vector.z *= scale;
-
-        // // Flatten drone's quaternions (so they only represent yaw), and use that to calculate the
-        // // actor's absolute rotation
-        // flatten(actor_direction);
-        // flatten(quat_drone);
-        // tf2::Quaternion quat_actor_absolute = actor_direction * quat_drone;
-
-
-        // NOTE: RESUME HERE. Verify the actor's absolute rotation is being calcualted correctly from it's relative rotation
-        // Combine actor's position and rotation (adjusted from relative to absolute)
-        cinematography_msgs::msg::VisionMeasurements vm;
-        vm.header.frame_id = "world_ned";
-        vm.header.stamp = clock.now();
+    
         vm.hde = angle;
-        vm.centerx = msg->centerx;
-        vm.centery = msg->centery;
-        vm.width = msg->width;
-        vm.height = msg->height;
-        vm.fov = msg->fov;
-        vm.drone_pose = msg->drone_pose;
-
-        // geometry_msgs::msg::PoseStamped actor_pose;
-        // actor_pose.pose.position.x = actor_ray.vector.x + msg->drone_pose.position.x;
-        // actor_pose.pose.position.y = actor_ray.vector.y + msg->drone_pose.position.y;
-        // actor_pose.pose.position.z = actor_ray.vector.z + msg->drone_pose.position.z;
-        // actor_pose.pose.orientation = tf2::toMsg(quat_actor_absolute);
-
-        // // Publish to rviz, as debugging step rviz_pose;
-       
         hde_pub->publish(vm);
+        return;       
     }
 
 

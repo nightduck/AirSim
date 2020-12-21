@@ -53,6 +53,7 @@ private:
     tk::dnn::Network *net;
     std::vector<tk::dnn::Layer*> outputs;
 
+    std::string trt_engine_filename;
     std::string airsim_hostname;
 
     int difffilter(const std::vector<uint8_t> &v, std::vector<uint8_t> &w, int m, int n);
@@ -84,7 +85,6 @@ private:
     void processImage() {
         RCLCPP_INFO(this->get_logger(), "Processing Image, time=%f", now().seconds());
         // TODO: Add parameter to specify which type our actor is (deer, car, person, etc)
-        // TODO: Run image through YOLO model and get bounding box coordiantes of object that is most confidently our actor
 
         cinematography_msgs::msg::BoundingBox bb;   // Contains subimage, position in frame, and camera pose at the moment the image was taken
 
@@ -130,6 +130,15 @@ private:
             // tfq.slerp(tf2::Quaternion(0,0,0,1), 0.1);
             // q = msr::airlib::Quaternionr(tfq.w(), tfq.x(), tfq.y(), tfq.z());
             //airsim_client->simSetCameraOrientation(camera_name, q, vehicle_name);
+
+            bb.fov = fov;
+            bb.centerx = 0.5;
+            bb.centery = 0.5;
+            bb.width = 0;
+            bb.height = 0;
+            cv_msg.image = cv::Mat();
+            bb.image = *cv_msg.toImageMsg();
+            bb_pub->publish(bb);
             return;
         }
 
@@ -140,6 +149,14 @@ private:
 
         // If the actor is too small, assume it's incorrect. False positives are often in the distance
         if (width < 0.05 && height < 0.05) {
+            bb.fov = fov;
+            bb.centerx = 0.5;
+            bb.centery = 0.5;
+            bb.width = 0;
+            bb.height = 0;
+            cv_msg.image = cv::Mat();
+            bb.image = *cv_msg.toImageMsg();
+            bb_pub->publish(bb);
             return;
         }
 
@@ -183,6 +200,8 @@ private:
 public:
     // TODO: Pass IP address of airsim as parameter
     ActorDetection() : Node("actor_detection") {
+        declare_parameter<std::string>("tensorrt_engine", "hde_deer_temp.rt");
+        get_parameter("tensorrt_engine", trt_engine_filename);
         declare_parameter<std::string>("airsim_hostname", "localhost");
         get_parameter("airsim_hostname", airsim_hostname);
         
@@ -197,7 +216,7 @@ public:
 
         // tk::dnn::NetworkRT *netRT = new tk::dnn::NetworkRT(net, net->getNetworkRTName("yolo4/yolo-deer.rt"));
         detNN = new tk::dnn::Yolo3Detection();
-        if (!detNN->init("yolo4_airsim.rt", 2, 1)) {
+        if (!detNN->init(trt_engine_filename, 2, 1)) {
             RCLCPP_ERROR(this->get_logger(), "Cannot find yolo4_airsim.rt! Please place in present directory");
         };
 
@@ -212,6 +231,7 @@ public:
 
 int main(int argc, char **argv) {
     rclcpp::init(argc, argv);
+    sleep(10);
     rclcpp::executors::MultiThreadedExecutor exec;
     auto actor_detection = std::make_shared<ActorDetection>();
     exec.add_node(actor_detection);
