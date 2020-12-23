@@ -32,3 +32,6 @@
 [submodule "ros2/src/cinematography/tkDNN"]
 	path = ros2/src/cinematography/tkDNN
 	url = https://github.com/ceccocats/tkDNN.git
+[submodule "ros2/src/cinematography/ukf"]
+	path = ros2/src/cinematography/ukf
+	url = https://github.com/sfwa/ukf.git

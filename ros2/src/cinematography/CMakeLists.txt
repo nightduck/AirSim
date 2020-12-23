@@ -58,7 +58,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DOPENCV")
 find_package( PCL REQUIRED )
 include_directories(${catkin_INCLUDE_DIRS}  ${PCL_INCLUDE_DIRS} )
 link_directories(${PCL_LIBRARY_DIRS})
-add_definitions(${PCL_DEFINITIONS})
+add_definitions(${PCL_DEFINITIONS} -DUKF_SINGLE_PRECISION)
 
 #-------------------------------------------------------------------------------
 # CUDA
@@ -114,6 +114,7 @@ include_directories(
         ${Boost_INCLUDE_DIRS}
         ${common_utility_src}
         tkDNN/include
+        ukf/include
 )
 include_directories(${CUDA_INCLUDE_DIRS} ${OPENCV_INCLUDE_DIRS} ${NVINFER_INCLUDES} ${CUDNN_INCLUDE_DIRS})
 
@@ -164,7 +165,7 @@ add_executable(heading_estimation src/heading_estimation.cpp)
 ament_target_dependencies(heading_estimation rclcpp cinematography_msgs sensor_msgs geometry_msgs nav_msgs cv_bridge tf2_geometry_msgs)
 target_link_libraries(heading_estimation tkDNN ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES} ${CUDNN_LIBRARIES} ${OpenCV_LIBS})
 
-add_executable(motion_forecasting src/motion_forecasting.cpp)
+add_executable(motion_forecasting src/motion_forecasting.cpp src/filter.cpp)
 ament_target_dependencies(motion_forecasting rclcpp geometry_msgs cinematography_msgs)
 target_link_libraries(motion_forecasting AirLib)
 
