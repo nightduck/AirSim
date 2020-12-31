@@ -1,5 +1,16 @@
 #include "optimize_drone_path.cuh"
 
+//error function for cpu called after kernel calls
+#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
+{
+   if (code != cudaSuccess) 
+   {
+      fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+      if (abort) exit(code);
+   }
+}
+
 __device__
 double floor_fun(const double & x, const double & scale){
     return floor(x*scale) / scale;
@@ -157,6 +168,21 @@ inline double get_cost(const double & sdf){
 
 }
 
+__device__
+inline double get_voxel_cost(const Eigen::Matrix<double, 3, 1> & voxel, const double & volume_size, Voxel * voxels, int * voxels_size){
+
+    double epsilon = volume_size / 4;
+
+    for(size_t i = 0;i < *voxels_size; ++i){ //look for voxel if it exists, then it lies within truncation distance of a surface
+        Voxel v = voxels[i];
+        if(check_floating_point_vectors_equal(v.position, voxel, epsilon))
+        {
+            return get_cost(v.sdf);
+        }
+    }
+    return 0; //voxel does not exist so it is in free space(or inside an object) and return 0 cost
+}
+
 /*
 * Compute cost gradient for a voxel. Check cost values of voxel and voxels around
 */
@@ -235,7 +261,7 @@ Eigen::Matrix<double, 3, 1> get_cost_gradient(const Eigen::Matrix<double, 3, 1> 
 
 __global__
 void process_obstacle_avoidance_voxels(Eigen::Matrix<double, 3, 1> * voxels, int * size_p, Voxel * voxels_data, int * voxels_size, double * velocity_mag, 
-    Eigen::Matrix<double, 3, 3> * identity_minus_p_hat_multiplied, Eigen::Matrix<double, Eigen::Dynamic, 3> * obs_grad, int * point_index){
+    Eigen::Matrix<double, 3, 3> * identity_minus_p_hat_multiplied, double * obs_grad, int * point_index){
     int thread_index = (blockIdx.x*256 + threadIdx.x);
     if(thread_index >=*size_p){
         return;
@@ -243,14 +269,17 @@ void process_obstacle_avoidance_voxels(Eigen::Matrix<double, 3, 1> * voxels, int
     Eigen::Matrix<double, 3, 1> cost_function_gradient = get_cost_gradient(voxels[thread_index], 0.5, voxels_data, voxels_size); //TODO: volume_size
     Eigen::Matrix<double, 3, 1> gradient_multiplied_result = (*identity_minus_p_hat_multiplied) * cost_function_gradient;       
     Eigen::Matrix<double, 3, 1> grad_j_obs = gradient_multiplied_result * (*velocity_mag);
-    atomicAdd(&((*obs_grad)(* point_index, 0)), grad_j_obs(0));
-    atomicAdd(&((*obs_grad)(* point_index, 1)), grad_j_obs(1));
-    atomicAdd(&((*obs_grad)(* point_index, 2)), grad_j_obs(2));
+    
+    int obs_grad_index = (* point_index) * 3;
+
+    atomicAdd(&(obs_grad[obs_grad_index]), grad_j_obs(0));
+    atomicAdd(&(obs_grad[obs_grad_index + 1]), grad_j_obs(1));
+    atomicAdd(&(obs_grad[obs_grad_index + 2]), grad_j_obs(2));
 
 }
 
 __global__
-void obstacle_avoidance_gradient(MultiDOF * drone_traj, Eigen::Matrix<double, Eigen::Dynamic, 3> * obs_grad, int * n, Voxel * voxels_data, int * voxels_size){
+void obstacle_avoidance_gradient(MultiDOF * drone_traj, double * obs_grad, int * n, Voxel * voxels_data, int * voxels_size){
     int thread_index = (blockIdx.x*128 + threadIdx.x);
     if(thread_index >= *n-1){
         return;
@@ -266,7 +295,7 @@ void obstacle_avoidance_gradient(MultiDOF * drone_traj, Eigen::Matrix<double, Ei
     double velocity_mag = sqrt(pow(point_end.vx, 2) + pow(point_end.vy ,2) + pow(point_end.vz , 2));
     double * velocity_mag_p = new double(velocity_mag);
     Eigen::Matrix<double, 3, 1> p_hat(point_end.vx/velocity_mag, point_end.vy/velocity_mag, point_end.vz/velocity_mag);
-    if(isnan(p_hat(0)), isnan(p_hat(1)), isnan(p_hat(2))){
+    if(isnan(p_hat(0)) || isnan(p_hat(1)) || isnan(p_hat(2))){
       p_hat(0) = 0;
       p_hat(1) = 0;
       p_hat(2) = 0;
@@ -274,7 +303,7 @@ void obstacle_avoidance_gradient(MultiDOF * drone_traj, Eigen::Matrix<double, Ei
 
     Eigen::Matrix<double, 3, 3> p_hat_multiplied = p_hat * p_hat.transpose();
 
-    Eigen::Matrix<double, 3, 3> * identity_minus_p_hat_multiplied_p;
+    Eigen::Matrix<double, 3, 3> * identity_minus_p_hat_multiplied_p = new Eigen::Matrix3d();
     * identity_minus_p_hat_multiplied_p = Eigen::Matrix3d::Identity(3,3) - p_hat_multiplied;
 
     int threads_per_block = 256;
@@ -282,10 +311,13 @@ void obstacle_avoidance_gradient(MultiDOF * drone_traj, Eigen::Matrix<double, Ei
     int * size_p = new int(size);
     int * thread_index_p = new int(thread_index);
     process_obstacle_avoidance_voxels<<<num_blocks, threads_per_block>>>(voxels, size_p, voxels_data, voxels_size, velocity_mag_p, identity_minus_p_hat_multiplied_p, obs_grad, thread_index_p);
+    cudaDeviceSynchronize();
 
-    (*obs_grad)(thread_index, 0)/=size;
-    (*obs_grad)(thread_index, 1)/=size;
-    (*obs_grad)(thread_index, 2)/=size;
+    int obs_grad_index = thread_index * 3;
+
+    obs_grad[obs_grad_index]/=size;
+    obs_grad[obs_grad_index+1]/=size;
+    obs_grad[obs_grad_index+2]/=size;
 
     free(voxels);
     free(velocity_mag_p);
@@ -294,9 +326,235 @@ void obstacle_avoidance_gradient(MultiDOF * drone_traj, Eigen::Matrix<double, Ei
     free(identity_minus_p_hat_multiplied_p);
 }
 
-void optimize_trajectory_cuda(std::vector<MultiDOF>  & drone_traj, std::vector<MultiDOF> & actor_traj, std::vector<Voxel> & voxels){
-    int n = drone_traj.size();
-    int * n_h = &n;
+__global__
+void process_occlusion_avoidance_voxels(Eigen::Matrix<double, 3, 1> * voxels, int * size_p, Voxel * voxels_data, int * voxels_size, 
+    double * occ_grad, int * point_index, MultiDOF * point_start_p, MultiDOF * point_end_p){
+    int thread_index = (blockIdx.x*256 + threadIdx.x);
+    if(thread_index >=*size_p){
+        return;
+    }
+
+    MultiDOF point_start = * point_start_p;
+    MultiDOF point_end = * point_end_p;
+
+    Eigen::Matrix<double, 3, 1> actor_point_velocity(point_end.vx, point_end.vy, point_end.vz);
+
+    Eigen::Matrix<double, 3, 1> drone_point_velocity(point_start.vx, point_start.vy, point_start.vz);
+    double drone_point_velocity_mag = drone_point_velocity.norm();
+    Eigen::Matrix<double, 3, 1> normalized_drone_point_velocity = drone_point_velocity/drone_point_velocity_mag; 
+    if(isnan(normalized_drone_point_velocity(0)) || isnan(normalized_drone_point_velocity(1)) || isnan(normalized_drone_point_velocity(2))){
+        normalized_drone_point_velocity(0) = 0;
+        normalized_drone_point_velocity(1) = 0;
+        normalized_drone_point_velocity(2) = 0;
+    }
+    
+    Eigen::Matrix<double, 1, 3> normalized_drone_point_velocity_transpose = normalized_drone_point_velocity.transpose();
+
+    Eigen::Matrix<double, 3, 1> L(point_end.x - point_start.x, point_end.y - point_start.y, point_end.z - point_start.z);
+    double L_mag = L.norm();
+    Eigen::Matrix<double, 3, 1> normalized_L = L/L_mag;
+    if(L_mag == 0){
+        printf("LMAG\n");
+    }
+    Eigen::Matrix<double, 1, 3> normalized_L_transpose = normalized_L.transpose();
+    Eigen::Matrix<double, 3, 1> L_velocity = actor_point_velocity - drone_point_velocity;
+
+    //used for determining the value of τ
+    double increment = 1.0/(*size_p-1); 
+
+    Eigen::Matrix<double, 3, 1> cost_function_gradient = get_cost_gradient(voxels[thread_index], 0.5, voxels_data, voxels_size);
+    Eigen::Matrix<double, 3, 1> inner_first_term = actor_point_velocity/drone_point_velocity_mag - normalized_drone_point_velocity;
+    double temp1 = inner_first_term(0);
+    double temp2 = inner_first_term(1);
+    double temp3 = inner_first_term(2);
+    inner_first_term*=thread_index*increment;
+    inner_first_term +=normalized_drone_point_velocity;
+    Eigen::Matrix<double, 3, 3> inner_first_term_matrix = inner_first_term * normalized_drone_point_velocity_transpose;
+    inner_first_term_matrix = Eigen::Matrix3d::Identity(3,3) - inner_first_term_matrix;
+    Eigen::Matrix<double, 1, 3> first_term = cost_function_gradient.transpose() * L_mag * drone_point_velocity_mag * inner_first_term_matrix;
+
+    Eigen::Matrix<double, 1, 3> inner_second_term = normalized_L_transpose + normalized_L_transpose * L_velocity * normalized_drone_point_velocity_transpose;
+    Eigen::Matrix<double, 1, 3> second_term = get_voxel_cost(voxels[thread_index], 0.5, voxels_data, voxels_size) * drone_point_velocity_mag * inner_second_term;
+    Eigen::Matrix<double, 1, 3> grad_j_occ = first_term - second_term;
+
+    if(isnan(grad_j_occ(0)) || isnan(grad_j_occ(1)) || isnan(grad_j_occ(2))){
+        grad_j_occ(0) = 0;
+        grad_j_occ(1) = 0;
+        grad_j_occ(2) = 0;
+    }
+
+    int occ_grad_index = (* point_index) * 3;
+
+    atomicAdd(&(occ_grad[occ_grad_index]), grad_j_occ(0));
+    atomicAdd(&(occ_grad[occ_grad_index + 1]), grad_j_occ(1));
+    atomicAdd(&(occ_grad[occ_grad_index + 2]), grad_j_occ(2));
+
+}
+
+__global__ 
+void occlusion_avoidance_gradient(MultiDOF * drone_traj, MultiDOF * actor_traj, double * occ_grad, int * n, Voxel * voxels_data, int * voxels_size){
+    int thread_index = (blockIdx.x*128 + threadIdx.x);
+    if(thread_index >= *n-1){
+        return;
+    }
+    
+    MultiDOF * point_start_p = new MultiDOF(drone_traj[thread_index+1]); 
+    // * point_start_p = drone_traj[thread_index+1];
+
+    MultiDOF * point_end_p = new MultiDOF(actor_traj[thread_index+1]); 
+    // * point_end_p = actor_traj[thread_index+1];
+
+    Eigen::Matrix<double, 3, 1> * voxels = new Eigen::Matrix<double, 3, 1>[500]; //figure out how to bound this
+    int size = 0;
+    get_voxels(* point_start_p, * point_end_p, voxels, 0.5, size);
+
+    int threads_per_block = 256;
+    int num_blocks = size / threads_per_block + 1;
+    int * size_p = new int(size);
+    int * thread_index_p = new int(thread_index);
+    process_occlusion_avoidance_voxels<<<num_blocks, threads_per_block>>>(voxels, size_p, voxels_data, voxels_size, occ_grad, thread_index_p, point_start_p, point_end_p);
+    cudaDeviceSynchronize();
+
+    int occ_grad_index = thread_index * 3;
+
+    occ_grad[occ_grad_index]/=size;
+    occ_grad[occ_grad_index+1]/=size;
+    occ_grad[occ_grad_index+2]/=size;
+
+    free(voxels);
+    free(size_p);
+    free(thread_index_p);
+    free(point_start_p);
+    free(point_end_p);
+}
+
+void optimize_trajectory_cuda(std::vector<MultiDOF>  & drone_traj, std::vector<MultiDOF> & actor_traj, std::vector<MultiDOF> & ideal_traj, double & t, std::vector<Voxel> & voxels){
+    // int n = drone_traj.size();
+    // int * n_h = &n;
+    // int * n_d;
+    // cudaMalloc(&n_d, sizeof(*n_h));
+    // cudaMemcpy(n_d, n_h, sizeof(*n_h), cudaMemcpyHostToDevice);
+
+    // MultiDOF * drone_traj_h = &drone_traj[0];
+    // MultiDOF * actor_traj_h = &actor_traj[0];
+    // MultiDOF * ideal_traj_h = &ideal_traj[0];
+    // MultiDOF * drone_traj_d;
+    // MultiDOF * actor_traj_d;
+    // MultiDOF * ideal_traj_d;
+
+    // cudaMalloc(&drone_traj_d, sizeof(*drone_traj_h)*n);
+    // cudaMemcpy(drone_traj_d, drone_traj_h, sizeof(*drone_traj_h)*n, cudaMemcpyHostToDevice);
+    // cudaMalloc(&actor_traj_d, sizeof(*actor_traj_h)*n);
+    // cudaMemcpy(actor_traj_d, actor_traj_h, sizeof(*actor_traj_h)*n, cudaMemcpyHostToDevice);
+    // cudaMalloc(&ideal_traj_d, sizeof(*ideal_traj_h)*n);
+    // cudaMemcpy(ideal_traj_d, ideal_traj_h, sizeof(*ideal_traj_h)*n, cudaMemcpyHostToDevice);
+
+    // int voxels_size = voxels.size();
+    // int * voxels_size_h = &voxels_size;
+    // int * voxels_size_d;
+    // cudaMalloc(&voxels_size_d, sizeof(*voxels_size_h));
+    // cudaMemcpy(voxels_size_d, voxels_size_h, sizeof(*voxels_size_h), cudaMemcpyHostToDevice);
+
+    // Voxel * voxels_h = &voxels[0];
+    // Voxel * voxels_d;
+    // cudaMalloc(&voxels_d, sizeof(*voxels_h) * voxels_size);
+    // cudaMemcpy(voxels_d, voxels_h, sizeof(*voxels_h) * voxels_size, cudaMemcpyHostToDevice);
+
+    // // Eigen::Matrix<double, Eigen::Dynamic, 3> * obs_grad_h = new Eigen::MatrixXd(n-1,3);
+    // Eigen::Matrix<double, Eigen::Dynamic, 3> * obs_grad_d;
+    // cudaMalloc(&obs_grad_d, 24 * (n-1));
+    // // cudaMemcpy(obs_grad_d, obs_grad_h, sizeof(* obs_grad_h) * (n-1), cudaMemcpyHostToDevice);
+
+    // // Eigen::Matrix<double, Eigen::Dynamic, 3> * obs_grad_h = new Eigen::MatrixXd(n-1,3);
+    // Eigen::Matrix<double, Eigen::Dynamic, 3> * occ_grad_d;
+    // cudaMalloc(&occ_grad_d, 24 * (n-1));
+    // // cudaMemcpy(obs_grad_d, obs_grad_h, sizeof(* obs_grad_h) * (n-1), cudaMemcpyHostToDevice);
+
+    // int num_threads = 128;
+    // int num_blocks = *n_h / num_threads + 1;
+
+    // //pass truncation distance and volume size
+    // for(size_t i = 0; i < 100; i++){
+
+    //     obstacle_avoidance_gradient<<<num_blocks, num_threads>>>(drone_traj_d, obs_grad_d, n_d, voxels_d, voxels_size_d); //reset obs_grad and occ_grad after each iteration set values to 0
+    //     cudaDeviceSynchronize();
+    //     occlusion_avoidance_gradient<<<num_blocks, num_threads>>>(drone_traj_d, actor_traj_d, occ_grad_d, n_d, voxels_d, voxels_size_d);
+    //     cudaDeviceSynchronize();
+    // }
+
+    // // cudaMemcpy(obs_grad_h, obs_grad_d, sizeof(* obs_grad_h) * (n-1), cudaMemcpyDeviceToHost);
+
+    // cudaFree(n_d);
+    // cudaFree(drone_traj_d);
+    // cudaFree(actor_traj_d);
+    // cudaFree(voxels_size_d);
+    // cudaFree(voxels_d);
+    // cudaFree(obs_grad_d);
+    // cudaFree(occ_grad_d);
+
+}
+
+Eigen::Matrix<double, Eigen::Dynamic, 3> obstacle_avoidance_gradient_cuda(std::vector<MultiDOF>  & drone_traj, std::vector<Voxel> & voxels){
+    int * n_h = new int(drone_traj.size());
+    int * n_d;
+    cudaMalloc(&n_d, sizeof(*n_h));
+    cudaMemcpy(n_d, n_h, sizeof(*n_h), cudaMemcpyHostToDevice);
+
+    MultiDOF * drone_traj_h = &drone_traj[0];
+    MultiDOF * drone_traj_d;
+
+    cudaMalloc(&drone_traj_d, sizeof(*drone_traj_h)*(*n_h));
+    cudaMemcpy(drone_traj_d, drone_traj_h, sizeof(*drone_traj_h)*(*n_h), cudaMemcpyHostToDevice);
+
+    // int voxels_size = voxels.size();
+    int * voxels_size_h = new int(voxels.size());
+    int * voxels_size_d;
+    cudaMalloc(&voxels_size_d, sizeof(*voxels_size_h));
+    cudaMemcpy(voxels_size_d, voxels_size_h, sizeof(*voxels_size_h), cudaMemcpyHostToDevice);
+
+    Voxel * voxels_h = &voxels[0];
+    Voxel * voxels_d;
+    cudaMalloc(&voxels_d, sizeof(*voxels_h) * (*voxels_size_h));
+    cudaMemcpy(voxels_d, voxels_h, sizeof(*voxels_h) * (*voxels_size_h), cudaMemcpyHostToDevice);
+
+    int obs_grad_size = ((*n_h)-1) * 3;
+    double obs_grad_h[obs_grad_size];
+    double * obs_grad_d;
+    cudaMalloc(&obs_grad_d, sizeof(*obs_grad_h) * obs_grad_size);
+    cudaMemset(obs_grad_d, 0, sizeof(*obs_grad_h) * obs_grad_size);
+
+    int num_threads = 128;
+    int num_blocks = *n_h / num_threads + 1;
+
+    obstacle_avoidance_gradient<<<num_blocks, num_threads>>>(drone_traj_d, obs_grad_d, n_d, voxels_d, voxels_size_d); //need to pass truncation distance and voxels_size
+    cudaDeviceSynchronize();
+    gpuErrchk(cudaPeekAtLastError());
+
+    cudaMemcpy(obs_grad_h, obs_grad_d, sizeof(*obs_grad_h) * obs_grad_size, cudaMemcpyDeviceToHost);
+    gpuErrchk(cudaPeekAtLastError());
+
+    Eigen::Matrix<double, Eigen::Dynamic, 3> obs_grad((*n_h)-1,3);
+    for(int i=0;i<(*n_h)-1; ++i){
+        int obs_grad_h_index = 3*i;
+        obs_grad(i,0) = obs_grad_h[obs_grad_h_index];
+        obs_grad(i,1) = obs_grad_h[obs_grad_h_index + 1];
+        obs_grad(i,2) = obs_grad_h[obs_grad_h_index + 2];
+    }
+
+    free(n_h);
+    free(voxels_size_h);
+    cudaFree(n_d);
+    cudaFree(drone_traj_d);
+    cudaFree(voxels_size_d);
+    cudaFree(voxels_d);
+    cudaFree(obs_grad_d);
+
+    return obs_grad;
+}
+
+Eigen::Matrix<double, Eigen::Dynamic, 3> occlusion_avoidance_gradient_cuda(std::vector<MultiDOF>  & drone_traj, std::vector<MultiDOF> & actor_traj, std::vector<Voxel> & voxels){
+    // int n = drone_traj.size();
+    int * n_h = new int(drone_traj.size());
     int * n_d;
     cudaMalloc(&n_d, sizeof(*n_h));
     cudaMemcpy(n_d, n_h, sizeof(*n_h), cudaMemcpyHostToDevice);
@@ -306,48 +564,54 @@ void optimize_trajectory_cuda(std::vector<MultiDOF>  & drone_traj, std::vector<M
     MultiDOF * drone_traj_d;
     MultiDOF * actor_traj_d;
 
-    cudaMalloc(&drone_traj_d, sizeof(*drone_traj_h)*n);
-    cudaMemcpy(drone_traj_d, drone_traj_h, sizeof(*drone_traj_h)*n, cudaMemcpyHostToDevice);
-    cudaMalloc(&actor_traj_d, sizeof(*actor_traj_h)*n);
-    cudaMemcpy(actor_traj_d, actor_traj_h, sizeof(*actor_traj_h)*n, cudaMemcpyHostToDevice);
+    cudaMalloc(&drone_traj_d, sizeof(*drone_traj_h)*(*n_h));
+    cudaMemcpy(drone_traj_d, drone_traj_h, sizeof(*drone_traj_h)*(*n_h), cudaMemcpyHostToDevice);
+    cudaMalloc(&actor_traj_d, sizeof(*actor_traj_h)*(*n_h));
+    cudaMemcpy(actor_traj_d, actor_traj_h, sizeof(*actor_traj_h)*(*n_h), cudaMemcpyHostToDevice);
 
-    int voxels_size = voxels.size();
-    int * voxels_size_h = &voxels_size;
+    // int voxels_size = voxels.size();
+    int * voxels_size_h = new int(voxels.size());
     int * voxels_size_d;
-    cudaMalloc(&voxels_size_h, sizeof(*voxels_size_h));
+    cudaMalloc(&voxels_size_d, sizeof(*voxels_size_h));
     cudaMemcpy(voxels_size_d, voxels_size_h, sizeof(*voxels_size_h), cudaMemcpyHostToDevice);
 
     Voxel * voxels_h = &voxels[0];
     Voxel * voxels_d;
-    cudaMalloc(&voxels_d, sizeof(*voxels_h) * voxels_size);
-    cudaMemcpy(voxels_d, voxels_h, sizeof(*voxels_h) * voxels_size, cudaMemcpyHostToDevice);
+    cudaMalloc(&voxels_d, sizeof(*voxels_h) * (*voxels_size_h));
+    cudaMemcpy(voxels_d, voxels_h, sizeof(*voxels_h) * (*voxels_size_h), cudaMemcpyHostToDevice);
 
-    // Eigen::Matrix<double, Eigen::Dynamic, 3> * obs_grad_h = new Eigen::MatrixXd(n-1,3);
-    Eigen::Matrix<double, Eigen::Dynamic, 3> * obs_grad_d;
-    cudaMalloc(&obs_grad_d, 24 * (n-1));
-    // cudaMemcpy(obs_grad_d, obs_grad_h, sizeof(* obs_grad_h) * (n-1), cudaMemcpyHostToDevice);
+    int occ_grad_size = ((*n_h)-1) * 3;
+    double occ_grad_h[occ_grad_size];
+    double * occ_grad_d;
+    cudaMalloc(&occ_grad_d, sizeof(*occ_grad_h) * occ_grad_size);
+    cudaMemset(occ_grad_d, 0, sizeof(*occ_grad_h) * occ_grad_size);
 
-    // Eigen::Matrix<double, Eigen::Dynamic, 3> * obs_grad_h = new Eigen::MatrixXd(n-1,3);
-    Eigen::Matrix<double, Eigen::Dynamic, 3> * occ_grad_d;
-    cudaMalloc(&occ_grad_d, 24 * (n-1));
-    // cudaMemcpy(obs_grad_d, obs_grad_h, sizeof(* obs_grad_h) * (n-1), cudaMemcpyHostToDevice);
     int num_threads = 128;
-    int num_blocks = n / num_threads + 1;
+    int num_blocks = *n_h / num_threads + 1;
 
-    //pass truncation distance and volume size
-    for(size_t i = 0; i < 100; i++){
-        obstacle_avoidance_gradient<<<num_blocks, num_threads>>>(drone_traj_d, obs_grad_d, n_d, voxels_d, voxels_size_d);
-        cudaDeviceSynchronize();
+    occlusion_avoidance_gradient<<<num_blocks, num_threads>>>(drone_traj_d, actor_traj_d, occ_grad_d, n_d, voxels_d, voxels_size_d); //pass truncation distance and voxel size
+    gpuErrchk(cudaPeekAtLastError());
+    cudaDeviceSynchronize();
+
+    cudaMemcpy(occ_grad_h, occ_grad_d, sizeof(*occ_grad_h) * occ_grad_size, cudaMemcpyDeviceToHost);
+    gpuErrchk(cudaPeekAtLastError());
+
+    Eigen::Matrix<double, Eigen::Dynamic, 3> occ_grad((*n_h)-1,3);
+    for(int i=0;i<(*n_h)-1; ++i){
+        int occ_grad_h_index = 3*i;
+        occ_grad(i,0) = occ_grad_h[occ_grad_h_index];
+        occ_grad(i,1) = occ_grad_h[occ_grad_h_index + 1];
+        occ_grad(i,2) = occ_grad_h[occ_grad_h_index + 2];
     }
 
-    // cudaMemcpy(obs_grad_h, obs_grad_d, sizeof(* obs_grad_h) * (n-1), cudaMemcpyDeviceToHost);
-
+    free(n_h);
+    free(voxels_size_h);
     cudaFree(n_d);
     cudaFree(drone_traj_d);
     cudaFree(actor_traj_d);
     cudaFree(voxels_size_d);
     cudaFree(voxels_d);
-    cudaFree(obs_grad_d);
     cudaFree(occ_grad_d);
 
+    return occ_grad;
 }
