@@ -82,10 +82,9 @@ namespace std {
     };
 }
 
-void optimize_trajectory_cuda(std::vector<MultiDOF> & drone_traj, std::vector<MultiDOF> & actor_traj, std::vector<MultiDOF> & ideal_traj, double & t, std::vector<Voxel> & voxels);
+Eigen::Matrix<double, Eigen::Dynamic, 3> obstacle_avoidance_gradient_cuda(std::vector<MultiDOF>  & drone_traj, std::vector<Voxel> & voxels, double & truncation_distance, double & voxel_size);
 
-Eigen::Matrix<double, Eigen::Dynamic, 3> obstacle_avoidance_gradient_cuda(std::vector<MultiDOF>  & drone_traj, std::vector<Voxel> & voxels);
-
-Eigen::Matrix<double, Eigen::Dynamic, 3> occlusion_avoidance_gradient_cuda(std::vector<MultiDOF>  & drone_traj, std::vector<MultiDOF> & actor_traj, std::vector<Voxel> & voxels);
+Eigen::Matrix<double, Eigen::Dynamic, 3> occlusion_avoidance_gradient_cuda(std::vector<MultiDOF>  & drone_traj, 
+std::vector<MultiDOF> & actor_traj, std::vector<Voxel> & voxels, double & truncation_distance, double & voxel_size);
 
 #endif

@@ -71,7 +71,8 @@ std::string vehicle_name = "drone_1";
 double VOXEL_SIZE = .5; //todo: add this to tsdf msg
 double HALF_VOXEL_SIZE = VOXEL_SIZE / 2;
 
-double truncation_distance;
+double truncation_distance = 4;
+double voxel_size = .5;
 std::vector<Voxel> voxels_list;
 
 std::unordered_map<Key, Voxel> voxel_map;
@@ -439,8 +440,8 @@ double traj_smoothness(const cinematography_msgs::msg::MultiDOFarray& drone_traj
     e(0,2) = -1 * drone_traj.points[0].z;
 
     Eigen::MatrixXd K0 = K / delta_t;
-    Eigen::MatrixXd K1 = K.array().pow(2) / pow(delta_t,2);
-    Eigen::MatrixXd K2 = K.array().pow(3) / pow(delta_t,3);
+    Eigen::MatrixXd K1 = K * K / pow(delta_t,2);
+    Eigen::MatrixXd K2 = K * K * K / pow(delta_t,3);
     Eigen::MatrixXd e0 = e / delta_t;
     Eigen::MatrixXd e1 = e / delta_t;
     Eigen::MatrixXd e2 = e / delta_t;
@@ -525,7 +526,7 @@ double traj_cost_function(const cinematography_msgs::msg::MultiDOFarray& drone_t
 }
 
 // TODO: Implement gradient equivalents of all the above, and hessian approximations (A_smooth + delta_1 * A_shot)
-Eigen::Matrix<double, Eigen::Dynamic, 3> traj_smoothness_gradient(const cinematography_msgs::msg::MultiDOFarray& drone_traj, double delta_t, const Eigen::MatrixXd  & K0, const Eigen::MatrixXd  & K1, const Eigen::MatrixXd  & K2, const Eigen::MatrixXd  & A) {
+Eigen::Matrix<double, Eigen::Dynamic, 3> traj_smoothness_gradient(const cinematography_msgs::msg::MultiDOFarray& drone_traj, double delta_t, const Eigen::MatrixXd  & K, const Eigen::MatrixXd  & K0, const Eigen::MatrixXd  & K1, const Eigen::MatrixXd  & K2, const Eigen::MatrixXd  & A) {
     int a0 = 1, a1 = 0.5, a2 = 0;       // TODO: Fix these somehow
 
     int n = drone_traj.points.size();
@@ -543,8 +544,8 @@ Eigen::Matrix<double, Eigen::Dynamic, 3> traj_smoothness_gradient(const cinemato
     e(0,2) = -1 * drone_traj.points[0].z;
 
     Eigen::MatrixXd e0 = e / delta_t; //these need to be fixed
-    Eigen::MatrixXd e1 = e / delta_t;
-    Eigen::MatrixXd e2 = e / delta_t;
+    Eigen::MatrixXd e1 = K * e / pow(delta_t, 2);
+    Eigen::MatrixXd e2 = K * K * e / pow(delta_t, 3);
 
     Eigen::MatrixXd b = a0 * K0.transpose() * e0 + a1 * K1.transpose() * e1 + a2 * K2.transpose() * e2;
 
@@ -575,105 +576,6 @@ Eigen::Matrix<double, Eigen::Dynamic, 3> shot_quality_gradient(const cinematogra
     return sum / (n-1);
 }
 
-Eigen::MatrixXd obstacle_avoidance_gradient(const cinematography_msgs::msg::MultiDOFarray& drone_traj){
-    std::vector<cinematography_msgs::msg::MultiDOF> points = drone_traj.points;
-    int n = points.size();
-    Eigen::MatrixXd gradient_vals(n-1,3);
-    for(size_t i = 0; i<n-1; ++i){
-        cinematography_msgs::msg::MultiDOF pointStart = points[i];
-        cinematography_msgs::msg::MultiDOF pointEnd = points[i+1];
-
-        std::vector<Key> voxelKeys;
-        get_voxels(pointStart, pointEnd, voxelKeys, VOXEL_SIZE);
-
-        double velocity_mag = sqrt(pow(pointEnd.vx, 2) + pow(pointEnd.vy ,2) + pow(pointEnd.vz , 2));
-
-        Eigen::Matrix<double, 3, 1> p_hat(pointEnd.vx/velocity_mag, pointEnd.vy/velocity_mag, pointEnd.vz/velocity_mag);
-        if(isnan(p_hat(0)) || isnan(p_hat(1)) || isnan(p_hat(2))){
-          p_hat(0) = 0;
-          p_hat(1) = 0;
-          p_hat(2) = 0;
-        }
-        Eigen::Matrix<double, 3, 3> p_hat_multiplied = p_hat * p_hat.transpose();
-        Eigen::Matrix<double, 3, 3> identity_minus_p_hat_multiplied = Eigen::Matrix3d::Identity(3,3) - p_hat_multiplied;
-        Eigen::Matrix<double, 3, 1> gradient_val(0,0,0);
-
-        for(size_t j = 1; j<voxelKeys.size(); ++j){ //skip first voxel for each drone point so not double counting voxel cost
-            Eigen::Matrix<double, 3, 1> cost_function_gradient = get_cost_gradient(voxelKeys[j]);
-            Eigen::Matrix<double, 3, 1> gradient_multiplied_result = identity_minus_p_hat_multiplied * cost_function_gradient;       
-            Eigen::Matrix<double, 3, 1> grad_j_obs = gradient_multiplied_result * velocity_mag;          
-            gradient_val+=grad_j_obs;
-        }
-        //normalize
-        gradient_val/=voxelKeys.size();
-
-        gradient_vals(i, 0) = gradient_val(0);
-        gradient_vals(i, 1) = gradient_val(1);
-        gradient_vals(i, 2) = gradient_val(2); 
-    }
-    return gradient_vals;
-}
-
-Eigen::MatrixXd occlusion_avoidance_gradient(const cinematography_msgs::msg::MultiDOFarray& drone_traj, const cinematography_msgs::msg::MultiDOFarray& actor_traj){
-    std::vector<cinematography_msgs::msg::MultiDOF> drone_points = drone_traj.points;
-    std::vector<cinematography_msgs::msg::MultiDOF> actor_points = actor_traj.points;
-    int n = drone_points.size();
-    Eigen::MatrixXd gradient_vals(n-1,3);
-    for(size_t i = 1; i<n; ++i){ // skips first point since drone is already there
-        cinematography_msgs::msg::MultiDOF pointStart = drone_points[i];
-        cinematography_msgs::msg::MultiDOF pointEnd = actor_points[i];
-        std::vector<Key> voxelKeys;
-        get_voxels(pointStart, pointEnd, voxelKeys, VOXEL_SIZE);
-        double manifold_cost = 0;
-        //velocity of the line between the drone and actor traj
-        double manifold_velocity = sqrt(pow(pointEnd.x - pointStart.x, 2) + pow(pointEnd.y - pointStart.y ,2) + pow(pointEnd.z - pointStart.z , 2));
-        
-        Eigen::Matrix<double, 1, 3> gradient_val(0,0,0);
-
-        Eigen::Matrix<double, 3, 1> drone_point_velocity(pointStart.vx, pointStart.vy, pointStart.vz);
-        double drone_point_velocity_mag = drone_point_velocity.norm();
-        Eigen::Matrix<double, 3, 1> normalized_drone_point_velocity = drone_point_velocity/drone_point_velocity_mag; 
-        //if normalized_drone_point velocity is 0
-        if(isnan(normalized_drone_point_velocity(0)) || isnan(normalized_drone_point_velocity(1) || isnan(normalized_drone_point_velocity(2)))){
-          normalized_drone_point_velocity(0) = 0;
-          normalized_drone_point_velocity(1) = 0;
-          normalized_drone_point_velocity(2) = 0;
-        }
-        Eigen::Matrix<double, 1, 3> normalized_drone_point_velocity_transpose = normalized_drone_point_velocity.transpose();
-        
-        Eigen::Matrix<double, 3, 1> actor_point_velocity(pointEnd.vx, pointEnd.vy, pointEnd.vz);
-
-        Eigen::Matrix<double, 3, 1> L(pointEnd.x - pointStart.x, pointEnd.y - pointStart.y, pointEnd.z - pointStart.z);
-        double L_mag = L.norm();
-        Eigen::Matrix<double, 3, 1> normalized_L = L/L_mag;
-        Eigen::Matrix<double, 1, 3> normalized_L_transpose = normalized_L.transpose();
-        Eigen::Matrix<double, 3, 1> L_velocity = actor_point_velocity - drone_point_velocity;
-
-        //used for determining the value of τ
-        double increment = 1.0/(voxelKeys.size()-1);
-
-        for(size_t j = 0; j<voxelKeys.size(); ++j){
-            Eigen::Matrix<double, 3, 1> cost_function_gradient = get_cost_gradient(voxelKeys[j]);
-            Eigen::Matrix<double, 3, 1> innerFirstTerm = actor_point_velocity/drone_point_velocity_mag - normalized_drone_point_velocity;
-            innerFirstTerm*=j*increment;
-            innerFirstTerm +=normalized_drone_point_velocity;
-            Eigen::Matrix<double, 3, 3> innerFirstTermMatrix = innerFirstTerm * normalized_drone_point_velocity_transpose;
-            innerFirstTermMatrix = Eigen::Matrix3d::Identity(3,3) - innerFirstTermMatrix;
-            Eigen::Matrix<double, 1, 3> firstTerm = cost_function_gradient.transpose() * L_mag * drone_point_velocity_mag * innerFirstTermMatrix;
-
-            Eigen::Matrix<double, 1, 3> innerSecondTerm = normalized_L_transpose + normalized_L_transpose * L_velocity * normalized_drone_point_velocity_transpose;
-            Eigen::Matrix<double, 1, 3> secondTerm = get_voxel_cost(voxelKeys[j]) * drone_point_velocity_mag * innerSecondTerm;
-            gradient_val += firstTerm - secondTerm;
-        }
-        // normalize gradient val?
-        gradient_val/=voxelKeys.size();
-        gradient_vals(i-1, 0) = gradient_val(0);
-        gradient_vals(i-1, 1) = gradient_val(1);
-        gradient_vals(i-1, 2) = gradient_val(2); 
-    }
-    return gradient_vals;
-}
-
 void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, const cinematography_msgs::msg::MultiDOFarray& actor_traj) {
     cinematography_msgs::msg::MultiDOFarray ideal_traj = calc_ideal_drone_traj(actor_traj);     // ξ_shot when calculating shot quality
 
@@ -683,10 +585,6 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
     std::vector<MultiDOF> actor_traj_cuda;
 
     double t = 0;
-    // for(cinematography_msgs::msg::MultiDOF p : actor_traj.points) {
-    //     t += p.duration;
-    // }
-    // t /= actor_traj.points.size();
 
     double LAMBDA_1, LAMBDA_2, LAMBDA_3 = 1;    // TODO: Have these specified as ROS parameters
 
@@ -705,9 +603,6 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
     }
     t /= n;
 
-    // optimize_trajectory_cuda(drone_traj_cuda, actor_traj_cuda, ideal_traj_cuda, t, voxels_list);
-
-
     //Intializing A_smooth
     int a0 = 1, a1 = 0.5, a2 = 0;  // TODO: Fix these somehow
 
@@ -716,8 +611,8 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
         K(i,i) = -1;                            // Initialize K (n-1,n-1) as -I
     }
     Eigen::MatrixXd K0 = K / t;
-    Eigen::MatrixXd K1 = K.array().pow(2) / pow(t,2);
-    Eigen::MatrixXd K2 = K.array().pow(3) / pow(t,3);
+    Eigen::MatrixXd K1 = K * K / pow(t,2);
+    Eigen::MatrixXd K2 = K * K * K / pow(t,3);
     Eigen::MatrixXd A_smooth = a0 * K0.transpose() * K0 + a1 * K1.transpose() * K1 + a2 * K2.transpose() * K2;
 
     //Intializing A_shot
@@ -727,17 +622,17 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
     Eigen::MatrixXd M_inv = (A_smooth + LAMBDA_3 * A_shot).inverse();
 
     int MAX_ITERATIONS;     // TODO: Make this a ROS parameter
-    for(int i = 0; i < 100; i++) {
-        Eigen::Matrix<double, Eigen::Dynamic, 3> smooth_grad = traj_smoothness_gradient(drone_traj, t, K0, K1, K2, A_smooth);
+    for(int i = 0; i < 20; i++) {
+        Eigen::Matrix<double, Eigen::Dynamic, 3> smooth_grad = traj_smoothness_gradient(drone_traj, t, K, K0, K1, K2, A_smooth);
         Eigen::Matrix<double, Eigen::Dynamic, 3> shot_grad = shot_quality_gradient(drone_traj, ideal_traj, A_shot);
-        // Eigen::MatrixXd obs_grad = obstacle_avoidance_gradient(drone_traj);
-        // Eigen::MatrixXd occ_grad = occlusion_avoidance_gradient(drone_traj, actor_traj);
 
-        Eigen::Matrix<double, Eigen::Dynamic, 3> obs_grad = obstacle_avoidance_gradient_cuda(drone_traj_cuda, voxels_list);
-        Eigen::Matrix<double, Eigen::Dynamic, 3> occ_grad = occlusion_avoidance_gradient_cuda(drone_traj_cuda, actor_traj_cuda, voxels_list);
+        Eigen::Matrix<double, Eigen::Dynamic, 3> obs_grad = obstacle_avoidance_gradient_cuda(drone_traj_cuda, voxels_list, truncation_distance, voxel_size);
+        Eigen::Matrix<double, Eigen::Dynamic, 3> occ_grad = occlusion_avoidance_gradient_cuda(drone_traj_cuda, actor_traj_cuda, voxels_list, truncation_distance, voxel_size);
 
-        Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = smooth_grad + LAMBDA_1 * obs_grad + LAMBDA_2 * occ_grad + LAMBDA_3 * shot_grad;
+        
 
+        // Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = smooth_grad + LAMBDA_1 * obs_grad + LAMBDA_2 * occ_grad + LAMBDA_3 * shot_grad;
+        Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = LAMBDA_1 * obs_grad + LAMBDA_2 * occ_grad + LAMBDA_3 * shot_grad;
         //Todo:
         // if((j_grad.transpose()*M_inv * j_grad).array().pow(2) / 2 < e0){
           
@@ -766,7 +661,7 @@ void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr act
         return;
     }
 
-    // print_rviz_traj(*actor_traj, "actor_traj", true);
+    print_rviz_traj(*actor_traj, "actor_traj", true);
 
     // TODO: Get this further up in the vision pipeline and pass it down. Also get velocity and acceleration info
     // msr::airlib::Pose currentPose = airsim_client->simGetVehiclePose(vehicle_name);
@@ -809,6 +704,7 @@ void tsdf_callback(tsdf_package_msgs::msg::Tsdf::SharedPtr tsdf){
     }
 
     truncation_distance = tsdf->truncation_distance;
+    voxel_size = tsdf->voxel_size;
 }
 
 int main(int argc, char ** argv)
