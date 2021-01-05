@@ -177,6 +177,10 @@ add_executable(follow_trajectory src/follow_trajectory.cpp)
 ament_target_dependencies(follow_trajectory rclcpp geometry_msgs cinematography_msgs tf2_geometry_msgs nav_msgs)
 target_link_libraries(follow_trajectory AirLib)
 
+add_executable(airsim_ros2_wrapper src/airsim_ros2_wrapper.cpp)
+ament_target_dependencies(airsim_ros2_wrapper rclcpp sensor_msgs)
+target_link_libraries(airsim_ros2_wrapper AirLib)
+
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   # the following line skips the linter which checks for copyrights
@@ -189,7 +193,7 @@ if(BUILD_TESTING)
 endif()
 
 install(TARGETS
-        actor_detection heading_estimation motion_forecasting motion_planner follow_trajectory
+        actor_detection heading_estimation motion_forecasting motion_planner follow_trajectory airsim_ros2_wrapper
         DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/
         DESTINATION include)
