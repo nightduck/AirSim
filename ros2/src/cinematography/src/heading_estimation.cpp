@@ -36,6 +36,8 @@ private:
     geometry_msgs::msg::Vector3Stamped unit_vect;
     geometry_msgs::msg::QuaternionStamped unit_quat;
 
+    std::string trt_engine_filename;
+
     rclcpp::Clock clock = rclcpp::Clock(RCL_SYSTEM_TIME);
 
     tk::dnn::NetworkRT* netRT;
@@ -103,9 +105,25 @@ private:
         int res;
         get_parameter("resolution", res);
 
+        // If nothing detected, passthru
+        if (msg->width == 0) {
+            cinematography_msgs::msg::VisionMeasurements vm;
+            vm.header.frame_id = "world_ned";
+            vm.header.stamp = clock.now();
+            vm.centerx = msg->centerx;
+            vm.centery = msg->centery;
+            vm.width = msg->width;
+            vm.height = msg->height;
+            vm.fov = msg->fov;
+            vm.drone_pose = msg->drone_pose;
+            vm.hde = 0;
+            hde_pub->publish(vm);
+            return;
+        }
+
         // Pad image to 192x192 square with black bars
         sensor_msgs::msg::Image img = msg->image;
-        cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(msg->image, sensor_msgs::image_encodings::BGR8);
+        cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(msg->image, msg->image.encoding);
         cv::Mat new_img;
 
 
@@ -132,12 +150,6 @@ private:
             cv_ptr->image = new_img;
         }
 
-        if (cv_ptr->image.cols == 0) {      // If no actors were detected in the last step, skip inference here
-            vm.hde = 0;
-            hde_pub->publish(vm);
-            return;
-        }
-
         float* array = infer(cv_ptr->image);
 
         double hde0 = array[0];   // Output #1
@@ -154,6 +166,8 @@ private:
 
 public:
     HeadingEstimation() : Node("heading_estimation") {
+        declare_parameter<std::string>("tensorrt_engine", "hde_deer_airsim.rt");
+        get_parameter("tensorrt_engine", trt_engine_filename);
         declare_parameter("resolution", 192);
 
         unit_vect.vector.x = unit_quat.quaternion.x = unit_quat.quaternion.w = 1;
@@ -162,7 +176,7 @@ public:
         hde_pub = this->create_publisher<cinematography_msgs::msg::VisionMeasurements>("vision_measurements", 50);
         bb_sub = this->create_subscription<cinematography_msgs::msg::BoundingBox>("bounding_box", 50, std::bind(&HeadingEstimation::processImage, this, _1));
 
-        netRT = new tk::dnn::NetworkRT(NULL, "hde_deer_airsim.rt");
+        netRT = new tk::dnn::NetworkRT(NULL, trt_engine_filename.c_str());
         // These 3 lines fix a bug in the NetworkRT constructor
         // netRT->input_dim = tk::dnn::dataDim_t(1, 3, 192, 192, 1);
         netRT->output_dim.w = 1;    // There's a bug where this will be set to zero. It should be 1 minimum
@@ -176,7 +190,6 @@ public:
 
 int main(int argc, char **argv) {
     rclcpp::init(argc, argv);
-    sleep(10);
     rclcpp::spin(std::make_shared<HeadingEstimation>());
     rclcpp::shutdown();
 

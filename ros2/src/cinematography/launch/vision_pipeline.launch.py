@@ -8,12 +8,13 @@ def generate_launch_description():
             node_executable="actor_detection",
             node_name="actor_detection",
             remappings=[
-                ("actor_pose", "/heading_estimation/gimbal_angle_quat_cmd"),
-                ("camera", "/airsim_node/drone_1/front_center_custom/Scene"),
+                ("actor_pose", "/airsim_ros2_wrapper/pose/drone_1/front_center_custom"),
+                ("camera", "/airsim_ros2_wrapper/camera"),
                 ("bounding_box", "/auto_cinematography/vision/bounding_box")
             ],
             parameters=[
-                {"airsim_hostname" : "ubuntu-workstation"}
+                {"airsim_hostname" : "ubuntu-workstation"},
+                {"tensorrt_engine" : "yolo4_deer_fp32.rt"}
             ]
         ),
         Node(
@@ -23,9 +24,10 @@ def generate_launch_description():
             remappings=[
                 ("rviz_pose", "/rviz/pose"),
                 ("vision_measurements", "/auto_cinematography/vision/vision_measurements"),
-                ("bounding_box", "/auto_cinematography/vision/bounding_box"),
-                ("satellite_pose", "/airsim_node/drone_1/global_gps"),
-                ("odom_pos", "/airsim_node/drone_1/odom_local_ned")
+                ("bounding_box", "/auto_cinematography/vision/bounding_box")
+            ],
+            parameters=[
+                {"tensorrt_engine" : "hde_deer_airsim.rt"}
             ]
         ),
         Node(

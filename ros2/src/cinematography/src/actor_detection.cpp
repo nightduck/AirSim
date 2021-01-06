@@ -14,7 +14,6 @@
 #include <opencv2/opencv.hpp>
 #include <cv_bridge/cv_bridge.h>
 #include "vehicles/multirotor/api/MultirotorRpcLibClient.hpp"
-//#include <darknet/include/darknet.h>
 #include <math.h>
 
 #include <iostream>
@@ -33,8 +32,8 @@ using std::placeholders::_1;
 
 class ActorDetection : public rclcpp::Node {
 private:
-    rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr objdet_pub;
     rclcpp::Publisher<cinematography_msgs::msg::BoundingBox>::SharedPtr bb_pub;
+    rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr camera_sub;
 
     rclcpp::TimerBase::SharedPtr timer_infr;
     rclcpp::TimerBase::SharedPtr timer_img;
@@ -45,7 +44,6 @@ private:
     float fov = M_PI/2;
     int gimbal_msg_count = 0;
 
-    cv::Mat lastFrame;
     geometry_msgs::msg::Pose drone_pose;
     std::mutex m;
 
@@ -56,58 +54,35 @@ private:
     std::string trt_engine_filename;
     std::string airsim_hostname;
 
-    int difffilter(const std::vector<uint8_t> &v, std::vector<uint8_t> &w, int m, int n);
-
-    void fetchImage() {
-    //cv::Mat fetchImage() {
-        RCLCPP_INFO(this->get_logger(), "Fetching Image, time=%f", now().seconds());
-        std::vector<ImageCaptureBase::ImageRequest> request = {
-            ImageCaptureBase::ImageRequest(camera_name, ImageCaptureBase::ImageType::Scene, false, false)
-        };
-        ImageCaptureBase::ImageResponse response = airsim_client->simGetImages(request, vehicle_name)[0];
-        msr::airlib::CameraInfo ci = airsim_client->simGetCameraInfo(camera_name, vehicle_name);
-        msr::airlib::Pose dp = airsim_client->simGetVehiclePose(vehicle_name) + ci.pose;
-        //std::vector<uint8_t> img_png = airsim_client->simGetImage(camera_name, msr::airlib::ImageCaptureBase::ImageType::Scene, vehicle_name);
+    void fetchPose(const geometry_msgs::msg::Pose::SharedPtr& msg) {
         m.lock();
-        lastFrame = cv::Mat(response.width, response.height, CV_8UC3, response.image_data_uint8.data());
-        drone_pose.position.x = dp.position.x();
-        drone_pose.position.y = dp.position.y();
-        drone_pose.position.z = dp.position.z();
-        drone_pose.orientation.x = dp.orientation.x();
-        drone_pose.orientation.y = dp.orientation.y();
-        drone_pose.orientation.z = dp.orientation.z();
-        drone_pose.orientation.w = dp.orientation.w();
-        fov = ci.fov * M_PI / 180;
+        drone_pose.orientation = msg->orientation;
+        drone_pose.position = msg->position;
         m.unlock();
-        //return cv::Mat(response.width, response.height, CV_8UC3, response.image_data_uint8.data());
     }
 
-    void processImage() {
-        RCLCPP_INFO(this->get_logger(), "Processing Image, time=%f", now().seconds());
-        // TODO: Add parameter to specify which type our actor is (deer, car, person, etc)
+    void fetchImage(const sensor_msgs::msg::Image::SharedPtr msg) {
+        cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
+        cv::Mat img = cv_ptr->image;
 
         cinematography_msgs::msg::BoundingBox bb;   // Contains subimage, position in frame, and camera pose at the moment the image was taken
-
-        m.lock();
-        cv::Mat img = lastFrame.clone();
         bb.drone_pose = drone_pose;
-        m.unlock();
 
         // Perform inference
         std::vector<cv::Mat> frame_array;
         frame_array.push_back(img.clone());
         detNN->update(frame_array);
 
-        // Draw on boxes and publish for debugging purposes
-        frame_array.clear();
-        frame_array.push_back(img.clone());
-        detNN->draw(frame_array);
+        // // Draw on boxes and publish for debugging purposes
+        // frame_array.clear();
+        // frame_array.push_back(img.clone());
+        // detNN->draw(frame_array);
         cv_bridge::CvImage cv_msg;
-        cv_msg.header.frame_id = "world_ned";
-        cv_msg.header.stamp = this->now();
         cv_msg.encoding = sensor_msgs::image_encodings::BGR8;
-        cv_msg.image = frame_array[0];
-        objdet_pub->publish(cv_msg.toImageMsg());
+        // cv_msg.header.frame_id = "world_ned";
+        // cv_msg.header.stamp = this->now();
+        // cv_msg.image = frame_array[0];
+        // objdet_pub->publish(cv_msg.toImageMsg());
 
         // Sort through found objects, and pick the one that's most likely our actor
         tk::dnn::box mostLikely;
@@ -198,29 +173,25 @@ private:
     }
 
 public:
-    // TODO: Pass IP address of airsim as parameter
     ActorDetection() : Node("actor_detection") {
-        declare_parameter<std::string>("tensorrt_engine", "hde_deer_temp.rt");
+        declare_parameter<std::string>("tensorrt_engine", "yolo4_deer_fp32.rt");
         get_parameter("tensorrt_engine", trt_engine_filename);
         declare_parameter<std::string>("airsim_hostname", "localhost");
         get_parameter("airsim_hostname", airsim_hostname);
         
         airsim_client = new msr::airlib::MultirotorRpcLibClient(airsim_hostname);
         gimbal_setpoint = tf2::Quaternion(0,0,0,1);
-        //airsim_client->simGetCameraInfo(camera_name, vehicle_name).pose.orientation;
         bb_pub = this->create_publisher<cinematography_msgs::msg::BoundingBox>("bounding_box", 50);
-        objdet_pub = this->create_publisher<sensor_msgs::msg::Image>("obj_detect_output", 50);
-        timer_img = create_wall_timer(PERIOD, std::bind(&ActorDetection::fetchImage, this));
-        timer_infr = create_wall_timer(PERIOD, std::bind(&ActorDetection::processImage, this));
-        //camera = this->create_subscription<sensor_msgs::msg::Image>("camera", 1, std::bind(&ActorDetection::processImage, this, _1));
+        camera_sub = this->create_subscription<sensor_msgs::msg::Image>("camera", 1, std::bind(&ActorDetection::fetchImage, this, _1));
 
-        // tk::dnn::NetworkRT *netRT = new tk::dnn::NetworkRT(net, net->getNetworkRTName("yolo4/yolo-deer.rt"));
+        //netRT = new tk::dnn::NetworkRT(NULL, "hde_deer_airsim.rt");
         detNN = new tk::dnn::Yolo3Detection();
         if (!detNN->init(trt_engine_filename, 2, 1)) {
             RCLCPP_ERROR(this->get_logger(), "Cannot find yolo4_airsim.rt! Please place in present directory");
         };
 
-        fetchImage();   // Fetch at least 1 so lastFrame isn't empty
+        msr::airlib::CameraInfo ci = airsim_client->simGetCameraInfo(camera_name, vehicle_name);
+        fov = ci.fov * M_PI / 180;
     }
 
     ~ActorDetection() {
@@ -231,7 +202,6 @@ public:
 
 int main(int argc, char **argv) {
     rclcpp::init(argc, argv);
-    sleep(10);
     rclcpp::executors::MultiThreadedExecutor exec;
     auto actor_detection = std::make_shared<ActorDetection>();
     exec.add_node(actor_detection);

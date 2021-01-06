@@ -9,7 +9,10 @@ def generate_launch_description():
             node_name="motion_forecasting",
             remappings=[
                 ("pred_path", "/auto_cinematography/planning/actor_traj"),
-                ("actor_pose", "/auto_cinematography/vision/actor_pose")
+                ("vision_measurements", "/auto_cinematography/vision/vision_measurements")
+            ],
+            parameters=[
+                {"airsim_hostname": "ubuntu-workstation"}
             ]
         )
     ])

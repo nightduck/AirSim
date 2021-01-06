@@ -12,7 +12,6 @@ using std::placeholders::_1;
 
 class MotionForecasting : public rclcpp::Node {
 private:
-    double FORECAST_WINDOW_SECS;
     std::string ACTOR_NAME;
 
     rclcpp::Publisher<cinematography_msgs::msg::MultiDOFarray>::SharedPtr predict_pub;
@@ -49,7 +48,7 @@ private:
         cinematography_msgs::msg::MultiDOFarray pred_traj;
         pred_traj.header.stamp = now;
 
-        int fws;
+        double fws;
         get_parameter("forecast_window_secs", fws);
         pred_traj.points.reserve(fws / duration.seconds() + 1);
         msr::airlib::Vector3r posDiff = pose.position - lastPose.position;
@@ -79,8 +78,7 @@ private:
 public:
     MotionForecasting() : Node("motion_forecasting") {
         std::string airsim_hostname;
-        declare_parameter<int>("forecast_window_secs", 10);
-        get_parameter("forecast_window_secs", FORECAST_WINDOW_SECS);
+        declare_parameter<double>("forecast_window_secs", 10);
         declare_parameter<std::string>("actor_name", "DeerBothBP2_19");
         get_parameter("actor_name", ACTOR_NAME);
         declare_parameter<std::string>("airsim_hostname", "localhost");

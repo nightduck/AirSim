@@ -10,9 +10,10 @@ def generate_launch_description():
             remappings=[
                 ("rviz_pose", "/rviz/pose"),
                 ("vision_measurements", "/auto_cinematography/vision/vision_measurements"),
-                ("bounding_box", "/auto_cinematography/vision/bounding_box"),
-                ("satellite_pose", "/airsim_node/drone_1/global_gps"),
-                ("odom_pos", "/airsim_node/drone_1/odom_local_ned")
+                ("bounding_box", "/auto_cinematography/vision/bounding_box")
+            ],
+            parameters=[
+                {"tensorrt_engine" : "hde_deer_airsim.rt"}
             ]
         )
     ])

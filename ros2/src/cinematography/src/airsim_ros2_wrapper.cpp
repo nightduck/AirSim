@@ -146,7 +146,7 @@ private:
     }
 
 public:
-    AirsimROS2Wrapper() : Node("airsim_ros2_wrapper") {
+    AirsimROS2Wrapper() : Node("airsim_ros2_wrapper", "/airsim_ros2_wrapper") {
         declare_parameter<std::string>("airsim_hostname", "localhost");
         get_parameter("airsim_hostname", airsim_hostname);
         declare_parameter<std::string>("camera_name", "front_center_custom");
@@ -167,8 +167,8 @@ public:
 
         camera = this->create_publisher<sensor_msgs::msg::Image>("camera", 10);
         lidar = this->create_publisher<sensor_msgs::msg::PointCloud2>("lidar", 10);
-        actorPose = this->create_publisher<geometry_msgs::msg::Pose>(vehicle_name + "/pose", 20);
-        actorAndCamPose = this->create_publisher<geometry_msgs::msg::Pose>(vehicle_name + "/" + camera_name + "/pose", 20);
+        actorPose = this->create_publisher<geometry_msgs::msg::Pose>("pose/" + vehicle_name, 20);
+        actorAndCamPose = this->create_publisher<geometry_msgs::msg::Pose>("pose/" + vehicle_name + "/" + camera_name, 20);
         timer_img = create_wall_timer(std::chrono::milliseconds(1000)/camera_fps,
                 std::bind(&AirsimROS2Wrapper::fetchImage, this));
         timer_lidar = create_wall_timer(std::chrono::milliseconds(1000)/lidar_fps,

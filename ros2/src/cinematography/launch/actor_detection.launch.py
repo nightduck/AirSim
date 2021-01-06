@@ -7,11 +7,14 @@ def generate_launch_description():
             package="cinematography",
             node_executable="actor_detection",
             node_name="actor_detection",
-            output="screen",
             remappings=[
-                ("actor_pose", "/heading_estimation/gimbal_angle_quat_cmd"),
-                ("camera", "/airsim_node/drone_1/front_center_custom/Scene"),
+                ("actor_pose", "/airsim_ros2_wrapper/pose/drone_1/front_center_custom"),
+                ("camera", "/airsim_ros2_wrapper/camera"),
                 ("bounding_box", "/auto_cinematography/vision/bounding_box")
+            ],
+            parameters=[
+                {"airsim_hostname" : "ubuntu-workstation"},
+                {"tensorrt_engine" : "yolo4_deer_fp32.rt"}
             ]
         )
     ])
