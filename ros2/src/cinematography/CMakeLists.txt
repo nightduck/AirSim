@@ -181,6 +181,10 @@ add_executable(airsim_ros2_wrapper src/airsim_ros2_wrapper.cpp)
 ament_target_dependencies(airsim_ros2_wrapper rclcpp sensor_msgs)
 target_link_libraries(airsim_ros2_wrapper AirLib)
 
+add_executable(debug_viz src/debug_viz.cpp)
+ament_target_dependencies(debug_viz rclcpp sensor_msgs geometry_msgs cinematography_msgs cv_bridge)
+target_link_libraries(debug_viz ${OpenCV_LIBS})
+
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   # the following line skips the linter which checks for copyrights
@@ -193,7 +197,7 @@ if(BUILD_TESTING)
 endif()
 
 install(TARGETS
-        actor_detection heading_estimation motion_forecasting motion_planner follow_trajectory airsim_ros2_wrapper
+        actor_detection heading_estimation motion_forecasting motion_planner follow_trajectory airsim_ros2_wrapper debug_viz
         DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/
         DESTINATION include)
