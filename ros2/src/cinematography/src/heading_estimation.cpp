@@ -90,9 +90,11 @@ private:
     float* infer(cv::Mat in) {
         preprocess(in, 0);
 
+        tk::dnn::dataDim_t dim = netRT->input_dim;
+
         float total_time = 0;
         TKDNN_TSTART
-        netRT->infer(netRT->input_dim, input_d);
+        netRT->infer(dim, input_d);
         TKDNN_TSTOP
         total_time+= t_ns;
 

@@ -14,5 +14,12 @@ def generate_launch_description():
                 {"lidar_name" : "LidarCustom"},
                 {"is_vulkan" : False}   # Required parameter
             ]
+        ),
+        Node(
+            package="tf2_ros",
+            node_executable="static_transform_publisher",
+            node_name="ned_to_enu_pub",
+            output="screen",
+            arguments=['0', '0', '0', '0.707', '0.707', '0', '0', 'world_ned', 'world_enu']
         )
     ])

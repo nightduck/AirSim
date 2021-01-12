@@ -68,7 +68,7 @@ find_package(CUDA 9.0 REQUIRED)
 SET(CUDA_SEPARABLE_COMPILATION ON)
 #set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -arch=sm_30 --compiler-options '-fPIC'")
 CUDA_SELECT_NVCC_ARCH_FLAGS(ARCH_FLAGS Auto)
-set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS})
+set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -arch=sm_60)
 
 # set(msgs
 # 	"msg/BoundingBox.msg"
@@ -194,7 +194,7 @@ ament_target_dependencies(follow_trajectory rclcpp geometry_msgs cinematography_
 target_link_libraries(follow_trajectory AirLib)
 
 add_executable(airsim_ros2_wrapper src/airsim_ros2_wrapper.cpp)
-ament_target_dependencies(airsim_ros2_wrapper rclcpp sensor_msgs)
+ament_target_dependencies(airsim_ros2_wrapper rclcpp sensor_msgs tf2 tf2_ros)
 target_link_libraries(airsim_ros2_wrapper AirLib)
 
 add_executable(debug_viz src/debug_viz.cpp)

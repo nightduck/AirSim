@@ -5,7 +5,12 @@
 #include "sensor_msgs/msg/camera_info.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
 #include "geometry_msgs/msg/pose.hpp"
+#include "geometry_msgs/msg/transform_stamped.hpp"
 #include "vehicles/multirotor/api/MultirotorRpcLibClient.hpp"
+#include <tf2/LinearMath/Vector3.h>
+#include <tf2_ros/transform_broadcaster.h>
+#include <tf2_ros/static_transform_broadcaster.h>
+#include <tf2_ros/buffer.h>
 
 using namespace std::chrono_literals;
 using std::placeholders::_1;
@@ -17,6 +22,10 @@ private:
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr lidar;
     rclcpp::Publisher<geometry_msgs::msg::Pose>::SharedPtr actorPose;
     rclcpp::Publisher<geometry_msgs::msg::Pose>::SharedPtr actorAndCamPose;
+    rclcpp::Publisher<geometry_msgs::msg::Pose>::SharedPtr actorAndLidarPose;
+
+    tf2_ros::TransformBroadcaster tf_broadcaster;
+    //tf2_ros::StaticTransformBroadcaster static_tf_broadcaster;
 
     rclcpp::TimerBase::SharedPtr timer_img;
     rclcpp::TimerBase::SharedPtr timer_lidar;
@@ -109,7 +118,7 @@ private:
             lidar_msg.data = std::move(lidar_msg_data);
         }
 
-        lidar_msg.header.frame_id = "world_ned"; // sensor frame name. todo add to doc
+        lidar_msg.header.frame_id = world_frame_id_ + "/" + vehicle_name + "/" + lidar_name; // sensor frame name. todo add to doc
         lidar_msg.header.stamp = clock.now();
         lidar->publish(lidar_msg);
     }
@@ -118,9 +127,9 @@ private:
         std::unique_lock<std::recursive_mutex> lck(drone_control_mutex_);
         msr::airlib::Pose p = airsim_client->simGetVehiclePose(vehicle_name);
         msr::airlib::CameraInfo c = airsim_client->simGetCameraInfo(camera_name, vehicle_name);
+        msr::airlib::Pose lp = airsim_client->getLidarData().pose;
+        rclcpp::Time now = this->now();
         lck.unlock();
-
-        msr::airlib::Pose cp = p + c.pose;
 
         geometry_msgs::msg::Pose p_msg;
         p_msg.orientation.w = p.orientation.w();
@@ -132,6 +141,7 @@ private:
         p_msg.position.z = p.position.z();
 
         
+        msr::airlib::Pose cp = p + c.pose;
         geometry_msgs::msg::Pose cp_msg;
         cp_msg.orientation.w = cp.orientation.w();
         cp_msg.orientation.x = cp.orientation.x();
@@ -143,10 +153,43 @@ private:
 
         actorPose->publish(p_msg);
         actorAndCamPose->publish(cp_msg);
+
+        // Publish transform for drone
+        geometry_msgs::msg::TransformStamped transform;
+        transform.header.stamp = now;
+        transform.header.frame_id = world_frame_id_;
+        transform.child_frame_id = vehicle_name;
+        transform.transform.translation.x = p_msg.position.x;
+        transform.transform.translation.y = p_msg.position.y;
+        transform.transform.translation.z = p_msg.position.z;
+        transform.transform.rotation = p_msg.orientation;
+        tf_broadcaster.sendTransform(transform);
+
+        // Publish transform for camera
+        transform.header.stamp = now;
+        transform.header.frame_id = vehicle_name;
+        transform.child_frame_id = camera_name;
+        transform.transform.translation.x = cp_msg.position.x;
+        transform.transform.translation.y = cp_msg.position.y;
+        transform.transform.translation.z = cp_msg.position.z;
+        transform.transform.rotation = cp_msg.orientation;
+        tf_broadcaster.sendTransform(transform);
+        
+        transform.header.stamp = this->now();
+        transform.header.frame_id = vehicle_name;
+        transform.child_frame_id = lidar_name;
+        transform.transform.translation.x = lp.position.x();
+        transform.transform.translation.y = lp.position.y();
+        transform.transform.translation.z = lp.position.z();
+        transform.transform.rotation.w = lp.orientation.w();
+        transform.transform.rotation.x = lp.orientation.x();
+        transform.transform.rotation.y = lp.orientation.y();
+        transform.transform.rotation.z = lp.orientation.z();
+        tf_broadcaster.sendTransform(transform);
     }
 
 public:
-    AirsimROS2Wrapper() : Node("airsim_ros2_wrapper", "/airsim_ros2_wrapper") {
+    AirsimROS2Wrapper() : Node("airsim_ros2_wrapper", "/airsim_ros2_wrapper"), tf_broadcaster(this) {
         declare_parameter<std::string>("airsim_hostname", "localhost");
         get_parameter("airsim_hostname", airsim_hostname);
         declare_parameter<std::string>("camera_name", "front_center_custom");
@@ -169,12 +212,32 @@ public:
         lidar = this->create_publisher<sensor_msgs::msg::PointCloud2>("lidar", 10);
         actorPose = this->create_publisher<geometry_msgs::msg::Pose>("pose/" + vehicle_name, 20);
         actorAndCamPose = this->create_publisher<geometry_msgs::msg::Pose>("pose/" + vehicle_name + "/" + camera_name, 20);
+        actorAndLidarPose = this->create_publisher<geometry_msgs::msg::Pose>("pose/" + vehicle_name + "/" + lidar_name, 20);
         timer_img = create_wall_timer(std::chrono::milliseconds(1000)/camera_fps,
                 std::bind(&AirsimROS2Wrapper::fetchImage, this));
         timer_lidar = create_wall_timer(std::chrono::milliseconds(1000)/lidar_fps,
                 std::bind(&AirsimROS2Wrapper::fetchLidarCloud, this));
         timer_pose = create_wall_timer(std::chrono::milliseconds(1000)/pose_update,
                 std::bind(&AirsimROS2Wrapper::fetchPosition, this));
+
+        // TODO: Get this to work. It's inefficient to keep publishing the lidar transform when it never changes
+        // // Fetch initial position (to set transforms)
+        // fetchPosition();
+
+        // // Publish transform for lidar (fixed)
+        // msr::airlib::Pose lp = airsim_client->getLidarData().pose;
+        // geometry_msgs::msg::TransformStamped transform;
+        // transform.header.stamp = this->now();
+        // transform.header.frame_id = vehicle_name;
+        // transform.child_frame_id = lidar_name;
+        // transform.transform.translation.x = lp.position.x();
+        // transform.transform.translation.y = lp.position.y();
+        // transform.transform.translation.z = lp.position.z();
+        // transform.transform.rotation.w = lp.orientation.w();
+        // transform.transform.rotation.x = lp.orientation.x();
+        // transform.transform.rotation.y = lp.orientation.y();
+        // transform.transform.rotation.z = lp.orientation.z();
+        // static_tf_broadcaster.sendTransform(transform);
     }
     
     ~AirsimROS2Wrapper() {

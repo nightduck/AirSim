@@ -13,7 +13,7 @@ def generate_launch_description():
                 ("bounding_box", "/auto_cinematography/vision/bounding_box")
             ],
             parameters=[
-                {"airsim_hostname" : "ubuntu-workstation"},
+                {"airsim_hostname" : "localhost"},
                 {"tensorrt_engine" : "yolo4_deer_fp32.rt"}
             ]
         ),
@@ -39,7 +39,7 @@ def generate_launch_description():
                 ("vision_measurements", "/auto_cinematography/vision/vision_measurements")
             ],
             parameters=[
-                {"airsim_hostname": "ubuntu-workstation"}
+                {"airsim_hostname": "localhost"}
             ]
         )
     ])
