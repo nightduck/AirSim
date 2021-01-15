@@ -50,11 +50,11 @@ struct Voxel{
     bool operator==(const Voxel &other) const{ //may need to include voxel size param
             // return (position(0) == other.position(0) && position(1)==other.position(1) && position(2)==other.position(2));
 
-        float epsilon = .5 / 4; //should equal voxel size / 4 TODO
+        float epsilon = .5 / 4; //should equal voxel size / 4 TODO can set to .1/4 and expect voxels won't be smaller than that
 
-        float diff_x = position(0) - other.position(0);
-        float diff_y = position(1) - other.position(1);
-        float diff_z = position(2) - other.position(2);
+        double diff_x = position(0) - other.position(0);
+        double diff_y = position(1) - other.position(1);
+        double diff_z = position(2) - other.position(2);
         //have to use an epsilon value due to floating point precision errors
         if((fabs(diff_x) < epsilon) && (fabs(diff_y) < epsilon) && (fabs(diff_z) < epsilon))
             return true;

@@ -459,6 +459,10 @@ void init_set_cuda(std::vector<Voxel> & voxels){
     cudaEventElapsedTime(&milliseconds, start, stop);
     printf("set generation: %f\n", milliseconds);
 
+    free(voxels_size_h);
+    cudaFree(voxels_size_d);
+    cudaFree(voxels_d);
+
 }
 
 Eigen::Matrix<double, Eigen::Dynamic, 3> obstacle_avoidance_gradient_cuda(std::vector<MultiDOF>  & drone_traj, double & truncation_distance, double & voxel_size){

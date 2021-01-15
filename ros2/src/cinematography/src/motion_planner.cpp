@@ -73,6 +73,8 @@ double HALF_VOXEL_SIZE = VOXEL_SIZE / 2;
 
 double truncation_distance = 4;
 double voxel_size = .5;
+bool received_first_msg = false;
+
 std::vector<Voxel> voxels_list;
 
 std::unordered_map<Key, Voxel> voxel_map;
@@ -630,13 +632,13 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
         Eigen::Matrix<double, Eigen::Dynamic, 3> shot_grad = shot_quality_gradient(drone_traj, ideal_traj, A_shot);
 
         Eigen::Matrix<double, Eigen::Dynamic, 3> obs_grad = obstacle_avoidance_gradient_cuda(drone_traj_cuda, truncation_distance, voxel_size);
-        Eigen::Matrix<double, Eigen::Dynamic, 3> occ_grad = occlusion_avoidance_gradient_cuda(drone_traj_cuda, actor_traj_cuda, truncation_distance, voxel_size);
+        // Eigen::Matrix<double, Eigen::Dynamic, 3> occ_grad = occlusion_avoidance_gradient_cuda(drone_traj_cuda, actor_traj_cuda, truncation_distance, voxel_size);
 
         
 
-        Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = smooth_grad + LAMBDA_1 * obs_grad + LAMBDA_2 * occ_grad + LAMBDA_3 * shot_grad;
+        // Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = smooth_grad + LAMBDA_1 * obs_grad + LAMBDA_2 * occ_grad + LAMBDA_3 * shot_grad;
         // Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = LAMBDA_1 * obs_grad + LAMBDA_2 * occ_grad;
-        // Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = smooth_grad + LAMBDA_3 * shot_grad;
+        Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = smooth_grad + LAMBDA_1 * obs_grad + LAMBDA_3 * shot_grad;
 
         //Todo:
         // if((j_grad.transpose()*M_inv * j_grad).array().pow(2) / 2 < e0){
@@ -669,14 +671,14 @@ void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr act
     print_rviz_traj(*actor_traj, "actor_traj", true);
 
     // TODO: Get this further up in the vision pipeline and pass it down. Also get velocity and acceleration info
-    msr::airlib::Pose currentPose = airsim_client->simGetVehiclePose(vehicle_name);
+    // msr::airlib::Pose currentPose = airsim_client->simGetVehiclePose(vehicle_name);
     cinematography_msgs::msg::MultiDOF currentState;
-    currentState.x = currentPose.position.x();
-    currentState.y = currentPose.position.y();
-    currentState.z = currentPose.position.z();
-    // currentState.x = 0;
-    // currentState.y = 0;
-    // currentState.z = 0;
+    // currentState.x = currentPose.position.x();
+    // currentState.y = currentPose.position.y();
+    // currentState.z = currentPose.position.z();
+    currentState.x = 0;
+    currentState.y = 0;
+    currentState.z = 0;
     currentState.vx = currentState.vy = currentState.vz = currentState.ax = currentState.ay = currentState.az = 0;
 
     cinematography_msgs::msg::MultiDOFarray drone_path;
@@ -714,8 +716,11 @@ void tsdf_callback(tsdf_package_msgs::msg::Tsdf::SharedPtr tsdf){
         voxels_list.push_back(val);
     }
 
-    truncation_distance = tsdf->truncation_distance;
-    voxel_size = tsdf->voxel_size;
+    if(!received_first_msg){
+        truncation_distance = tsdf->truncation_distance;
+        voxel_size = tsdf->voxel_size;
+        received_first_msg = true;
+    }
 }
 
 int main(int argc, char ** argv)
