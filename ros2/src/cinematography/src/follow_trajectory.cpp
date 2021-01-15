@@ -113,7 +113,7 @@ int main(int argc, char **argv)
 {
     rclcpp::init(argc, argv);
 
-    node = rclcpp::Node::make_shared("/motion_planner");
+    node = rclcpp::Node::make_shared("follow_trajectory");
 
     clock_ = node->get_clock();
 

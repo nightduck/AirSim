@@ -6,7 +6,10 @@
 #include "sensor_msgs/msg/point_cloud2.hpp"
 #include "geometry_msgs/msg/pose.hpp"
 #include "geometry_msgs/msg/transform_stamped.hpp"
+#include "geometry_msgs/msg/vector3.hpp"
 #include "vehicles/multirotor/api/MultirotorRpcLibClient.hpp"
+#include <Eigen/Core>
+#include <Eigen/Geometry>
 #include <tf2/LinearMath/Vector3.h>
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_ros/static_transform_broadcaster.h>
@@ -68,8 +71,8 @@ private:
         sensor_msgs::msg::Image img_msg_ptr;
         img_msg_ptr.data = response.image_data_uint8;
         img_msg_ptr.step = response.width * 3; // todo un-hardcode. image_width*num_bytes
-        img_msg_ptr.header.stamp = make_ts(response.time_stamp);
-        img_msg_ptr.header.frame_id = response.camera_name + "_optical";
+        img_msg_ptr.header.stamp = this->now();
+        img_msg_ptr.header.frame_id = response.camera_name;
         img_msg_ptr.height = response.height;
         img_msg_ptr.width = response.width;
         img_msg_ptr.encoding = "bgr8";
@@ -86,6 +89,7 @@ private:
         lck.unlock();
 
         sensor_msgs::msg::PointCloud2 lidar_msg;
+        lidar_msg.header.stamp = this->now();
         lidar_msg.header.frame_id = world_frame_id_; // todo
 
         if (lidar_data.point_cloud.size() > 3)
@@ -118,8 +122,6 @@ private:
             lidar_msg.data = std::move(lidar_msg_data);
         }
 
-        lidar_msg.header.frame_id = world_frame_id_ + "/" + vehicle_name + "/" + lidar_name; // sensor frame name. todo add to doc
-        lidar_msg.header.stamp = clock.now();
         lidar->publish(lidar_msg);
     }
 
@@ -127,64 +129,48 @@ private:
         std::unique_lock<std::recursive_mutex> lck(drone_control_mutex_);
         msr::airlib::Pose p = airsim_client->simGetVehiclePose(vehicle_name);
         msr::airlib::CameraInfo c = airsim_client->simGetCameraInfo(camera_name, vehicle_name);
-        msr::airlib::Pose lp = airsim_client->getLidarData().pose;
+        msr::airlib::Pose l = airsim_client->getLidarData().pose;
         rclcpp::Time now = this->now();
         lck.unlock();
-
-        geometry_msgs::msg::Pose p_msg;
-        p_msg.orientation.w = p.orientation.w();
-        p_msg.orientation.x = p.orientation.x();
-        p_msg.orientation.y = p.orientation.y();
-        p_msg.orientation.z = p.orientation.z();
-        p_msg.position.x = p.position.x();
-        p_msg.position.y = p.position.y();
-        p_msg.position.z = p.position.z();
-
-        
-        msr::airlib::Pose cp = p + c.pose;
-        geometry_msgs::msg::Pose cp_msg;
-        cp_msg.orientation.w = cp.orientation.w();
-        cp_msg.orientation.x = cp.orientation.x();
-        cp_msg.orientation.y = cp.orientation.y();
-        cp_msg.orientation.z = cp.orientation.z();
-        cp_msg.position.x = cp.position.x();
-        cp_msg.position.y = cp.position.y();
-        cp_msg.position.z = cp.position.z();
-
-        actorPose->publish(p_msg);
-        actorAndCamPose->publish(cp_msg);
 
         // Publish transform for drone
         geometry_msgs::msg::TransformStamped transform;
         transform.header.stamp = now;
         transform.header.frame_id = world_frame_id_;
         transform.child_frame_id = vehicle_name;
-        transform.transform.translation.x = p_msg.position.x;
-        transform.transform.translation.y = p_msg.position.y;
-        transform.transform.translation.z = p_msg.position.z;
-        transform.transform.rotation = p_msg.orientation;
+        transform.transform.translation.x = p.position.x();
+        transform.transform.translation.y = p.position.y();
+        transform.transform.translation.z = p.position.z();
+        transform.transform.rotation.w = p.orientation.w();
+        transform.transform.rotation.x = p.orientation.x();
+        transform.transform.rotation.y = p.orientation.y();
+        transform.transform.rotation.z = p.orientation.z();
         tf_broadcaster.sendTransform(transform);
 
         // Publish transform for camera
         transform.header.stamp = now;
-        transform.header.frame_id = vehicle_name;
-        transform.child_frame_id = camera_name;
-        transform.transform.translation.x = cp_msg.position.x;
-        transform.transform.translation.y = cp_msg.position.y;
-        transform.transform.translation.z = cp_msg.position.z;
-        transform.transform.rotation = cp_msg.orientation;
+        transform.header.frame_id = world_frame_id_;
+        transform.child_frame_id = vehicle_name + "/" + camera_name;
+        transform.transform.translation.x = c.pose.position.x();
+        transform.transform.translation.y = c.pose.position.y();
+        transform.transform.translation.z = c.pose.position.z();
+        transform.transform.rotation.w = c.pose.orientation.w();
+        transform.transform.rotation.x = c.pose.orientation.x();
+        transform.transform.rotation.y = c.pose.orientation.y();
+        transform.transform.rotation.z = c.pose.orientation.z();
         tf_broadcaster.sendTransform(transform);
         
-        transform.header.stamp = this->now();
-        transform.header.frame_id = vehicle_name;
-        transform.child_frame_id = lidar_name;
-        transform.transform.translation.x = lp.position.x();
-        transform.transform.translation.y = lp.position.y();
-        transform.transform.translation.z = lp.position.z();
-        transform.transform.rotation.w = lp.orientation.w();
-        transform.transform.rotation.x = lp.orientation.x();
-        transform.transform.rotation.y = lp.orientation.y();
-        transform.transform.rotation.z = lp.orientation.z();
+        // Publish transform for lidar
+        transform.header.stamp = now;
+        transform.header.frame_id = world_frame_id_;
+        transform.child_frame_id = vehicle_name + "/" + lidar_name;
+        transform.transform.translation.x = l.position.x();
+        transform.transform.translation.y = l.position.y();
+        transform.transform.translation.z = l.position.z();
+        transform.transform.rotation.w = l.orientation.w();
+        transform.transform.rotation.x = l.orientation.x();
+        transform.transform.rotation.y = l.orientation.y();
+        transform.transform.rotation.z = l.orientation.z();
         tf_broadcaster.sendTransform(transform);
     }
 
@@ -210,9 +196,6 @@ public:
 
         camera = this->create_publisher<sensor_msgs::msg::Image>("camera", 10);
         lidar = this->create_publisher<sensor_msgs::msg::PointCloud2>("lidar", 10);
-        actorPose = this->create_publisher<geometry_msgs::msg::Pose>("pose/" + vehicle_name, 20);
-        actorAndCamPose = this->create_publisher<geometry_msgs::msg::Pose>("pose/" + vehicle_name + "/" + camera_name, 20);
-        actorAndLidarPose = this->create_publisher<geometry_msgs::msg::Pose>("pose/" + vehicle_name + "/" + lidar_name, 20);
         timer_img = create_wall_timer(std::chrono::milliseconds(1000)/camera_fps,
                 std::bind(&AirsimROS2Wrapper::fetchImage, this));
         timer_lidar = create_wall_timer(std::chrono::milliseconds(1000)/lidar_fps,

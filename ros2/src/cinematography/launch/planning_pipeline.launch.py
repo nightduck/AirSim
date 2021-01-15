@@ -11,7 +11,7 @@ def generate_launch_description():
                 ("/actor_traj", "/auto_cinematography/planning/actor_traj")
             ],
             parameters=[
-                {"airsim_hostname" : "ubuntu-workstation"}
+                {"airsim_hostname" : "localhost"}
             ]
         ),
         Node(

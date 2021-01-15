@@ -1,6 +1,8 @@
 #include "rclcpp/rclcpp.hpp"
 #include "cinematography_msgs/msg/gimbal_angle_quat_cmd.hpp"
 #include "geometry_msgs/msg/quaternion.hpp"
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2/LinearMath/Vector3.h>
@@ -35,17 +37,19 @@ private:
     rclcpp::Publisher<cinematography_msgs::msg::BoundingBox>::SharedPtr bb_pub;
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr camera_sub;
 
+    tf2_ros::Buffer* tf_buffer;
+    tf2_ros::TransformListener* tf_listener;
+
     rclcpp::TimerBase::SharedPtr timer_infr;
     rclcpp::TimerBase::SharedPtr timer_img;
     msr::airlib::MultirotorRpcLibClient* airsim_client;
     tf2::Quaternion gimbal_setpoint;
-    std::string camera_name = "front_center_custom";  // TODO: Set these 3 as parameters
+    std::string world_frame = "world_ned";
     std::string vehicle_name = "drone_1";
+    std::string camera_name = "front_center_custom";
+    std::string pose_frame;
     float fov = M_PI/2;
     int gimbal_msg_count = 0;
-
-    geometry_msgs::msg::Pose drone_pose;
-    std::mutex m;
 
     tk::dnn::Yolo3Detection *detNN;
     tk::dnn::Network *net;
@@ -54,19 +58,16 @@ private:
     std::string trt_engine_filename;
     std::string airsim_hostname;
 
-    void fetchPose(const geometry_msgs::msg::Pose::SharedPtr& msg) {
-        m.lock();
-        drone_pose.orientation = msg->orientation;
-        drone_pose.position = msg->position;
-        m.unlock();
-    }
-
     void fetchImage(const sensor_msgs::msg::Image::SharedPtr msg) {
         cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
         cv::Mat img = cv_ptr->image;
 
         cinematography_msgs::msg::BoundingBox bb;   // Contains subimage, position in frame, and camera pose at the moment the image was taken
-        bb.drone_pose = drone_pose;
+        geometry_msgs::msg::TransformStamped transform = tf_buffer->lookupTransform(world_frame, pose_frame, tf2::TimePointZero, std::chrono::milliseconds(100)); // TODO: Make sure inference + this block doesn't exceed period
+        bb.drone_pose.position.x = transform.transform.translation.x;
+        bb.drone_pose.position.y = transform.transform.translation.y;
+        bb.drone_pose.position.z = transform.transform.translation.z;
+        bb.drone_pose.orientation = transform.transform.rotation;
 
         // Perform inference
         std::vector<cv::Mat> frame_array;
@@ -178,6 +179,17 @@ public:
         get_parameter("tensorrt_engine", trt_engine_filename);
         declare_parameter<std::string>("airsim_hostname", "localhost");
         get_parameter("airsim_hostname", airsim_hostname);
+        declare_parameter<std::string>("world_frame", "world_ned");
+        get_parameter("world_frame", world_frame);
+        declare_parameter<std::string>("vehicle_name", "drone_1");
+        get_parameter("vehicle_name", vehicle_name);
+        declare_parameter<std::string>("camera_name", "camera");
+        get_parameter("camera_name", camera_name);
+
+        pose_frame = vehicle_name + "/" + camera_name;
+
+        tf_buffer = new tf2_ros::Buffer(this->get_clock()); 
+        tf_listener = new tf2_ros::TransformListener(*tf_buffer);
         
         airsim_client = new msr::airlib::MultirotorRpcLibClient(airsim_hostname);
         gimbal_setpoint = tf2::Quaternion(0,0,0,1);

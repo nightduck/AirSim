@@ -30,6 +30,7 @@ private:
     rclcpp::Subscription<sensor_msgs::msg::NavSatFix>::SharedPtr sat_sub;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub;
     rclcpp::Subscription<cinematography_msgs::msg::BoundingBox>::SharedPtr bb_sub;
+    rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr bb_pub;
 
     // NOTE: These variables makes this node not safe for multithreaded spinning
     geometry_msgs::msg::TransformStamped t;         // Dummy variable for math-ing
@@ -152,10 +153,13 @@ private:
             cv_ptr->image = new_img;
         }
 
-        float* array = infer(cv_ptr->image);
+        // DEBUG
+        bb_pub->publish(cv_ptr->toImageMsg());
 
-        double hde0 = array[0];   // Output #1
-        double hde1 = array[1];   // Output #2
+        //float* array = infer(cv_ptr->image);
+
+        double hde0 = 0.5; //array[0];   // Output #1
+        double hde1 = 0.5; //array[1];   // Output #2
 
         // Get the rotation of the actor relative to camera
         double angle = atan2(hde1, hde0);
@@ -177,11 +181,10 @@ public:
 
         hde_pub = this->create_publisher<cinematography_msgs::msg::VisionMeasurements>("vision_measurements", 50);
         bb_sub = this->create_subscription<cinematography_msgs::msg::BoundingBox>("bounding_box", 50, std::bind(&HeadingEstimation::processImage, this, _1));
+        bb_pub = this->create_publisher<sensor_msgs::msg::Image>("bounding_box_out", 50);
 
-        netRT = new tk::dnn::NetworkRT(NULL, trt_engine_filename.c_str());
+        netRT = new tk::dnn::NetworkRT(NULL, trt_engine_filename.c_str(), tk::dnn::NCHW);
         // These 3 lines fix a bug in the NetworkRT constructor
-        // netRT->input_dim = tk::dnn::dataDim_t(1, 3, 192, 192, 1);
-        netRT->output_dim.w = 1;    // There's a bug where this will be set to zero. It should be 1 minimum
         
         // Allocate memory for input buffers
         checkCuda(cudaMallocHost(&input, sizeof(dnnType) * netRT->input_dim.tot() * nBatches));

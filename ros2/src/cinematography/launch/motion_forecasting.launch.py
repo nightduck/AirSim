@@ -12,7 +12,7 @@ def generate_launch_description():
                 ("vision_measurements", "/auto_cinematography/vision/vision_measurements")
             ],
             parameters=[
-                {"airsim_hostname": "ubuntu-workstation"}
+                {"airsim_hostname": "localhost"}
             ]
         )
     ])

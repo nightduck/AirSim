@@ -173,7 +173,7 @@ install(
 #-------------------------------------------------------------------------------
 
 add_executable(actor_detection src/actor_detection.cpp)
-ament_target_dependencies(actor_detection rclcpp cinematography_msgs sensor_msgs geometry_msgs cv_bridge)
+ament_target_dependencies(actor_detection rclcpp cinematography_msgs sensor_msgs geometry_msgs cv_bridge tf2_ros)
 target_link_libraries(actor_detection AirLib tkDNN ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES} ${CUDNN_LIBRARIES} ${OpenCV_LIBS})
 #rosidl_target_interfaces(actor_detection ${PROJECT_NAME} "rosidl_typesupport_cpp")
 

@@ -14,7 +14,10 @@ def generate_launch_description():
             ],
             parameters=[
                 {"airsim_hostname" : "localhost"},
-                {"tensorrt_engine" : "yolo4_deer_fp32.rt"}
+                {"tensorrt_engine" : "yolo4_deer_fp32.rt"},
+                {"world_frame" : "world_ned"},
+                {"vehicle_name" : "drone_1"},
+                {"camera_name" : "front_center_custom"}
             ]
         )
     ])

@@ -6,7 +6,8 @@ def generate_launch_description():
         Node(
             package="rviz2",
             node_executable="rviz2",
-            node_name="rviz2"
+            node_name="rviz2",
+            arguments=['-d $(ros2 pkg prefix cinematography)/share/cinematography/launch/debug.rviz']
         ),
         Node(
             package="rqt_image_view",
