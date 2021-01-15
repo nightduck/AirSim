@@ -1,22 +1,15 @@
 from launch import LaunchDescription
 from launch_ros.actions import Node
+from launch.actions import IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import ThisLaunchFileDir
 
 def generate_launch_description():
     return LaunchDescription([
-        Node(
-            package="cinematography",
-            node_executable="motion_planner",
-            node_name="motion_planner",
-            remappings=[
-                ("/actor_traj", "/auto_cinematography/planning/actor_traj")
-            ],
-            parameters=[
-                {"airsim_hostname" : "localhost"}
-            ]
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource([ThisLaunchFileDir(), '/motion_planning.launch.py'])
         ),
-        Node(
-            package="cinematography",
-            node_executable="follow_trajectory",
-            node_name="follow_trajectory"
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource([ThisLaunchFileDir(), '/follow_trajectory.launch.py'])
         )
     ])

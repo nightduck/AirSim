@@ -124,7 +124,8 @@ int main(int argc, char **argv)
     node->get_parameter("airsim_hostname", host_ip);
 
     airsim_client = new msr::airlib::MultirotorRpcLibClient(host_ip);
-    airsim_client->takeoffAsync(5)->waitOnLastTask();
+    airsim_client->enableApiControl(true);
+    airsim_client->takeoffAsync()->waitOnLastTask();
 
     //variable     
     rclcpp::Rate loop_rate(FREQ);    // NOTE: Set to frequency of trajectory points
@@ -132,7 +133,7 @@ int main(int argc, char **argv)
 
     //publisher and subscriber
 
-    auto trajectory_follower_sub = node->create_subscription<cinematography_msgs::msg::MultiDOFarray>("multidoftraj", 1, callback_trajectory); 
+    auto trajectory_follower_sub = node->create_subscription<cinematography_msgs::msg::MultiDOFarray>("drone_traj", 1, callback_trajectory); 
 
     // DEBUGGING
     rviz_vel_pub = node->create_publisher<nav_msgs::msg::Odometry>("velocities", 1);

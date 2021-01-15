@@ -39,8 +39,6 @@
 using namespace std;
 
 rclcpp::Publisher<cinematography_msgs::msg::MultiDOFarray>::SharedPtr traj_pub;
-rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr rviz_actor_pub;
-rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr rviz_drone_pub;
 
 bool path_found = false;
 
@@ -76,25 +74,6 @@ double voxel_size = .5;
 std::vector<Voxel> voxels_list;
 
 std::unordered_map<Key, Voxel> voxel_map;
-
-void print_rviz_traj(cinematography_msgs::msg::MultiDOFarray& path, std::string name, bool actor) {
-    geometry_msgs::msg::PoseArray rviz_path = geometry_msgs::msg::PoseArray();
-    rviz_path.header.stamp = clock_->now();
-    rviz_path.header.frame_id = "world_ned";
-    for(cinematography_msgs::msg::MultiDOF n : path.points) {
-        geometry_msgs::msg::Pose p;
-        p.orientation = tf2::toMsg(tf2::Quaternion(0, 0, sin(n.yaw / 2), cos(n.yaw / 2)));
-        p.position.x = n.x;
-        p.position.y = n.y;
-        p.position.z = n.z;
-        rviz_path.poses.push_back(p);
-    }
-
-    if (actor)
-        rviz_actor_pub->publish(rviz_path);
-    else
-        rviz_drone_pub->publish(rviz_path);
-}
 
 // Calculate an ideal drone trajectory using a given actor trajectory (both in NED and radians)
 cinematography_msgs::msg::MultiDOFarray calc_ideal_drone_traj(const cinematography_msgs::msg::MultiDOFarray &  actor_traj) {
@@ -626,13 +605,14 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
         Eigen::Matrix<double, Eigen::Dynamic, 3> smooth_grad = traj_smoothness_gradient(drone_traj, t, K, K0, K1, K2, A_smooth);
         Eigen::Matrix<double, Eigen::Dynamic, 3> shot_grad = shot_quality_gradient(drone_traj, ideal_traj, A_shot);
 
-        Eigen::Matrix<double, Eigen::Dynamic, 3> obs_grad = obstacle_avoidance_gradient_cuda(drone_traj_cuda, voxels_list, truncation_distance, voxel_size);
-        Eigen::Matrix<double, Eigen::Dynamic, 3> occ_grad = occlusion_avoidance_gradient_cuda(drone_traj_cuda, actor_traj_cuda, voxels_list, truncation_distance, voxel_size);
+        // Eigen::Matrix<double, Eigen::Dynamic, 3> obs_grad = obstacle_avoidance_gradient_cuda(drone_traj_cuda, voxels_list, truncation_distance, voxel_size);
+        // Eigen::Matrix<double, Eigen::Dynamic, 3> occ_grad = occlusion_avoidance_gradient_cuda(drone_traj_cuda, actor_traj_cuda, voxels_list, truncation_distance, voxel_size);
 
         
 
-        // Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = smooth_grad + LAMBDA_1 * obs_grad + LAMBDA_2 * occ_grad + LAMBDA_3 * shot_grad;
-        Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = LAMBDA_1 * obs_grad + LAMBDA_2 * occ_grad + LAMBDA_3 * shot_grad;
+        //Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = smooth_grad + LAMBDA_1 * obs_grad + LAMBDA_2 * occ_grad + LAMBDA_3 * shot_grad;
+        //Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = LAMBDA_1 * obs_grad + LAMBDA_2 * occ_grad + LAMBDA_3 * shot_grad;
+        Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = smooth_grad + LAMBDA_3 * shot_grad;
         //Todo:
         // if((j_grad.transpose()*M_inv * j_grad).array().pow(2) / 2 < e0){
           
@@ -661,8 +641,6 @@ void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr act
         return;
     }
 
-    print_rviz_traj(*actor_traj, "actor_traj", true);
-
     // TODO: Get this further up in the vision pipeline and pass it down. Also get velocity and acceleration info
     // msr::airlib::Pose currentPose = airsim_client->simGetVehiclePose(vehicle_name);
     cinematography_msgs::msg::MultiDOF currentState;
@@ -681,7 +659,6 @@ void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr act
     face_actor(drone_path, *actor_traj);                    // Set all yaws to fact their corresponding point in the actor trajectory
 
     optimize_trajectory(drone_path, *actor_traj);
-    print_rviz_traj(drone_path, "drone_traj", false);
 
     // Publish the trajectory (for debugging purposes)
     drone_path.header.stamp = clock_->now();
@@ -710,6 +687,7 @@ void tsdf_callback(tsdf_package_msgs::msg::Tsdf::SharedPtr tsdf){
 int main(int argc, char ** argv)
 {
     rclcpp::init(argc, argv);
+    sleep(10);
     node = rclcpp::Node::make_shared("motion_planner");
     clock_ = node->get_clock();
 
@@ -717,13 +695,10 @@ int main(int argc, char ** argv)
     node->get_parameter("airsim_hostname", airsim_hostname);
     airsim_client = new msr::airlib::MultirotorRpcLibClient(airsim_hostname);
 
-    auto actor_traj_sub = node->create_subscription<cinematography_msgs::msg::MultiDOFarray>("/auto_cinematography/planning/actor_traj", 1, get_actor_trajectory); 
+    auto actor_traj_sub = node->create_subscription<cinematography_msgs::msg::MultiDOFarray>("actor_traj", 1, get_actor_trajectory); 
     auto tsdf_sub = node->create_subscription<tsdf_package_msgs::msg::Tsdf>("tsdf", 1, tsdf_callback);
 
-    traj_pub = node->create_publisher<cinematography_msgs::msg::MultiDOFarray>("/multidoftraj", 1);
-
-    rviz_actor_pub = node->create_publisher<geometry_msgs::msg::PoseArray>("/rviz_actor_traj", 1);
-    rviz_drone_pub = node->create_publisher<geometry_msgs::msg::PoseArray>("/rviz_drone_traj", 1);
+    traj_pub = node->create_publisher<cinematography_msgs::msg::MultiDOFarray>("drone_traj", 1);
 
     // Sleep
     rclcpp::spin(node);

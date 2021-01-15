@@ -218,7 +218,6 @@ int main(int argc, char **argv) {
     auto actor_detection = std::make_shared<ActorDetection>();
     exec.add_node(actor_detection);
     exec.spin();
-    //rclcpp::spin(actor_detection);
     rclcpp::shutdown();
 
     return 0;

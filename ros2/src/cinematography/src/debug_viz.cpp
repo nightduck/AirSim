@@ -15,12 +15,14 @@ using std::placeholders::_1;
 class DebugViz : public rclcpp::Node {
 private:
     rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr pose_sub;
-    rclcpp::Subscription<cinematography_msgs::msg::MultiDOFarray>::SharedPtr traj_sub;
+    rclcpp::Subscription<cinematography_msgs::msg::MultiDOFarray>::SharedPtr drone_traj_sub;
+    rclcpp::Subscription<cinematography_msgs::msg::MultiDOFarray>::SharedPtr actor_traj_sub;
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr img_sub;
     rclcpp::Subscription<cinematography_msgs::msg::VisionMeasurements>::SharedPtr vm_sub;
 
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_pub;
-    rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr traj_pub;
+    rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr actor_traj_pub;
+    rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr drone_traj_pub;
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr img_pub;
 
     std::recursive_mutex m;
@@ -39,7 +41,7 @@ private:
         pose_pub->publish(ps);
     }
 
-    void fetchActorTraj(const cinematography_msgs::msg::MultiDOFarray::SharedPtr traj) {
+    geometry_msgs::msg::PoseArray convertTraj(const cinematography_msgs::msg::MultiDOFarray::SharedPtr traj) {
         geometry_msgs::msg::PoseArray traj_out;
 
         traj_out.header.frame_id = "world_ned";
@@ -60,7 +62,15 @@ private:
             traj_out.poses.push_back(p);
         }
 
-        traj_pub->publish(traj_out);
+        return traj_out;
+    }
+
+    void fetchActorTraj(const cinematography_msgs::msg::MultiDOFarray::SharedPtr traj) {
+        actor_traj_pub->publish(convertTraj(traj));
+    }
+
+    void fetchDroneTraj(const cinematography_msgs::msg::MultiDOFarray::SharedPtr traj) {
+        drone_traj_pub->publish(convertTraj(traj));
     }
 
     void fetchImage(const sensor_msgs::msg::Image::SharedPtr img) {
@@ -110,13 +120,16 @@ private:
 public:
     DebugViz() : Node("debug_viz") {
         pose_pub = this->create_publisher<geometry_msgs::msg::PoseStamped>("pose_out", 1);
-        traj_pub = this->create_publisher<geometry_msgs::msg::PoseArray>("traj_out", 1);
+        actor_traj_pub = this->create_publisher<geometry_msgs::msg::PoseArray>("actor_traj_out", 1);
+        drone_traj_pub = this->create_publisher<geometry_msgs::msg::PoseArray>("drone_traj_out", 1);
         img_pub = this->create_publisher<sensor_msgs::msg::Image>("img_out", 20);
         
         pose_sub = this->create_subscription<geometry_msgs::msg::Pose>("pose_in", 1,
             std::bind(&DebugViz::fetchDronePose, this, _1));
-        traj_sub = this->create_subscription<cinematography_msgs::msg::MultiDOFarray>("traj_in", 1,
+        actor_traj_sub = this->create_subscription<cinematography_msgs::msg::MultiDOFarray>("actor_traj_in", 1,
             std::bind(&DebugViz::fetchActorTraj, this, _1));
+        drone_traj_sub = this->create_subscription<cinematography_msgs::msg::MultiDOFarray>("drone_traj_in", 1,
+            std::bind(&DebugViz::fetchDroneTraj, this, _1));
         img_sub = this->create_subscription<sensor_msgs::msg::Image>("img_in", 1,
             std::bind(&DebugViz::fetchImage, this, _1));
         vm_sub = this->create_subscription<cinematography_msgs::msg::VisionMeasurements>("vm_in", 1,
