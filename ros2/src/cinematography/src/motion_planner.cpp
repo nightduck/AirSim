@@ -621,18 +621,23 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
     //Intializing M_inv
     Eigen::MatrixXd M_inv = (A_smooth + LAMBDA_3 * A_shot).inverse();
 
+    printf("host map size: %lu\n", voxel_map.size());
+    init_set_cuda(voxels_list);
+    
     int MAX_ITERATIONS;     // TODO: Make this a ROS parameter
-    for(int i = 0; i < 20; i++) {
+    for(int i = 0; i < 1; i++) {
         Eigen::Matrix<double, Eigen::Dynamic, 3> smooth_grad = traj_smoothness_gradient(drone_traj, t, K, K0, K1, K2, A_smooth);
         Eigen::Matrix<double, Eigen::Dynamic, 3> shot_grad = shot_quality_gradient(drone_traj, ideal_traj, A_shot);
 
-        Eigen::Matrix<double, Eigen::Dynamic, 3> obs_grad = obstacle_avoidance_gradient_cuda(drone_traj_cuda, voxels_list, truncation_distance, voxel_size);
-        Eigen::Matrix<double, Eigen::Dynamic, 3> occ_grad = occlusion_avoidance_gradient_cuda(drone_traj_cuda, actor_traj_cuda, voxels_list, truncation_distance, voxel_size);
+        Eigen::Matrix<double, Eigen::Dynamic, 3> obs_grad = obstacle_avoidance_gradient_cuda(drone_traj_cuda, truncation_distance, voxel_size);
+        Eigen::Matrix<double, Eigen::Dynamic, 3> occ_grad = occlusion_avoidance_gradient_cuda(drone_traj_cuda, actor_traj_cuda, truncation_distance, voxel_size);
 
         
 
-        // Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = smooth_grad + LAMBDA_1 * obs_grad + LAMBDA_2 * occ_grad + LAMBDA_3 * shot_grad;
-        Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = LAMBDA_1 * obs_grad + LAMBDA_2 * occ_grad + LAMBDA_3 * shot_grad;
+        Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = smooth_grad + LAMBDA_1 * obs_grad + LAMBDA_2 * occ_grad + LAMBDA_3 * shot_grad;
+        // Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = LAMBDA_1 * obs_grad + LAMBDA_2 * occ_grad;
+        // Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = smooth_grad + LAMBDA_3 * shot_grad;
+
         //Todo:
         // if((j_grad.transpose()*M_inv * j_grad).array().pow(2) / 2 < e0){
           
@@ -664,14 +669,14 @@ void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr act
     print_rviz_traj(*actor_traj, "actor_traj", true);
 
     // TODO: Get this further up in the vision pipeline and pass it down. Also get velocity and acceleration info
-    // msr::airlib::Pose currentPose = airsim_client->simGetVehiclePose(vehicle_name);
+    msr::airlib::Pose currentPose = airsim_client->simGetVehiclePose(vehicle_name);
     cinematography_msgs::msg::MultiDOF currentState;
-    // currentState.x = currentPose.position.x();
-    // currentState.y = currentPose.position.y();
-    // currentState.z = currentPose.position.z();
-    currentState.x = 0;
-    currentState.y = 0;
-    currentState.z = 0;
+    currentState.x = currentPose.position.x();
+    currentState.y = currentPose.position.y();
+    currentState.z = currentPose.position.z();
+    // currentState.x = 0;
+    // currentState.y = 0;
+    // currentState.z = 0;
     currentState.vx = currentState.vy = currentState.vz = currentState.ax = currentState.ay = currentState.az = 0;
 
     cinematography_msgs::msg::MultiDOFarray drone_path;
@@ -680,7 +685,13 @@ void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr act
 
     face_actor(drone_path, *actor_traj);                    // Set all yaws to fact their corresponding point in the actor trajectory
 
+    auto start = std::chrono::high_resolution_clock::now();
     optimize_trajectory(drone_path, *actor_traj);
+    auto stop = std::chrono::high_resolution_clock::now(); 
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start); 
+    std::cout << "Optimization Duration: ";
+    std::cout << duration.count() << std::endl;
+
     print_rviz_traj(drone_path, "drone_traj", false);
 
     // Publish the trajectory (for debugging purposes)
@@ -712,6 +723,8 @@ int main(int argc, char ** argv)
     rclcpp::init(argc, argv);
     node = rclcpp::Node::make_shared("motion_planner");
     clock_ = node->get_clock();
+
+    allocate_set();
 
     node->declare_parameter<std::string>("airsim_hostname", "localhost");
     node->get_parameter("airsim_hostname", airsim_hostname);

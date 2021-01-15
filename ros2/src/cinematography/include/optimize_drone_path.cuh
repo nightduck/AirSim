@@ -5,7 +5,6 @@
 #include <vector>
 #include <Eigen/Dense>
 #include <stdio.h> 
-#include <unordered_map>
 
 struct MultiDOF{
     double x;
@@ -46,6 +45,23 @@ struct Voxel{
         position(1) = y;
         position(2) = z;
     }
+
+        __host__ __device__
+    bool operator==(const Voxel &other) const{ //may need to include voxel size param
+            // return (position(0) == other.position(0) && position(1)==other.position(1) && position(2)==other.position(2));
+
+        float epsilon = .5 / 4; //should equal voxel size / 4 TODO
+
+        float diff_x = position(0) - other.position(0);
+        float diff_y = position(1) - other.position(1);
+        float diff_z = position(2) - other.position(2);
+        //have to use an epsilon value due to floating point precision errors
+        if((fabs(diff_x) < epsilon) && (fabs(diff_y) < epsilon) && (fabs(diff_z) < epsilon))
+            return true;
+
+        return false;
+
+    }
 };
 
 struct Key{
@@ -82,9 +98,11 @@ namespace std {
     };
 }
 
-Eigen::Matrix<double, Eigen::Dynamic, 3> obstacle_avoidance_gradient_cuda(std::vector<MultiDOF>  & drone_traj, std::vector<Voxel> & voxels, double & truncation_distance, double & voxel_size);
+Eigen::Matrix<double, Eigen::Dynamic, 3> obstacle_avoidance_gradient_cuda(std::vector<MultiDOF>  & drone_traj, double & truncation_distance, double & voxel_size);
 
 Eigen::Matrix<double, Eigen::Dynamic, 3> occlusion_avoidance_gradient_cuda(std::vector<MultiDOF>  & drone_traj, 
-std::vector<MultiDOF> & actor_traj, std::vector<Voxel> & voxels, double & truncation_distance, double & voxel_size);
+std::vector<MultiDOF> & actor_traj, double & truncation_distance, double & voxel_size);
 
+void allocate_set();
+void init_set_cuda(std::vector<Voxel> & voxels);
 #endif

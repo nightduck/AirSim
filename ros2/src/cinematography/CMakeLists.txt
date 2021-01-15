@@ -18,6 +18,15 @@ set(CMAKE_CXX_STANDARD 14)
 # -lm -lc -lgcc_s -lgcc  
 # -lstdc++fs -fmax-errors=10 -Wnoexcept -Wstrict-null-sentinel") 
 
+# Exclude the examples from the build
+set(STDGPU_BUILD_EXAMPLES OFF CACHE INTERNAL "")
+# Exclude the tests from the build
+set(STDGPU_BUILD_TESTS OFF CACHE INTERNAL "")
+set(STDGPU_BUILD_SHARED_LIBS ON CACHE INTERNAL "")
+add_subdirectory(stdgpu)
+set_property(TARGET stdgpu PROPERTY CMAKE_CUDA_SEPARABLE_COMPILATION ON)
+set_property(TARGET stdgpu PROPERTY CUDA_ARCHITECTURES 60)
+
 set(RPC_LIB_INCLUDES " ${AIRSIM_ROOT}/external/rpclib/rpclib-2.2.1/include")
 set(RPC_LIB rpc) # name of .a file with lib prefix
 message(STATUS "found RPC_LIB_INCLUDES=${RPC_LIB_INCLUDES}")
@@ -68,7 +77,7 @@ find_package(CUDA 9.0 REQUIRED)
 SET(CUDA_SEPARABLE_COMPILATION ON)
 #set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -arch=sm_30 --compiler-options '-fPIC'")
 CUDA_SELECT_NVCC_ARCH_FLAGS(ARCH_FLAGS Auto)
-set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS})
+set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -arch=sm_60)
 
 # set(msgs
 # 	"msg/BoundingBox.msg"
@@ -125,7 +134,7 @@ add_subdirectory(tkDNN)
 # #-------------------------------------------------------------------------------
 # # CUDA
 # #-------------------------------------------------------------------------------
-# find_package(CUDA 9.0 REQUIRED)
+# find_package(CUDA REQUIRED)
 # SET(CUDA_SEPARABLE_COMPILATION ON)
 # #set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -arch=sm_30 --compiler-options '-fPIC'")
 # set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} --maxrregcount=32)
@@ -139,19 +148,11 @@ add_subdirectory(tkDNN)
 # cuda_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include ${CUDA_INCLUDE_DIRS} ${CUDNN_INCLUDE_DIRS})
 # cuda_add_library(kernels SHARED ${tkdnn_CUSRC})
 
-cuda_add_library(motion_planner_cuda SHARED
+cuda_add_library(motion_planner_cuda STATIC
   src/optimize_drone_path.cu
   OPTIONS -g -shared -Xcompiler -fPIC -rdc=true
 )
-
-install(
-  TARGETS motion_planner_cuda
-  EXPORT motion_planner_cuda
-  LIBRARY DESTINATION lib
-  ARCHIVE DESTINATION lib
-  RUNTIME DESTINATION bin
-  INCLUDES DESTINATION include
-)
+target_link_libraries(motion_planner_cuda stdgpu::stdgpu)
 
 
 # #-------------------------------------------------------------------------------
@@ -213,7 +214,7 @@ if(BUILD_TESTING)
 endif()
 
 install(TARGETS
-        actor_detection heading_estimation motion_forecasting motion_planner follow_trajectory airsim_ros2_wrapper debug_viz
+        actor_detection heading_estimation motion_forecasting motion_planner motion_planner_cuda follow_trajectory airsim_ros2_wrapper debug_viz
         DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/
         DESTINATION include)
