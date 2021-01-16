@@ -21,6 +21,8 @@
 #include <cinematography_msgs/msg/multi_do_farray.hpp>
 #include <cinematography_msgs/msg/multi_dof.hpp>
 #include <cinematography_msgs/msg/artistic_spec.hpp>
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2/LinearMath/Vector3.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
@@ -65,6 +67,12 @@ rclcpp::Clock::SharedPtr clock_;
 msr::airlib::MultirotorRpcLibClient* airsim_client;
 std::string airsim_hostname;
 std::string vehicle_name = "drone_1";
+
+tf2_ros::Buffer* tf_buffer;
+tf2_ros::TransformListener* tf_listener;
+
+std::string world_frame;
+std::string drone_frame;
 
 double VOXEL_SIZE = .5; //todo: add this to tsdf msg
 double HALF_VOXEL_SIZE = VOXEL_SIZE / 2;
@@ -129,31 +137,31 @@ cinematography_msgs::msg::MultiDOFarray calc_ideal_drone_traj(const cinematograp
 void move_traj_start(cinematography_msgs::msg::MultiDOFarray& drone_traj, cinematography_msgs::msg::MultiDOF& drone_pose) {
     cinematography_msgs::msg::MultiDOF traj_offset;
     traj_offset.x = drone_traj.points[0].x - drone_pose.x;
-    traj_offset.x = drone_traj.points[0].y - drone_pose.y;
-    traj_offset.x = drone_traj.points[0].z - drone_pose.z;
+    traj_offset.y = drone_traj.points[0].y - drone_pose.y;
+    traj_offset.z = drone_traj.points[0].z - drone_pose.z;
 
 
     for(int i = 0; i < drone_traj.points.size(); i++) {
-        float weight = 1 - (i / (drone_traj.points.size() - 1));    // Fraction of the offset to subtract
+        float weight = 1.0 - (i / (float)(drone_traj.points.size() - 1));    // Fraction of the offset to subtract
         drone_traj.points[i].x -= weight * (traj_offset.x);
         drone_traj.points[i].y -= weight * (traj_offset.y);
         drone_traj.points[i].z -= weight * (traj_offset.z);
-        drone_traj.points[i].vx = drone_traj.points[i].vy = drone_traj.points[i].vz
-         = drone_traj.points[i].ax = drone_traj.points[i].ay = drone_traj.points[i].az;
+        drone_traj.points[i].ax = drone_traj.points[i].ay = drone_traj.points[i].az = 0;
     }
 
-    // First point has current velocity. Note that if you sum up velocity and acceleration of a point
-    // according to actual physics, you will not get the correct next point. It's very approximative
-    drone_traj.points[0].vx = drone_pose.vx;
-    drone_traj.points[0].vy = drone_pose.vy;
-    drone_traj.points[0].vz = drone_pose.vz;
-    for(int i = 1; i < drone_traj.points.size() - 1; i++) {
+    for(int i = 0; i < drone_traj.points.size() - 1; i++) {
         drone_traj.points[i].vx = (drone_traj.points[i+1].x - drone_traj.points[i].x) / drone_traj.points[i].duration;
         drone_traj.points[i].vy = (drone_traj.points[i+1].y - drone_traj.points[i].y) / drone_traj.points[i].duration;
         drone_traj.points[i].vz = (drone_traj.points[i+1].z - drone_traj.points[i].z) / drone_traj.points[i].duration;
-        drone_traj.points[i-1].ax = (drone_traj.points[i+1].vx - drone_traj.points[i].vx) / drone_traj.points[i].duration;
-        drone_traj.points[i-1].ay = (drone_traj.points[i+1].vy - drone_traj.points[i].vy) / drone_traj.points[i].duration;
-        drone_traj.points[i-1].az = (drone_traj.points[i+1].vz - drone_traj.points[i].vz) / drone_traj.points[i].duration;
+    }
+
+
+    // Note that if you sum up velocity and acceleration of a point according to actual physics,
+    // you will not get the correct next point. It's very approximative
+    for(int i = 0; i < drone_traj.points.size() - 1; i++) {
+        drone_traj.points[i].ax = (drone_traj.points[i+1].vx - drone_traj.points[i].vx) / drone_traj.points[i].duration;
+        drone_traj.points[i].ay = (drone_traj.points[i+1].vy - drone_traj.points[i].vy) / drone_traj.points[i].duration;
+        drone_traj.points[i].az = (drone_traj.points[i+1].vz - drone_traj.points[i].vz) / drone_traj.points[i].duration;
     }
 
     // Add acceleration and velocity to final points. Velocity stays constant, and acceleration goes to zero
@@ -164,6 +172,9 @@ void move_traj_start(cinematography_msgs::msg::MultiDOFarray& drone_traj, cinema
     finalPoint.vy = penultimitePoint.vy;
     finalPoint.vz = penultimitePoint.vz;
     finalPoint.ax = finalPoint.ay = finalPoint.az = 0;
+
+    drone_traj.points[drone_traj.points.size() - 2] = penultimitePoint;
+    drone_traj.points[drone_traj.points.size() - 1] = finalPoint;
 
     return;
 }
@@ -178,7 +189,7 @@ void face_actor(cinematography_msgs::msg::MultiDOFarray& drone_traj, const cinem
     std::vector<cinematography_msgs::msg::MultiDOF>::const_iterator ait = actor_traj.points.begin();
 
     double d_time = dit->duration, a_time = 0;
-    for(; dit < drone_traj.points.end(); ait++,dit++) {
+    for(; dit <= drone_traj.points.end(); ait++,dit++) {
         // Get the vector difference (just x and y, since we only care about the yaw of the drone)
         tf2::Vector3 diff = tf2::Vector3(ait->x, ait->y, 0) - tf2::Vector3(dit->x, dit->y, 0);
 
@@ -642,23 +653,25 @@ void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr act
     }
 
     // TODO: Get this further up in the vision pipeline and pass it down. Also get velocity and acceleration info
-    // msr::airlib::Pose currentPose = airsim_client->simGetVehiclePose(vehicle_name);
+    geometry_msgs::msg::PointStamped origin;
+    origin.header.frame_id = drone_frame;
+    origin.point.x = 0;
+    origin.point.y = 0;
+    origin.point.z = 0;
+    geometry_msgs::msg::PointStamped point = tf_buffer->transform<geometry_msgs::msg::PointStamped>(origin, world_frame);
     cinematography_msgs::msg::MultiDOF currentState;
-    // currentState.x = currentPose.position.x();
-    // currentState.y = currentPose.position.y();
-    // currentState.z = currentPose.position.z();
-    currentState.x = 0;
-    currentState.y = 0;
-    currentState.z = 0;
+    currentState.x = point.point.x;
+    currentState.y = point.point.y;
+    currentState.z = point.point.z;
     currentState.vx = currentState.vy = currentState.vz = currentState.ax = currentState.ay = currentState.az = 0;
 
     cinematography_msgs::msg::MultiDOFarray drone_path;
     drone_path = calc_ideal_drone_traj(*actor_traj);        // Calculate the ideal observation point for every point in actor trajectory
     move_traj_start(drone_path, currentState);              // Skew ideal path, so it starts at the drone's current position
 
-    face_actor(drone_path, *actor_traj);                    // Set all yaws to fact their corresponding point in the actor trajectory
+    //optimize_trajectory(drone_path, *actor_traj);
 
-    optimize_trajectory(drone_path, *actor_traj);
+    face_actor(drone_path, *actor_traj);                    // Set all yaws to fact their corresponding point in the actor trajectory
 
     // Publish the trajectory (for debugging purposes)
     drone_path.header.stamp = clock_->now();
@@ -693,7 +706,14 @@ int main(int argc, char ** argv)
 
     node->declare_parameter<std::string>("airsim_hostname", "localhost");
     node->get_parameter("airsim_hostname", airsim_hostname);
+    node->declare_parameter<std::string>("world_frame", "world_ned");
+    node->get_parameter("world_frame", world_frame);
+    node->declare_parameter<std::string>("drone_frame", "drone_1/camera");
+    node->get_parameter("drone_frame", drone_frame);
     airsim_client = new msr::airlib::MultirotorRpcLibClient(airsim_hostname);
+
+    tf_buffer = new tf2_ros::Buffer(node->get_clock()); 
+    tf_listener = new tf2_ros::TransformListener(*tf_buffer);
 
     auto actor_traj_sub = node->create_subscription<cinematography_msgs::msg::MultiDOFarray>("actor_traj", 1, get_actor_trajectory); 
     auto tsdf_sub = node->create_subscription<tsdf_package_msgs::msg::Tsdf>("tsdf", 1, tsdf_callback);

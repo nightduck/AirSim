@@ -13,7 +13,8 @@ def generate_launch_description():
                 ("tsdf", "/auto_cinematography/mapping/tsdf")
             ],
             parameters=[
-                {"airsim_hostname" : "localhost"}
+                {"airsim_hostname" : "localhost"},
+                {"drone_frame" : "drone_1"}
             ]
         )
     ])
