@@ -101,11 +101,27 @@ void get_voxels(const MultiDOF point_start, const MultiDOF point_end, Eigen::Mat
     Eigen::Matrix<double, 3, 1> current_vol_center = get_volume_center_from_point_cuda(current_vol, volume_size);
     Eigen::Matrix<double, 3, 1> end_voxel_center = get_volume_center_from_point_cuda(end, volume_size);
 
+    // printf("-----------------------------------------------------\n");
+    // printf("truncation_vol_start_center: (%f,%f,%f)\n", start_voxel_center(0), start_voxel_center(1), start_voxel_center(2));
+    // printf("truncation_vol_end_center: (%f,%f,%f)\n", end_voxel_center(0), end_voxel_center(1), end_voxel_center(2));
+    // printf("size: %f\n", volume_size);
+    // printf("end: (%f,%f,%f)\n", end(0), end(1), end(2));
+    // printf("-----------------------------------------------------\n");
+
     while(!check_floating_point_vectors_equal_cuda(current_vol_center, end_voxel_center, epsilon)){
         //add traversed voxel key to list of voxel keys
         Eigen::Matrix<double, 3, 1> voxel = current_vol_center;
         voxels[size] = voxel;
+        // printf("current_vol: (%f,%f,%f)\n", current_vol(0), current_vol(1), current_vol(2));
+        // printf("current_vol_center: (%f,%f,%f)\n", current_vol_center(0), current_vol_center(1), current_vol_center(2));
+        // printf("tMaxX: %f, tMaxy: %f, tMaxZ:%f\n", tMaxX, tMaxY, tMaxZ);
+        // printf("deltaX: %f, deltaY: %f, deltaZ:%f\n\n", tDeltaX, tDeltaY, tDeltaZ);
         size++;
+
+        // if(size > 200){
+        //     // printf("thread: %d, current_vol_center: (%f,%f,%f), end_center: (%f,%f,%f), start_center: (%f,%f,%f), start: (%f,%f,%f), end: (%f,%f,%f)\n", thread_index, current_vol_center(0), current_vol_center(1), current_vol_center(2), end_voxel_center(0), end_voxel_center(1), end_voxel_center(2), start_voxel_center(0), start_voxel_center(1), start_voxel_center(2), start(0), start(1), start(2), end(0), end(1), end(2));
+        //     break;
+        // }
         
         if(tMaxX < tMaxY){
             if(tMaxX < tMaxZ)
@@ -177,6 +193,8 @@ void get_voxels(const MultiDOF point_start, const MultiDOF point_end, Eigen::Mat
     //add traversed voxel key to list of voxel keys
     Eigen::Matrix<double, 3, 1> voxel = current_vol_center;
     voxels[size] = voxel;
+    // printf("current_vol: (%f,%f,%f)\n", current_vol(0), current_vol(1), current_vol(2));
+    // printf("current_vol_center: (%f,%f,%f)\n\n", current_vol_center(0), current_vol_center(1), current_vol_center(2));
     size++;
 }
 
@@ -381,12 +399,20 @@ double * truncation_distance, double * voxel_size){
     if(thread_index >= *n-1){
         return;
     }
-    
-    MultiDOF * point_start_p = new MultiDOF(drone_traj[thread_index+1]); 
-    // * point_start_p = drone_traj[thread_index+1];
 
-    MultiDOF * point_end_p = new MultiDOF(actor_traj[thread_index+1]); 
-    // * point_end_p = actor_traj[thread_index+1];
+    // if(thread_index >= 1){
+    //     return;
+    // }
+    
+    MultiDOF * point_start_p = new MultiDOF(drone_traj[thread_index + 1]); 
+    // point_start_p->x = 7.304082; 
+    // point_start_p->y = 3.061411;
+    // point_start_p->z = -3.535534;
+
+    MultiDOF * point_end_p = new MultiDOF(actor_traj[thread_index + 1]); 
+    // point_end_p->x = 2.000000; 
+    // point_end_p->y = 0.000000;
+    // point_end_p->z = 0.000000;
 
     Eigen::Matrix<double, 3, 1> * voxels = new Eigen::Matrix<double, 3, 1>[500]; //figure out how to bound this
     int size = 0;
@@ -401,6 +427,8 @@ double * truncation_distance, double * voxel_size){
     cudaDeviceSynchronize();
 
     int occ_grad_index = thread_index * 3;
+
+    // size = 1;
 
     occ_grad[occ_grad_index]/=size;
     occ_grad[occ_grad_index+1]/=size;
@@ -539,7 +567,7 @@ Eigen::Matrix<double, Eigen::Dynamic, 3> obstacle_avoidance_gradient_cuda(std::v
     cudaEventSynchronize(stop);
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
-    // printf("obstacle avoidance gradient duration: %f\n", milliseconds);
+    printf("obstacle avoidance gradient duration: %f\n", milliseconds);
 
     return obs_grad;
 }
@@ -605,7 +633,7 @@ Eigen::Matrix<double, Eigen::Dynamic, 3> occlusion_avoidance_gradient_cuda(std::
     cudaEventSynchronize(stop);
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
-    // printf("occlusion avoidance gradient duration: %f\n", milliseconds);
+    printf("occlusion avoidance gradient duration: %f\n", milliseconds);
 
     cudaMemcpy(occ_grad_h, occ_grad_d, sizeof(*occ_grad_h) * occ_grad_size, cudaMemcpyDeviceToHost);
     gpuErrchk(cudaPeekAtLastError());
