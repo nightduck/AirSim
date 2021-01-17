@@ -29,15 +29,53 @@ namespace stdgpu {
 }
 
 stdgpu::unordered_set<Voxel> set;
+stdgpu::unordered_set<Voxel> set1;
+stdgpu::unordered_set<Voxel> set2;
+stdgpu::unordered_set<Voxel> set3;
+stdgpu::unordered_set<Voxel> set4;
+
+__device__
+size_t retrieveHashIndexFromPoint(Eigen::Matrix<double, 3, 1> point){
+    return abs((((int)point(0)*73856093) ^ ((int)point(1)*19349669) ^ ((int)point(2)*83492791)) % 5);
+}
 
 __global__ 
-void init_set(stdgpu::unordered_set<Voxel> set, Voxel * voxels, int * voxels_size){
+void init_set(stdgpu::unordered_set<Voxel> set, stdgpu::unordered_set<Voxel> set1, stdgpu::unordered_set<Voxel> set2, stdgpu::unordered_set<Voxel> set3, stdgpu::unordered_set<Voxel> set4,Voxel * voxels, int * voxels_size){
     int thread_index = (blockIdx.x*512 + threadIdx.x);
     if(thread_index >= *voxels_size){
         return;
     }
     Voxel v = voxels[thread_index];
-    set.insert(v);
+
+    stdgpu::unordered_set<Voxel> * sets[5];
+    sets[0] = &set;
+    sets[1] = &set1;
+    sets[2] = &set2;
+    sets[3] = &set3;
+    sets[4] = &set4;
+
+
+    size_t position = retrieveHashIndexFromPoint(v.position);
+
+    // switch(position){
+    //     case 0: 
+    //         set.insert(v);
+    //         break;
+    //     case 1:
+    //         set1.insert(v);
+    //         break;
+    //     case 2:
+    //         set2.insert(v);
+    //         break;
+    //     case 3:
+    //         set3.insert(v);
+    //         break;
+    //     case 4:
+    //         set4.insert(v);
+    //         break;
+    // }
+    sets[position]->insert(v);
+
 }
 
 __device__
@@ -215,13 +253,58 @@ double get_cost(const double & sdf, const double & truncation_distance){
 }
 
 __device__
-inline double get_voxel_cost(const Eigen::Matrix<double, 3, 1> & voxel_pos, const double & volume_size, stdgpu::unordered_set<Voxel> set, double * truncation_distance){
+inline double get_voxel_cost(const Eigen::Matrix<double, 3, 1> & voxel_pos, const double & volume_size, stdgpu::unordered_set<Voxel> set, stdgpu::unordered_set<Voxel> set1, stdgpu::unordered_set<Voxel> set2, stdgpu::unordered_set<Voxel> set3, stdgpu::unordered_set<Voxel> set4, double * truncation_distance){
 
     Voxel voxel(0, voxel_pos(0), voxel_pos(1), voxel_pos(2));
-    const Voxel * result = set.find(voxel);
-    if(result != set.end()){
+
+    size_t position = retrieveHashIndexFromPoint(voxel_pos);
+
+    // const Voxel * result;
+
+    stdgpu::unordered_set<Voxel> * sets[5];
+    sets[0] = &set;
+    sets[1] = &set1;
+    sets[2] = &set2;
+    sets[3] = &set3;
+    sets[4] = &set4;
+
+    // switch(position){
+    //     case 0: 
+    //         result = set.find(voxel);
+    //         if(result != set.end()){
+    //             return get_cost(result->sdf, * truncation_distance);
+    //         }
+    //         break;
+    //     case 1:
+    //         result = set1.find(voxel);
+    //         if(result != set1.end()){
+    //             return get_cost(result->sdf, * truncation_distance);
+    //         }
+    //         break;
+    //     case 2:
+    //         result = set2.find(voxel);
+    //         if(result != set2.end()){
+    //             return get_cost(result->sdf, * truncation_distance);
+    //         }
+    //         break;
+    //     case 3:
+    //         result = set3.find(voxel);
+    //         if(result != set3.end()){
+    //             return get_cost(result->sdf, * truncation_distance);
+    //         }
+    //         break;
+    //     case 4:
+    //         result = set4.find(voxel);
+    //         if(result != set4.end()){
+    //             return get_cost(result->sdf, * truncation_distance);
+    //         }
+    //         break;
+    // }
+    const Voxel * result = sets[position]->find(voxel);
+    if(result != sets[position]->end()){
         return get_cost(result->sdf, * truncation_distance);
     }
+
     return 0; //voxel does not exist so it is in free space(or inside an object) and return 0 cost
 }
 
@@ -229,39 +312,39 @@ inline double get_voxel_cost(const Eigen::Matrix<double, 3, 1> & voxel_pos, cons
 * Compute cost gradient for a voxel. Check cost values of voxel and voxels around
 */
 __device__
-Eigen::Matrix<double, 3, 1> get_voxel_cost_gradient(const Eigen::Matrix<double, 3, 1> & voxel_pos, const double & volume_size, stdgpu::unordered_set<Voxel> set, double * truncation_distance){
-    double cost = get_voxel_cost(voxel_pos, volume_size, set, truncation_distance);
+Eigen::Matrix<double, 3, 1> get_voxel_cost_gradient(const Eigen::Matrix<double, 3, 1> & voxel_pos, const double & volume_size, stdgpu::unordered_set<Voxel> set, stdgpu::unordered_set<Voxel> set1, stdgpu::unordered_set<Voxel> set2, stdgpu::unordered_set<Voxel> set3, stdgpu::unordered_set<Voxel> set4, double * truncation_distance){
+    double cost = get_voxel_cost(voxel_pos, volume_size, set, set1, set2, set3, set4, truncation_distance);
     Eigen::Matrix<double, 3, 1> gradient_val;
 
     Eigen::Matrix<double, 3, 1> xNext(voxel_pos(0) + volume_size, voxel_pos(1), voxel_pos(2));
     Eigen::Matrix<double, 3, 1> xPrev(voxel_pos(0) - volume_size, voxel_pos(1), voxel_pos(2));
-    double xDiffNext = get_voxel_cost(xNext, volume_size, set, truncation_distance) - cost;
-    double xDiffPrev = cost - get_voxel_cost(xPrev, volume_size, set, truncation_distance);
+    double xDiffNext = get_voxel_cost(xNext, volume_size, set, set1, set2, set3, set4, truncation_distance) - cost;
+    double xDiffPrev = cost - get_voxel_cost(xPrev, volume_size, set, set1, set2, set3, set4, truncation_distance);
     gradient_val(0) = (xDiffNext + xDiffPrev) / 2;
 
     Eigen::Matrix<double, 3, 1> yNext(voxel_pos(0), voxel_pos(1) + volume_size, voxel_pos(2));
     Eigen::Matrix<double, 3, 1> yPrev(voxel_pos(0), voxel_pos(1) - volume_size, voxel_pos(2));
-    double yDiffNext = get_voxel_cost(yNext, volume_size, set, truncation_distance) - cost;
-    double yDiffPrev = cost - get_voxel_cost(yPrev, volume_size, set, truncation_distance);
+    double yDiffNext = get_voxel_cost(yNext, volume_size, set, set1, set2, set3, set4, truncation_distance) - cost;
+    double yDiffPrev = cost - get_voxel_cost(yPrev, volume_size, set, set1, set2, set3, set4, truncation_distance);
     gradient_val(1) = (yDiffNext + yDiffPrev) / 2;
 
     Eigen::Matrix<double, 3, 1> zNext(voxel_pos(0), voxel_pos(1), voxel_pos(2) + volume_size);
     Eigen::Matrix<double, 3, 1> zPrev(voxel_pos(0), voxel_pos(1), voxel_pos(2) - volume_size);
-    double zDiffNext = get_voxel_cost(zNext, volume_size, set, truncation_distance) - cost;
-    double zDiffPrev = cost - get_voxel_cost(zPrev, volume_size, set, truncation_distance);
+    double zDiffNext = get_voxel_cost(zNext, volume_size, set, set1, set2, set3, set4, truncation_distance) - cost;
+    double zDiffPrev = cost - get_voxel_cost(zPrev, volume_size, set, set1, set2, set3, set4, truncation_distance);
     gradient_val(2) = (zDiffNext + zDiffPrev) / 2;
 
     return gradient_val;
 }
 
 __global__
-void process_obstacle_avoidance_voxels(Eigen::Matrix<double, 3, 1> * voxels, int * size_p, stdgpu::unordered_set<Voxel> set, double * velocity_mag, 
+void process_obstacle_avoidance_voxels(Eigen::Matrix<double, 3, 1> * voxels, int * size_p, stdgpu::unordered_set<Voxel> set, stdgpu::unordered_set<Voxel> set1, stdgpu::unordered_set<Voxel> set2, stdgpu::unordered_set<Voxel> set3, stdgpu::unordered_set<Voxel> set4, double * velocity_mag, 
     Eigen::Matrix<double, 3, 3> * identity_minus_p_hat_multiplied, double * obs_grad, int * point_index, double * truncation_distance, double * voxel_size){
     int thread_index = (blockIdx.x*256 + threadIdx.x);
     if(thread_index >=*size_p){
         return;
     }
-    Eigen::Matrix<double, 3, 1> cost_function_gradient = get_voxel_cost_gradient(voxels[thread_index], * voxel_size, set, truncation_distance); //TODO: volume_size
+    Eigen::Matrix<double, 3, 1> cost_function_gradient = get_voxel_cost_gradient(voxels[thread_index], * voxel_size, set, set1, set2, set3, set4, truncation_distance); //TODO: volume_size
     Eigen::Matrix<double, 3, 1> gradient_multiplied_result = (*identity_minus_p_hat_multiplied) * cost_function_gradient;       
     Eigen::Matrix<double, 3, 1> grad_j_obs = gradient_multiplied_result * (*velocity_mag);
     
@@ -280,7 +363,7 @@ void process_obstacle_avoidance_voxels(Eigen::Matrix<double, 3, 1> * voxels, int
 }
 
 __global__
-void obstacle_avoidance_gradient(MultiDOF * drone_traj, double * obs_grad, int * n, stdgpu::unordered_set<Voxel> set, double * truncation_distance, double * voxel_size){
+void obstacle_avoidance_gradient(MultiDOF * drone_traj, double * obs_grad, int * n, stdgpu::unordered_set<Voxel> set, stdgpu::unordered_set<Voxel> set1, stdgpu::unordered_set<Voxel> set2, stdgpu::unordered_set<Voxel> set3, stdgpu::unordered_set<Voxel> set4, double * truncation_distance, double * voxel_size){
     int thread_index = (blockIdx.x*128 + threadIdx.x);
     if(thread_index >= *n-1){
         return;
@@ -311,7 +394,7 @@ void obstacle_avoidance_gradient(MultiDOF * drone_traj, double * obs_grad, int *
     int num_blocks = size / threads_per_block + 1;
     int * size_p = new int(size);
     int * thread_index_p = new int(thread_index);
-    process_obstacle_avoidance_voxels<<<num_blocks, threads_per_block>>>(voxels, size_p, set, velocity_mag_p, 
+    process_obstacle_avoidance_voxels<<<num_blocks, threads_per_block>>>(voxels, size_p, set, set1, set2, set3, set4, velocity_mag_p, 
         identity_minus_p_hat_multiplied_p, obs_grad, thread_index_p, truncation_distance, voxel_size);
     cudaDeviceSynchronize();
 
@@ -329,7 +412,7 @@ void obstacle_avoidance_gradient(MultiDOF * drone_traj, double * obs_grad, int *
 }
 
 __global__
-void process_occlusion_avoidance_voxels(Eigen::Matrix<double, 3, 1> * voxels, int * size_p, stdgpu::unordered_set<Voxel> set, 
+void process_occlusion_avoidance_voxels(Eigen::Matrix<double, 3, 1> * voxels, int * size_p, stdgpu::unordered_set<Voxel> set, stdgpu::unordered_set<Voxel> set1, stdgpu::unordered_set<Voxel> set2, stdgpu::unordered_set<Voxel> set3, stdgpu::unordered_set<Voxel> set4, 
      double * occ_grad, int * point_index, MultiDOF * point_start_p, MultiDOF * point_end_p, double * truncation_distance, double * voxel_size){
     int thread_index = (blockIdx.x*256 + threadIdx.x);
     if(thread_index >=*size_p){
@@ -361,7 +444,7 @@ void process_occlusion_avoidance_voxels(Eigen::Matrix<double, 3, 1> * voxels, in
     //used for determining the value of τ
     double increment = 1.0/(*size_p-1); 
 
-    Eigen::Matrix<double, 3, 1> cost_function_gradient = get_voxel_cost_gradient(voxels[thread_index], * voxel_size, set, truncation_distance);
+    Eigen::Matrix<double, 3, 1> cost_function_gradient = get_voxel_cost_gradient(voxels[thread_index], * voxel_size, set, set1, set2, set3, set4, truncation_distance);
     // Eigen::Matrix<double, 3, 1> cost_function_gradient(1,1,1);
     Eigen::Matrix<double, 3, 1> inner_first_term = actor_point_velocity/drone_point_velocity_mag - normalized_drone_point_velocity;
     double temp1 = inner_first_term(0);
@@ -374,7 +457,7 @@ void process_occlusion_avoidance_voxels(Eigen::Matrix<double, 3, 1> * voxels, in
     Eigen::Matrix<double, 1, 3> first_term = cost_function_gradient.transpose() * L_mag * drone_point_velocity_mag * inner_first_term_matrix;
 
     Eigen::Matrix<double, 1, 3> inner_second_term = normalized_L_transpose + normalized_L_transpose * L_velocity * normalized_drone_point_velocity_transpose;
-    Eigen::Matrix<double, 1, 3> second_term = get_voxel_cost(voxels[thread_index], * voxel_size, set, truncation_distance) * drone_point_velocity_mag * inner_second_term;
+    Eigen::Matrix<double, 1, 3> second_term = get_voxel_cost(voxels[thread_index], * voxel_size, set, set1, set2, set3, set4, truncation_distance) * drone_point_velocity_mag * inner_second_term;
     // Eigen::Matrix<double, 1, 3> second_term(1,1,1);
     Eigen::Matrix<double, 1, 3> grad_j_occ = first_term - second_term;
 
@@ -393,7 +476,7 @@ void process_occlusion_avoidance_voxels(Eigen::Matrix<double, 3, 1> * voxels, in
 }
 
 __global__ 
-void occlusion_avoidance_gradient(MultiDOF * drone_traj, MultiDOF * actor_traj, double * occ_grad, int * n, stdgpu::unordered_set<Voxel> set, 
+void occlusion_avoidance_gradient(MultiDOF * drone_traj, MultiDOF * actor_traj, double * occ_grad, int * n, stdgpu::unordered_set<Voxel> set, stdgpu::unordered_set<Voxel> set1, stdgpu::unordered_set<Voxel> set2, stdgpu::unordered_set<Voxel> set3, stdgpu::unordered_set<Voxel> set4, 
 double * truncation_distance, double * voxel_size){
     int thread_index = (blockIdx.x*128 + threadIdx.x);
     if(thread_index >= *n-1){
@@ -403,7 +486,12 @@ double * truncation_distance, double * voxel_size){
     // if(thread_index >= 1){
     //     return;
     // }
-    
+    // MultiDOF point_start = drone_traj[thread_index + 1];
+    // MultiDOF * point_start_p = new MultiDOF();
+    // * point_start_p = point_start;
+    // MultiDOF point_end = actor_traj[thread_index + 1];
+    // MultiDOF * point_end_p = new MultiDOF();
+    // * point_end_p = point_end;
     MultiDOF * point_start_p = new MultiDOF(drone_traj[thread_index + 1]); 
     // point_start_p->x = 7.304082; 
     // point_start_p->y = 3.061411;
@@ -422,7 +510,7 @@ double * truncation_distance, double * voxel_size){
     int num_blocks = size / threads_per_block + 1;
     int * size_p = new int(size);
     int * thread_index_p = new int(thread_index);
-    process_occlusion_avoidance_voxels<<<num_blocks, threads_per_block>>>(voxels, size_p, set, occ_grad, 
+    process_occlusion_avoidance_voxels<<<num_blocks, threads_per_block>>>(voxels, size_p, set, set1, set2, set3, set4, occ_grad, 
         thread_index_p, point_start_p, point_end_p, truncation_distance, voxel_size);
     cudaDeviceSynchronize();
 
@@ -442,7 +530,11 @@ double * truncation_distance, double * voxel_size){
 }
 
 void allocate_set(){
-    set = stdgpu::unordered_set<Voxel>::createDeviceObject(5000000);
+    set = stdgpu::unordered_set<Voxel>::createDeviceObject(1000000);
+    set1 = stdgpu::unordered_set<Voxel>::createDeviceObject(1000000);
+    set2 = stdgpu::unordered_set<Voxel>::createDeviceObject(1000000);
+    set3 = stdgpu::unordered_set<Voxel>::createDeviceObject(1000000);
+    set4 = stdgpu::unordered_set<Voxel>::createDeviceObject(1000000);
 }
 
 void init_set_cuda(std::vector<Voxel> & voxels){
@@ -452,8 +544,16 @@ void init_set_cuda(std::vector<Voxel> & voxels){
     cudaEventRecord(start);
 
     set.clear();
+    set1.clear();
+    set2.clear();
+    set3.clear();
+    set4.clear();
 
     int * voxels_size_h = new int(voxels.size());
+
+    // if(*voxels_size_h > 50000){
+    //     * voxels_size_h = 50000;
+    // }
 
     if(*voxels_size_h == 0){
         return;
@@ -472,20 +572,24 @@ void init_set_cuda(std::vector<Voxel> & voxels){
     int num_threads = 512;
     int num_blocks = *voxels_size_h / num_threads + 1;
     // printf("max size: %d\n", set.max_size());
-    init_set<<<num_blocks,num_threads>>>(set, voxels_d, voxels_size_d);
+    init_set<<<num_blocks,num_threads>>>(set, set1, set2, set3, set4, voxels_d, voxels_size_d);
     cudaDeviceSynchronize();
     gpuErrchk(cudaPeekAtLastError());
 
     // printf("valid? : %d\n", set.valid());
     printf("set size: %d\n", set.size());
-    printf("set load factor: %f\n", set.load_factor());
+    printf("set size: %d\n", set1.size());
+    printf("set size: %d\n", set2.size());
+    printf("set size: %d\n", set3.size());
+    printf("set size: %d\n", set4.size());
+    // printf("set load factor: %f\n", set.load_factor());
     // printf("set max load factor: %f\n", set.max_load_factor());
-    printf("num buckets: %d\n", set.bucket_count());
+    // printf("num buckets: %d\n", set.bucket_count());
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
-    printf("set generation: %f\n", milliseconds);
+    printf("sets generation: %f\n\n", milliseconds);
 
     free(voxels_size_h);
     cudaFree(voxels_size_d);
@@ -540,7 +644,7 @@ Eigen::Matrix<double, Eigen::Dynamic, 3> obstacle_avoidance_gradient_cuda(std::v
     int num_threads = 128;
     int num_blocks = *n_h / num_threads + 1;
 
-    obstacle_avoidance_gradient<<<num_blocks, num_threads>>>(drone_traj_d, obs_grad_d, n_d, set, truncation_distance_d, voxel_size_d);
+    obstacle_avoidance_gradient<<<num_blocks, num_threads>>>(drone_traj_d, obs_grad_d, n_d, set, set1, set2, set3, set4, truncation_distance_d, voxel_size_d);
     cudaDeviceSynchronize();
     gpuErrchk(cudaPeekAtLastError());
 
@@ -625,7 +729,7 @@ Eigen::Matrix<double, Eigen::Dynamic, 3> occlusion_avoidance_gradient_cuda(std::
     cudaEventCreate(&stop);
     cudaEventRecord(start);
 
-    occlusion_avoidance_gradient<<<num_blocks, num_threads>>>(drone_traj_d, actor_traj_d, occ_grad_d, n_d, set, truncation_distance_d, voxel_size_d);
+    occlusion_avoidance_gradient<<<num_blocks, num_threads>>>(drone_traj_d, actor_traj_d, occ_grad_d, n_d, set, set1, set2, set3, set4, truncation_distance_d, voxel_size_d);
     gpuErrchk(cudaPeekAtLastError());
     cudaDeviceSynchronize();
 

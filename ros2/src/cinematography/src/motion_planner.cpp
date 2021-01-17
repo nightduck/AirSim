@@ -77,6 +77,9 @@ bool received_first_msg = false;
 
 std::vector<Voxel> voxels_list;
 
+std::vector<Voxel> voxels_set[NUM_BUCKETS];
+int voxels_set_size;
+
 std::unordered_map<Key, Voxel> voxel_map;
 
 void print_rviz_traj(cinematography_msgs::msg::MultiDOFarray& path, std::string name, bool actor) {
@@ -627,15 +630,26 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
     init_set_cuda(voxels_list);
     
     int MAX_ITERATIONS;     // TODO: Make this a ROS parameter
-    for(int i = 0; i < 1; i++) {
+    for(int i = 0; i < 20; i++) {
+        auto start = std::chrono::high_resolution_clock::now();
         Eigen::Matrix<double, Eigen::Dynamic, 3> smooth_grad = traj_smoothness_gradient(drone_traj, t, K, K0, K1, K2, A_smooth);
+        auto stop = std::chrono::high_resolution_clock::now(); 
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start); 
+        std::cout << "smooth grad duration: ";
+        std::cout << duration.count() << std::endl;
+
+        auto start1 = std::chrono::high_resolution_clock::now();
         Eigen::Matrix<double, Eigen::Dynamic, 3> shot_grad = shot_quality_gradient(drone_traj, ideal_traj, A_shot);
+        auto stop1 = std::chrono::high_resolution_clock::now(); 
+        auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(stop1 - start1); 
+        std::cout << "shot grad duration: ";
+        std::cout << duration1.count() << std::endl;
 
         Eigen::Matrix<double, Eigen::Dynamic, 3> obs_grad = obstacle_avoidance_gradient_cuda(drone_traj_cuda, truncation_distance, voxel_size);
         Eigen::Matrix<double, Eigen::Dynamic, 3> occ_grad = occlusion_avoidance_gradient_cuda(drone_traj_cuda, actor_traj_cuda, truncation_distance, voxel_size);
 
         
-
+// + LAMBDA_2 * occ_grad
         Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = smooth_grad + LAMBDA_1 * obs_grad + LAMBDA_2 * occ_grad + LAMBDA_3 * shot_grad;
         // Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = LAMBDA_1 * obs_grad + LAMBDA_2 * occ_grad;
         // Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = smooth_grad + LAMBDA_3 * shot_grad;
@@ -700,7 +714,7 @@ void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr act
     drone_path.header.stamp = clock_->now();
     path_found = true;
 
-    RCLCPP_INFO(node->get_logger(), "Publishing drone trajectory");
+    RCLCPP_INFO(node->get_logger(), "Publishing drone trajectory\n");
 
     traj_pub->publish(drone_path);
 }
@@ -708,12 +722,19 @@ void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr act
 void tsdf_callback(tsdf_package_msgs::msg::Tsdf::SharedPtr tsdf){
     voxel_map.clear();
     voxels_list.clear();
+    for(int i=0;i<NUM_BUCKETS;++i){ //move to cuda
+        voxels_set[i].clear();
+    }
+
     std::vector<tsdf_package_msgs::msg::Voxel> voxels = tsdf->voxels;
+    voxels_set_size = voxels.size();
     for (tsdf_package_msgs::msg::Voxel v : voxels){
         Key k(v.x, v.y, v.z);
         Voxel val(v.sdf, v.x, v.y, v.z);
         voxel_map[k] = val;
         voxels_list.push_back(val);
+        size_t bucket = val.get_bucket();
+        voxels_set[bucket].push_back(val);
     }
 
     if(!received_first_msg){

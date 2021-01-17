@@ -6,6 +6,9 @@
 #include <Eigen/Dense>
 #include <stdio.h> 
 
+__constant__
+const int NUM_BUCKETS = 2000000;
+
 struct MultiDOF{
     double x;
     double y;
@@ -18,6 +21,9 @@ struct MultiDOF{
     double az;
     double yaw;
     double duration;
+    // __host__ __device__
+    // MultiDOF():x(0),y(0),z(0),vx(0),vy(0),vz(0),ax(0),ay(0),az(0),yaw(0),duration(0){}
+    // __host__ __device__
     MultiDOF(double x, double y, double z, double vx, double vy, double vz, double ax, double ay, double az, double yaw, double duration){
         this->x = x;
         this->y = y;
@@ -46,7 +52,7 @@ struct Voxel{
         position(2) = z;
     }
 
-        __host__ __device__
+    __device__ __host__
     bool operator==(const Voxel &other) const{ //may need to include voxel size param
             // return (position(0) == other.position(0) && position(1)==other.position(1) && position(2)==other.position(2));
 
@@ -61,6 +67,11 @@ struct Voxel{
 
         return false;
 
+    }
+
+    __device__ __host__
+    size_t get_bucket(){
+        return ((int)(position(0)*73856093) ^ (int)(position(1)*19349669) ^ (int)(position(2)*83492791)) % NUM_BUCKETS;
     }
 };
 
