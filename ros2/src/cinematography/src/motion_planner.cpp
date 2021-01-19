@@ -627,10 +627,14 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
     Eigen::MatrixXd M_inv = (A_smooth + LAMBDA_3 * A_shot).inverse();
 
     printf("host map size: %lu\n", voxel_map.size());
-    init_set_cuda(voxels_list);
+    // init_set_cuda(voxels_list);
+    
+    int curr_voxels_set_size = voxels_set_size;
+    printf("voxels_set_size: %d\n", curr_voxels_set_size);
+    init_set_cuda(voxels_set, curr_voxels_set_size);
     
     int MAX_ITERATIONS;     // TODO: Make this a ROS parameter
-    for(int i = 0; i < 20; i++) {
+    for(int i = 0; i < 1; i++) {
         auto start = std::chrono::high_resolution_clock::now();
         Eigen::Matrix<double, Eigen::Dynamic, 3> smooth_grad = traj_smoothness_gradient(drone_traj, t, K, K0, K1, K2, A_smooth);
         auto stop = std::chrono::high_resolution_clock::now(); 
@@ -645,8 +649,8 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
         std::cout << "shot grad duration: ";
         std::cout << duration1.count() << std::endl;
 
-        Eigen::Matrix<double, Eigen::Dynamic, 3> obs_grad = obstacle_avoidance_gradient_cuda(drone_traj_cuda, truncation_distance, voxel_size);
-        Eigen::Matrix<double, Eigen::Dynamic, 3> occ_grad = occlusion_avoidance_gradient_cuda(drone_traj_cuda, actor_traj_cuda, truncation_distance, voxel_size);
+        Eigen::Matrix<double, Eigen::Dynamic, 3> obs_grad = obstacle_avoidance_gradient_cuda(drone_traj_cuda, voxels_set, curr_voxels_set_size, truncation_distance, voxel_size);
+        Eigen::Matrix<double, Eigen::Dynamic, 3> occ_grad = occlusion_avoidance_gradient_cuda(drone_traj_cuda, actor_traj_cuda, voxels_set, curr_voxels_set_size, truncation_distance, voxel_size);
 
         
 // + LAMBDA_2 * occ_grad
@@ -677,6 +681,9 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
 // Get actor's predicted trajectory (in NED and radians)
 void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr actor_traj)
 {
+
+    auto start = std::chrono::high_resolution_clock::now();
+
     if (actor_traj->points.size() == 0) {
         RCLCPP_ERROR(node->get_logger(), "Received empty actor path"); 
         return;
@@ -701,12 +708,7 @@ void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr act
 
     face_actor(drone_path, *actor_traj);                    // Set all yaws to fact their corresponding point in the actor trajectory
 
-    auto start = std::chrono::high_resolution_clock::now();
     optimize_trajectory(drone_path, *actor_traj);
-    auto stop = std::chrono::high_resolution_clock::now(); 
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start); 
-    std::cout << "Optimization Duration: ";
-    std::cout << duration.count() << std::endl;
 
     print_rviz_traj(drone_path, "drone_traj", false);
 
@@ -717,6 +719,11 @@ void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr act
     RCLCPP_INFO(node->get_logger(), "Publishing drone trajectory\n");
 
     traj_pub->publish(drone_path);
+
+    auto stop = std::chrono::high_resolution_clock::now(); 
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start); 
+    std::cout << "Actor Traj Callback Duration: ";
+    std::cout << duration.count() << std::endl;
 }
 
 void tsdf_callback(tsdf_package_msgs::msg::Tsdf::SharedPtr tsdf){
@@ -732,7 +739,7 @@ void tsdf_callback(tsdf_package_msgs::msg::Tsdf::SharedPtr tsdf){
         Key k(v.x, v.y, v.z);
         Voxel val(v.sdf, v.x, v.y, v.z);
         voxel_map[k] = val;
-        voxels_list.push_back(val);
+        // voxels_list.push_back(val);
         size_t bucket = val.get_bucket();
         voxels_set[bucket].push_back(val);
     }
@@ -750,7 +757,7 @@ int main(int argc, char ** argv)
     node = rclcpp::Node::make_shared("motion_planner");
     clock_ = node->get_clock();
 
-    allocate_set();
+    // allocate_set();
 
     node->declare_parameter<std::string>("airsim_hostname", "localhost");
     node->get_parameter("airsim_hostname", airsim_hostname);

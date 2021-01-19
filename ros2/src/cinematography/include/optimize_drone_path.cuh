@@ -7,7 +7,7 @@
 #include <stdio.h> 
 
 __constant__
-const int NUM_BUCKETS = 2000000;
+const int NUM_BUCKETS = 50000;
 
 struct MultiDOF{
     double x;
@@ -71,7 +71,7 @@ struct Voxel{
 
     __device__ __host__
     size_t get_bucket(){
-        return ((int)(position(0)*73856093) ^ (int)(position(1)*19349669) ^ (int)(position(2)*83492791)) % NUM_BUCKETS;
+        return abs((((int)position(0)*73856093) ^ ((int)position(1)*19349669) ^ ((int)position(2)*83492791)) % NUM_BUCKETS);
     }
 };
 
@@ -109,11 +109,12 @@ namespace std {
     };
 }
 
-Eigen::Matrix<double, Eigen::Dynamic, 3> obstacle_avoidance_gradient_cuda(std::vector<MultiDOF>  & drone_traj, double & truncation_distance, double & voxel_size);
+Eigen::Matrix<double, Eigen::Dynamic, 3> obstacle_avoidance_gradient_cuda(std::vector<MultiDOF>  & drone_traj, std::vector<Voxel> voxels_set[], int & voxels_set_size, double & truncation_distance, double & voxel_size);
 
 Eigen::Matrix<double, Eigen::Dynamic, 3> occlusion_avoidance_gradient_cuda(std::vector<MultiDOF>  & drone_traj, 
-std::vector<MultiDOF> & actor_traj, double & truncation_distance, double & voxel_size);
+std::vector<MultiDOF> & actor_traj, std::vector<Voxel> voxels_set[], int & voxels_set_size, double & truncation_distance, double & voxel_size);
 
 void allocate_set();
 void init_set_cuda(std::vector<Voxel> & voxels);
+void init_set_cuda(std::vector<Voxel> voxels_set[], int & voxels_set_size);
 #endif
