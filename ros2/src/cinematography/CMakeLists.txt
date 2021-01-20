@@ -18,15 +18,6 @@ set(CMAKE_CXX_STANDARD 14)
 # -lm -lc -lgcc_s -lgcc  
 # -lstdc++fs -fmax-errors=10 -Wnoexcept -Wstrict-null-sentinel") 
 
-# Exclude the examples from the build
-set(STDGPU_BUILD_EXAMPLES OFF CACHE INTERNAL "")
-# Exclude the tests from the build
-set(STDGPU_BUILD_TESTS OFF CACHE INTERNAL "")
-set(STDGPU_BUILD_SHARED_LIBS ON CACHE INTERNAL "")
-add_subdirectory(stdgpu)
-set_property(TARGET stdgpu PROPERTY CMAKE_CUDA_SEPARABLE_COMPILATION ON)
-set_property(TARGET stdgpu PROPERTY CUDA_ARCHITECTURES 60)
-
 set(RPC_LIB_INCLUDES " ${AIRSIM_ROOT}/external/rpclib/rpclib-2.2.1/include")
 set(RPC_LIB rpc) # name of .a file with lib prefix
 message(STATUS "found RPC_LIB_INCLUDES=${RPC_LIB_INCLUDES}")
@@ -152,8 +143,6 @@ cuda_add_library(motion_planner_cuda STATIC
   src/optimize_drone_path.cu
   OPTIONS -g -shared -Xcompiler -fPIC -rdc=true
 )
-target_link_libraries(motion_planner_cuda stdgpu::stdgpu)
-
 
 # #-------------------------------------------------------------------------------
 # # Build Libraries

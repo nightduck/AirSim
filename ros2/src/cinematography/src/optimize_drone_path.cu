@@ -1,7 +1,4 @@
 #include "optimize_drone_path.cuh"
-#include <stdgpu/unordered_map.cuh>
-#include <stdgpu/unordered_set.cuh>
-#include <stdgpu/memory.h>
 
 Voxel * set_d;
 
@@ -17,70 +14,6 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
       fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
       if (abort) exit(code);
    }
-}
-
-namespace stdgpu {
-    template<>
-    struct hash<Voxel>{
-        inline STDGPU_HOST_DEVICE std::size_t
-        operator()(const Voxel& v) const
-        {
-            Eigen::Matrix<double, 3, 1> p = v.position;
-            return ((int)(p(0)*73856093) ^ (int)(p(1)*19349669) ^ (int)(p(2)*83492791));
-            // using stdgpu::hash;
-            // return(hash<double>()(k.x) ^ hash<double>()(k.y) ^ hash<double>()(k.z));
-        }
-    };
-}
-
-stdgpu::unordered_set<Voxel> set;
-stdgpu::unordered_set<Voxel> set1;
-stdgpu::unordered_set<Voxel> set2;
-stdgpu::unordered_set<Voxel> set3;
-stdgpu::unordered_set<Voxel> set4;
-
-__device__
-size_t retrieveHashIndexFromPoint(Eigen::Matrix<double, 3, 1> point){
-    return abs((((int)point(0)*73856093) ^ ((int)point(1)*19349669) ^ ((int)point(2)*83492791)) % 5);
-}
-
-__global__ 
-void init_set(stdgpu::unordered_set<Voxel> set, stdgpu::unordered_set<Voxel> set1, stdgpu::unordered_set<Voxel> set2, stdgpu::unordered_set<Voxel> set3, stdgpu::unordered_set<Voxel> set4,Voxel * voxels, int * voxels_size){
-    int thread_index = (blockIdx.x*512 + threadIdx.x);
-    if(thread_index >= *voxels_size){
-        return;
-    }
-    Voxel v = voxels[thread_index];
-
-    stdgpu::unordered_set<Voxel> * sets[5];
-    sets[0] = &set;
-    sets[1] = &set1;
-    sets[2] = &set2;
-    sets[3] = &set3;
-    sets[4] = &set4;
-
-
-    size_t position = retrieveHashIndexFromPoint(v.position);
-
-    // switch(position){
-    //     case 0: 
-    //         set.insert(v);
-    //         break;
-    //     case 1:
-    //         set1.insert(v);
-    //         break;
-    //     case 2:
-    //         set2.insert(v);
-    //         break;
-    //     case 3:
-    //         set3.insert(v);
-    //         break;
-    //     case 4:
-    //         set4.insert(v);
-    //         break;
-    // }
-    sets[position]->insert(v);
-
 }
 
 __device__
@@ -500,74 +433,6 @@ double * truncation_distance, double * voxel_size){
     free(point_end_p);
 }
 
-void allocate_set(){
-    set = stdgpu::unordered_set<Voxel>::createDeviceObject(1000000);
-    set1 = stdgpu::unordered_set<Voxel>::createDeviceObject(1000000);
-    set2 = stdgpu::unordered_set<Voxel>::createDeviceObject(1000000);
-    set3 = stdgpu::unordered_set<Voxel>::createDeviceObject(1000000);
-    set4 = stdgpu::unordered_set<Voxel>::createDeviceObject(1000000);
-}
-
-void init_set_cuda(std::vector<Voxel> & voxels){
-    cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
-    cudaEventRecord(start);
-
-    set.clear();
-    set1.clear();
-    set2.clear();
-    set3.clear();
-    set4.clear();
-
-    int * voxels_size_h = new int(voxels.size());
-
-    // if(*voxels_size_h > 50000){
-    //     * voxels_size_h = 50000;
-    // }
-
-    if(*voxels_size_h == 0){
-        return;
-    }
-
-    // printf("voxels size: %d\n", * voxels_size_h);
-    int * voxels_size_d;
-    cudaMalloc(&voxels_size_d, sizeof(*voxels_size_h));
-    cudaMemcpy(voxels_size_d, voxels_size_h, sizeof(*voxels_size_h), cudaMemcpyHostToDevice);
-
-    Voxel * voxels_h = &voxels[0];
-    Voxel * voxels_d;
-    cudaMalloc(&voxels_d, sizeof(*voxels_h) * (*voxels_size_h));
-    cudaMemcpy(voxels_d, voxels_h, sizeof(*voxels_h) * (*voxels_size_h), cudaMemcpyHostToDevice);
-
-    int num_threads = 512;
-    int num_blocks = *voxels_size_h / num_threads + 1;
-    // printf("max size: %d\n", set.max_size());
-    init_set<<<num_blocks,num_threads>>>(set, set1, set2, set3, set4, voxels_d, voxels_size_d);
-    cudaDeviceSynchronize();
-    gpuErrchk(cudaPeekAtLastError());
-
-    // printf("valid? : %d\n", set.valid());
-    printf("set size: %d\n", set.size());
-    printf("set size: %d\n", set1.size());
-    printf("set size: %d\n", set2.size());
-    printf("set size: %d\n", set3.size());
-    printf("set size: %d\n", set4.size());
-    // printf("set load factor: %f\n", set.load_factor());
-    // printf("set max load factor: %f\n", set.max_load_factor());
-    // printf("num buckets: %d\n", set.bucket_count());
-    cudaEventRecord(stop);
-    cudaEventSynchronize(stop);
-    float milliseconds = 0;
-    cudaEventElapsedTime(&milliseconds, start, stop);
-    printf("sets generation: %f\n\n", milliseconds);
-
-    free(voxels_size_h);
-    cudaFree(voxels_size_d);
-    cudaFree(voxels_d);
-
-}
-
 void init_set_cuda(std::vector<Voxel> voxels_set[], int & voxels_set_size){
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
@@ -578,42 +443,31 @@ void init_set_cuda(std::vector<Voxel> voxels_set[], int & voxels_set_size){
         return;
     }
 
-
-    cudaFree(set_d);
+    cudaFree(set_d); //free previous memory allocated for set
     cudaFree(bucket_indices_d);  
-
 
     cudaMalloc(&set_d, sizeof(Voxel)*voxels_set_size);
 
-    // int current_index = 0;
     Voxel *dst = set_d;
     bucket_indices_h[0] = 0;
     for(int i=0; i<NUM_BUCKETS; ++i){
         std::vector<Voxel> vec = voxels_set[i];
         Voxel * src = &vec[0];
         int sz = vec.size();
-        // std::copy(vec.begin(), vec.end(), &set_h[current_index]);
-        // current_index += sz;
         bucket_indices_h[i+1] = bucket_indices_h[i] + sz;
         cudaMemcpyAsync(dst, src, sizeof(Voxel)*sz, cudaMemcpyHostToDevice);
         dst += sz;
     }
-    // bucket_indices_h[NUM_BUCKETS] = voxels_set_size;
-
-    // cudaMalloc(&set_d, sizeof(Voxel)*voxels_set_size);
-    // cudaMemcpy(set_d, set_h, sizeof(Voxel)*voxels_set_size, cudaMemcpyHostToDevice);
 
     cudaMalloc(&bucket_indices_d, sizeof(int) * (NUM_BUCKETS + 1));
     cudaMemcpyAsync(bucket_indices_d, bucket_indices_h, sizeof(int) * (NUM_BUCKETS + 1), cudaMemcpyHostToDevice);
     cudaDeviceSynchronize();
 
-    // delete[] set_h;
-
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
-    printf("sets generation: %f\n\n", milliseconds);
+    printf("set generation: %f\n\n", milliseconds);
 
 }
 

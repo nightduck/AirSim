@@ -68,14 +68,12 @@ msr::airlib::MultirotorRpcLibClient* airsim_client;
 std::string airsim_hostname;
 std::string vehicle_name = "drone_1";
 
-double VOXEL_SIZE = .5; //todo: add this to tsdf msg
+double VOXEL_SIZE = .5;
 double HALF_VOXEL_SIZE = VOXEL_SIZE / 2;
 
 double truncation_distance = 4;
 double voxel_size = .5;
 bool received_first_msg = false;
-
-// std::vector<Voxel> voxels_list;
 
 std::vector<Voxel> voxels_set[NUM_BUCKETS];
 int voxels_set_size;
@@ -86,6 +84,8 @@ std::chrono::time_point<std::chrono::high_resolution_clock> global_start;
 int global_iterations = 0;
 double average = 0;
 bool first_time = true;
+
+int MAX_ITERATIONS;
 
 void print_rviz_traj(cinematography_msgs::msg::MultiDOFarray& path, std::string name, bool actor) {
     geometry_msgs::msg::PoseArray rviz_path = geometry_msgs::msg::PoseArray();
@@ -630,9 +630,6 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
 
     //Intializing M_inv
     Eigen::MatrixXd M_inv = (A_smooth + LAMBDA_3 * A_shot).inverse();
-
-    printf("host map size: %lu\n", voxel_map.size());
-    // init_set_cuda(voxels_list);
     
     int curr_voxels_set_size = voxels_set_size;
     printf("voxels_set_size: %d\n", curr_voxels_set_size);
@@ -645,8 +642,7 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
     average += duration2.count();
     std::cout << average/global_iterations << std::endl; 
 
-    int MAX_ITERATIONS;     // TODO: Make this a ROS parameter
-    for(int i = 0; i < 20; i++) {
+    for(int i = 0; i < MAX_ITERATIONS; i++) {
         auto start = std::chrono::high_resolution_clock::now();
         Eigen::Matrix<double, Eigen::Dynamic, 3> smooth_grad = traj_smoothness_gradient(drone_traj, t, K, K0, K1, K2, A_smooth);
         auto stop = std::chrono::high_resolution_clock::now(); 
@@ -750,7 +746,6 @@ void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr act
 
 void tsdf_callback(tsdf_package_msgs::msg::Tsdf::SharedPtr tsdf){
     voxel_map.clear();
-    // voxels_list.clear();
     for(int i=0;i<NUM_BUCKETS;++i){ //move to cuda
         voxels_set[i].clear();
     }
@@ -761,7 +756,6 @@ void tsdf_callback(tsdf_package_msgs::msg::Tsdf::SharedPtr tsdf){
         Key k(v.x, v.y, v.z);
         Voxel val(v.sdf, v.x, v.y, v.z);
         voxel_map[k] = val;
-        // voxels_list.push_back(val);
         size_t bucket = val.get_bucket();
         voxels_set[bucket].push_back(val);
     }
@@ -779,10 +773,10 @@ int main(int argc, char ** argv)
     node = rclcpp::Node::make_shared("motion_planner");
     clock_ = node->get_clock();
 
-    // allocate_set();
-
     node->declare_parameter<std::string>("airsim_hostname", "localhost");
     node->get_parameter("airsim_hostname", airsim_hostname);
+    node->declare_parameter<int>("max_iterations", 1);
+    node->get_parameter("max_iterations", MAX_ITERATIONS);
     airsim_client = new msr::airlib::MultirotorRpcLibClient(airsim_hostname);
 
     auto actor_traj_sub = node->create_subscription<cinematography_msgs::msg::MultiDOFarray>("/auto_cinematography/planning/actor_traj", 1, get_actor_trajectory); 
