@@ -75,12 +75,17 @@ double truncation_distance = 4;
 double voxel_size = .5;
 bool received_first_msg = false;
 
-std::vector<Voxel> voxels_list;
+// std::vector<Voxel> voxels_list;
 
 std::vector<Voxel> voxels_set[NUM_BUCKETS];
 int voxels_set_size;
 
 std::unordered_map<Key, Voxel> voxel_map;
+
+std::chrono::time_point<std::chrono::high_resolution_clock> global_start;
+int global_iterations = 0;
+double average = 0;
+bool first_time = true;
 
 void print_rviz_traj(cinematography_msgs::msg::MultiDOFarray& path, std::string name, bool actor) {
     geometry_msgs::msg::PoseArray rviz_path = geometry_msgs::msg::PoseArray();
@@ -631,10 +636,17 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
     
     int curr_voxels_set_size = voxels_set_size;
     printf("voxels_set_size: %d\n", curr_voxels_set_size);
+
+    auto start2 = std::chrono::high_resolution_clock::now();
     init_set_cuda(voxels_set, curr_voxels_set_size);
-    
+    auto stop2 = std::chrono::high_resolution_clock::now(); 
+    auto duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(stop2 - start2); 
+    std::cout << "Average Set Duration: ";
+    average += duration2.count();
+    std::cout << average/global_iterations << std::endl; 
+
     int MAX_ITERATIONS;     // TODO: Make this a ROS parameter
-    for(int i = 0; i < 1; i++) {
+    for(int i = 0; i < 20; i++) {
         auto start = std::chrono::high_resolution_clock::now();
         Eigen::Matrix<double, Eigen::Dynamic, 3> smooth_grad = traj_smoothness_gradient(drone_traj, t, K, K0, K1, K2, A_smooth);
         auto stop = std::chrono::high_resolution_clock::now(); 
@@ -652,8 +664,6 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
         Eigen::Matrix<double, Eigen::Dynamic, 3> obs_grad = obstacle_avoidance_gradient_cuda(drone_traj_cuda, voxels_set, curr_voxels_set_size, truncation_distance, voxel_size);
         Eigen::Matrix<double, Eigen::Dynamic, 3> occ_grad = occlusion_avoidance_gradient_cuda(drone_traj_cuda, actor_traj_cuda, voxels_set, curr_voxels_set_size, truncation_distance, voxel_size);
 
-        
-// + LAMBDA_2 * occ_grad
         Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = smooth_grad + LAMBDA_1 * obs_grad + LAMBDA_2 * occ_grad + LAMBDA_3 * shot_grad;
         // Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = LAMBDA_1 * obs_grad + LAMBDA_2 * occ_grad;
         // Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = smooth_grad + LAMBDA_3 * shot_grad;
@@ -681,8 +691,13 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
 // Get actor's predicted trajectory (in NED and radians)
 void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr actor_traj)
 {
+    if(first_time){
+        global_start = std::chrono::high_resolution_clock::now();
+        first_time = false;
+    }
 
     auto start = std::chrono::high_resolution_clock::now();
+    global_iterations++;
 
     if (actor_traj->points.size() == 0) {
         RCLCPP_ERROR(node->get_logger(), "Received empty actor path"); 
@@ -724,11 +739,18 @@ void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr act
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start); 
     std::cout << "Actor Traj Callback Duration: ";
     std::cout << duration.count() << std::endl;
+
+    auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(stop - global_start); 
+    std::cout << "Global Duration: ";
+    std::cout << duration1.count() << std::endl;
+
+    printf("num callbacks: %d\n", global_iterations);
+    printf("---------------------------------------------\n");
 }
 
 void tsdf_callback(tsdf_package_msgs::msg::Tsdf::SharedPtr tsdf){
     voxel_map.clear();
-    voxels_list.clear();
+    // voxels_list.clear();
     for(int i=0;i<NUM_BUCKETS;++i){ //move to cuda
         voxels_set[i].clear();
     }

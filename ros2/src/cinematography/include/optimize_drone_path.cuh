@@ -7,7 +7,7 @@
 #include <stdio.h> 
 
 __constant__
-const int NUM_BUCKETS = 50000;
+const int NUM_BUCKETS = 100000;
 
 struct MultiDOF{
     double x;
