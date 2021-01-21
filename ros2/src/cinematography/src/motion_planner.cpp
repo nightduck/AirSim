@@ -79,9 +79,19 @@ double HALF_VOXEL_SIZE = VOXEL_SIZE / 2;
 
 double truncation_distance = 4;
 double voxel_size = .5;
-std::vector<Voxel> voxels_list;
+bool received_first_msg = false;
+
+std::vector<Voxel> voxels_set[NUM_BUCKETS];
+int voxels_set_size;
 
 std::unordered_map<Key, Voxel> voxel_map;
+
+std::chrono::time_point<std::chrono::high_resolution_clock> global_start;
+int global_iterations = 0;
+double average = 0;
+bool first_time = true;
+
+int MAX_ITERATIONS;
 
 // Calculate an ideal drone trajectory using a given actor trajectory (both in NED and radians)
 cinematography_msgs::msg::MultiDOFarray calc_ideal_drone_traj(const cinematography_msgs::msg::MultiDOFarray &  actor_traj) {
@@ -610,20 +620,40 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
 
     //Intializing M_inv
     Eigen::MatrixXd M_inv = (A_smooth + LAMBDA_3 * A_shot).inverse();
+    
+    int curr_voxels_set_size = voxels_set_size;
+    printf("voxels_set_size: %d\n", curr_voxels_set_size);
 
-    int MAX_ITERATIONS;     // TODO: Make this a ROS parameter
-    for(int i = 0; i < 20; i++) {
+    auto start2 = std::chrono::high_resolution_clock::now();
+    init_set_cuda(voxels_set, curr_voxels_set_size);
+    auto stop2 = std::chrono::high_resolution_clock::now(); 
+    auto duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(stop2 - start2); 
+    std::cout << "Average Set Duration: ";
+    average += duration2.count();
+    std::cout << average/global_iterations << std::endl; 
+
+    for(int i = 0; i < MAX_ITERATIONS; i++) {
+        auto start = std::chrono::high_resolution_clock::now();
         Eigen::Matrix<double, Eigen::Dynamic, 3> smooth_grad = traj_smoothness_gradient(drone_traj, t, K, K0, K1, K2, A_smooth);
+        auto stop = std::chrono::high_resolution_clock::now(); 
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start); 
+        std::cout << "smooth grad duration: ";
+        std::cout << duration.count() << std::endl;
+
+        auto start1 = std::chrono::high_resolution_clock::now();
         Eigen::Matrix<double, Eigen::Dynamic, 3> shot_grad = shot_quality_gradient(drone_traj, ideal_traj, A_shot);
+        auto stop1 = std::chrono::high_resolution_clock::now(); 
+        auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(stop1 - start1); 
+        std::cout << "shot grad duration: ";
+        std::cout << duration1.count() << std::endl;
 
-        // Eigen::Matrix<double, Eigen::Dynamic, 3> obs_grad = obstacle_avoidance_gradient_cuda(drone_traj_cuda, voxels_list, truncation_distance, voxel_size);
-        // Eigen::Matrix<double, Eigen::Dynamic, 3> occ_grad = occlusion_avoidance_gradient_cuda(drone_traj_cuda, actor_traj_cuda, voxels_list, truncation_distance, voxel_size);
+        Eigen::Matrix<double, Eigen::Dynamic, 3> obs_grad = obstacle_avoidance_gradient_cuda(drone_traj_cuda, voxels_set, curr_voxels_set_size, truncation_distance, voxel_size);
+        Eigen::Matrix<double, Eigen::Dynamic, 3> occ_grad = occlusion_avoidance_gradient_cuda(drone_traj_cuda, actor_traj_cuda, voxels_set, curr_voxels_set_size, truncation_distance, voxel_size);
 
-        
+        Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = smooth_grad + LAMBDA_1 * obs_grad + LAMBDA_2 * occ_grad + LAMBDA_3 * shot_grad;
+        // Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = LAMBDA_1 * obs_grad + LAMBDA_2 * occ_grad;
+        // Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = smooth_grad + LAMBDA_3 * shot_grad;
 
-        //Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = smooth_grad + LAMBDA_1 * obs_grad + LAMBDA_2 * occ_grad + LAMBDA_3 * shot_grad;
-        //Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = LAMBDA_1 * obs_grad + LAMBDA_2 * occ_grad + LAMBDA_3 * shot_grad;
-        Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = smooth_grad + LAMBDA_3 * shot_grad;
         //Todo:
         // if((j_grad.transpose()*M_inv * j_grad).array().pow(2) / 2 < e0){
           
@@ -647,6 +677,14 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
 // Get actor's predicted trajectory (in NED and radians)
 void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr actor_traj)
 {
+    if(first_time){
+        global_start = std::chrono::high_resolution_clock::now();
+        first_time = false;
+    }
+
+    auto start = std::chrono::high_resolution_clock::now();
+    global_iterations++;
+
     if (actor_traj->points.size() == 0) {
         RCLCPP_ERROR(node->get_logger(), "Received empty actor path"); 
         return;
@@ -658,18 +696,21 @@ void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr act
     origin.point.x = 0;
     origin.point.y = 0;
     origin.point.z = 0;
-    geometry_msgs::msg::PointStamped point = tf_buffer->transform<geometry_msgs::msg::PointStamped>(origin, world_frame);
+    // geometry_msgs::msg::PointStamped point = tf_buffer->transform<geometry_msgs::msg::PointStamped>(origin, world_frame);
     cinematography_msgs::msg::MultiDOF currentState;
-    currentState.x = point.point.x;
-    currentState.y = point.point.y;
-    currentState.z = point.point.z;
+    // currentState.x = point.point.x;
+    // currentState.y = point.point.y;
+    // currentState.z = point.point.z;
+    currentState.x = 0;
+    currentState.y = 0;
+    currentState.z = 0;
     currentState.vx = currentState.vy = currentState.vz = currentState.ax = currentState.ay = currentState.az = 0;
 
     cinematography_msgs::msg::MultiDOFarray drone_path;
     drone_path = calc_ideal_drone_traj(*actor_traj);        // Calculate the ideal observation point for every point in actor trajectory
     move_traj_start(drone_path, currentState);              // Skew ideal path, so it starts at the drone's current position
 
-    //optimize_trajectory(drone_path, *actor_traj);
+    optimize_trajectory(drone_path, *actor_traj);
 
     face_actor(drone_path, *actor_traj);                    // Set all yaws to fact their corresponding point in the actor trajectory
 
@@ -677,32 +718,53 @@ void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr act
     drone_path.header.stamp = clock_->now();
     path_found = true;
 
-    RCLCPP_INFO(node->get_logger(), "Publishing drone trajectory");
+    RCLCPP_INFO(node->get_logger(), "Publishing drone trajectory\n");
 
     traj_pub->publish(drone_path);
+
+    auto stop = std::chrono::high_resolution_clock::now(); 
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start); 
+    std::cout << "Actor Traj Callback Duration: ";
+    std::cout << duration.count() << std::endl;
+
+    auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(stop - global_start); 
+    std::cout << "Global Duration: ";
+    std::cout << duration1.count() << std::endl;
+
+    printf("num callbacks: %d\n", global_iterations);
+    printf("---------------------------------------------\n");
 }
 
 void tsdf_callback(tsdf_package_msgs::msg::Tsdf::SharedPtr tsdf){
     voxel_map.clear();
-    voxels_list.clear();
+    for(int i=0;i<NUM_BUCKETS;++i){ //move to cuda
+        voxels_set[i].clear();
+    }
+
     std::vector<tsdf_package_msgs::msg::Voxel> voxels = tsdf->voxels;
+    voxels_set_size = voxels.size();
     for (tsdf_package_msgs::msg::Voxel v : voxels){
         Key k(v.x, v.y, v.z);
         Voxel val(v.sdf, v.x, v.y, v.z);
         voxel_map[k] = val;
-        voxels_list.push_back(val);
+        size_t bucket = val.get_bucket();
+        voxels_set[bucket].push_back(val);
     }
 
-    truncation_distance = tsdf->truncation_distance;
-    voxel_size = tsdf->voxel_size;
+    if(!received_first_msg){
+        truncation_distance = tsdf->truncation_distance;
+        voxel_size = tsdf->voxel_size;
+        received_first_msg = true;
+    }
 }
 
 int main(int argc, char ** argv)
 {
     rclcpp::init(argc, argv);
-    sleep(10);
     node = rclcpp::Node::make_shared("motion_planner");
     clock_ = node->get_clock();
+
+    allocate_bucket_indices();
 
     node->declare_parameter<std::string>("airsim_hostname", "localhost");
     node->get_parameter("airsim_hostname", airsim_hostname);
@@ -710,6 +772,8 @@ int main(int argc, char ** argv)
     node->get_parameter("world_frame", world_frame);
     node->declare_parameter<std::string>("drone_frame", "drone_1/camera");
     node->get_parameter("drone_frame", drone_frame);
+    node->declare_parameter<int>("max_iterations", 1);
+    node->get_parameter("max_iterations", MAX_ITERATIONS);
     airsim_client = new msr::airlib::MultirotorRpcLibClient(airsim_hostname);
 
     tf_buffer = new tf2_ros::Buffer(node->get_clock()); 

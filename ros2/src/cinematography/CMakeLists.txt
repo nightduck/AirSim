@@ -125,7 +125,7 @@ add_subdirectory(tkDNN)
 # #-------------------------------------------------------------------------------
 # # CUDA
 # #-------------------------------------------------------------------------------
-# find_package(CUDA 9.0 REQUIRED)
+# find_package(CUDA REQUIRED)
 # SET(CUDA_SEPARABLE_COMPILATION ON)
 # #set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -arch=sm_30 --compiler-options '-fPIC'")
 # set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} --maxrregcount=32)
@@ -139,20 +139,10 @@ add_subdirectory(tkDNN)
 # cuda_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include ${CUDA_INCLUDE_DIRS} ${CUDNN_INCLUDE_DIRS})
 # cuda_add_library(kernels SHARED ${tkdnn_CUSRC})
 
-cuda_add_library(motion_planner_cuda SHARED
+cuda_add_library(motion_planner_cuda STATIC
   src/optimize_drone_path.cu
   OPTIONS -g -shared -Xcompiler -fPIC -rdc=true
 )
-
-install(
-  TARGETS motion_planner_cuda
-  EXPORT motion_planner_cuda
-  LIBRARY DESTINATION lib
-  ARCHIVE DESTINATION lib
-  RUNTIME DESTINATION bin
-  INCLUDES DESTINATION include
-)
-
 
 # #-------------------------------------------------------------------------------
 # # Build Libraries
@@ -213,7 +203,7 @@ if(BUILD_TESTING)
 endif()
 
 install(TARGETS
-        actor_detection heading_estimation motion_forecasting motion_planner follow_trajectory airsim_ros2_wrapper debug_viz
+        actor_detection heading_estimation motion_forecasting motion_planner motion_planner_cuda follow_trajectory airsim_ros2_wrapper debug_viz
         DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/
         DESTINATION include)
