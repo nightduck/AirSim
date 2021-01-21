@@ -94,10 +94,11 @@ void get_voxels(const MultiDOF point_start, const MultiDOF point_end, Eigen::Mat
         // printf("deltaX: %f, deltaY: %f, deltaZ:%f\n\n", tDeltaX, tDeltaY, tDeltaZ);
         size++;
 
-        // if(size > 200){
-        //     // printf("thread: %d, current_vol_center: (%f,%f,%f), end_center: (%f,%f,%f), start_center: (%f,%f,%f), start: (%f,%f,%f), end: (%f,%f,%f)\n", thread_index, current_vol_center(0), current_vol_center(1), current_vol_center(2), end_voxel_center(0), end_voxel_center(1), end_voxel_center(2), start_voxel_center(0), start_voxel_center(1), start_voxel_center(2), start(0), start(1), start(2), end(0), end(1), end(2));
-        //     break;
-        // }
+        if(size >= 500){
+            printf("\n!!!!ERROR IN VOXEL TRAVERSAL!!!!\n\n");
+            // printf("current_vol_center: (%f,%f,%f), end_center: (%f,%f,%f), start_center: (%f,%f,%f), start: (%f,%f,%f), end: (%f,%f,%f)\n", current_vol_center(0), current_vol_center(1), current_vol_center(2), end_voxel_center(0), end_voxel_center(1), end_voxel_center(2), start_voxel_center(0), start_voxel_center(1), start_voxel_center(2), start(0), start(1), start(2), end(0), end(1), end(2));
+            break;
+        }
         
         if(tMaxX < tMaxY){
             if(tMaxX < tMaxZ)
@@ -444,7 +445,6 @@ void init_set_cuda(std::vector<Voxel> voxels_set[], int & voxels_set_size){
     }
 
     cudaFree(set_d); //free previous memory allocated for set
-    cudaFree(bucket_indices_d);  
 
     cudaMalloc(&set_d, sizeof(Voxel)*voxels_set_size);
 
@@ -459,7 +459,6 @@ void init_set_cuda(std::vector<Voxel> voxels_set[], int & voxels_set_size){
         dst += sz;
     }
 
-    cudaMalloc(&bucket_indices_d, sizeof(int) * (NUM_BUCKETS + 1));
     cudaMemcpyAsync(bucket_indices_d, bucket_indices_h, sizeof(int) * (NUM_BUCKETS + 1), cudaMemcpyHostToDevice);
     cudaDeviceSynchronize();
 
@@ -469,6 +468,11 @@ void init_set_cuda(std::vector<Voxel> voxels_set[], int & voxels_set_size){
     cudaEventElapsedTime(&milliseconds, start, stop);
     printf("set generation: %f\n\n", milliseconds);
 
+}
+
+void allocate_bucket_indices(){
+    cudaMalloc(&bucket_indices_d, sizeof(int) * (NUM_BUCKETS + 1));
+    gpuErrchk(cudaPeekAtLastError());
 }
 
 Eigen::Matrix<double, Eigen::Dynamic, 3> obstacle_avoidance_gradient_cuda(std::vector<MultiDOF>  & drone_traj, std::vector<Voxel> voxels_set[], int & voxels_set_size, double & truncation_distance, double & voxel_size){

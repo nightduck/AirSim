@@ -773,6 +773,8 @@ int main(int argc, char ** argv)
     node = rclcpp::Node::make_shared("motion_planner");
     clock_ = node->get_clock();
 
+    allocate_bucket_indices();
+
     node->declare_parameter<std::string>("airsim_hostname", "localhost");
     node->get_parameter("airsim_hostname", airsim_hostname);
     node->declare_parameter<int>("max_iterations", 1);

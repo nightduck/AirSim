@@ -114,5 +114,7 @@ Eigen::Matrix<double, Eigen::Dynamic, 3> obstacle_avoidance_gradient_cuda(std::v
 Eigen::Matrix<double, Eigen::Dynamic, 3> occlusion_avoidance_gradient_cuda(std::vector<MultiDOF>  & drone_traj, 
 std::vector<MultiDOF> & actor_traj, std::vector<Voxel> voxels_set[], int & voxels_set_size, double & truncation_distance, double & voxel_size);
 
+void allocate_bucket_indices();
+
 void init_set_cuda(std::vector<Voxel> voxels_set[], int & voxels_set_size);
 #endif
