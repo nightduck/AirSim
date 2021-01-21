@@ -13,7 +13,7 @@ def generate_launch_description():
                 ("bounding_box", "/auto_cinematography/vision/bounding_box")
             ],
             parameters=[
-                {"tensorrt_engine" : "hde_deer_airsim.rt"}
+                {"tensorrt_engine" : "deer_hde_fp32.rt"}
             ]
         )
     ])

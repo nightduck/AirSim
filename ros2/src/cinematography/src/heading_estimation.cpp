@@ -42,8 +42,8 @@ private:
     rclcpp::Clock clock = rclcpp::Clock(RCL_SYSTEM_TIME);
 
     tk::dnn::NetworkRT* netRT;
+    //tk::dnn::Network* net;
     dnnType *input_d;
-    dnnType *out_d;
     const int nBatches = 1;
 
     #ifdef OPENCV_CUDACONTRIB
@@ -76,15 +76,20 @@ private:
             int idx = i * imagePreproc.rows * imagePreproc.cols;
             memcpy((void *)&input[idx + netRT->input_dim.tot()*bi], (void *)bgr[i].data, imagePreproc.rows * imagePreproc.cols * sizeof(dnnType));
         }
-        checkCuda(cudaMemcpyAsync(input_d+ netRT->input_dim.tot()*bi, input + netRT->input_dim.tot()*bi, netRT->input_dim.tot() * sizeof(dnnType), cudaMemcpyHostToDevice, netRT->stream));
+
+        checkCuda( cudaMemcpy(input_d, input, netRT->input_dim.tot()*bi * sizeof(dnnType), cudaMemcpyHostToDevice) );
+        //checkCuda(cudaMemcpyAsync(input_d+ netRT->input_dim.tot()*bi, input + netRT->input_dim.tot()*bi, netRT->input_dim.tot() * sizeof(dnnType), cudaMemcpyHostToDevice, netRT->stream));
     }
 
-    void postprocess(){
-        out_d = (float*)malloc(netRT->output_dim.tot() * sizeof(dnnType));
-        checkCuda(cudaMemcpy(out_d, netRT->output, netRT->output_dim.tot() * sizeof(dnnType), cudaMemcpyDeviceToHost));
+    dnnType* postprocess(dnnType* output_d){
+        float* out = (float*)malloc(netRT->output_dim.tot() * sizeof(dnnType));
+        checkCuda(cudaDeviceSynchronize());
+        checkCuda(cudaMemcpy(out, output_d, netRT->output_dim.tot() * sizeof(dnnType), cudaMemcpyDeviceToHost));
+        checkCuda(cudaDeviceSynchronize());
 
-        out_d[0] = (out_d[0] * 2) - 1;
-        out_d[1] = (out_d[1] * 2) - 1;
+        out[0] = (out[0] * 2) - 1;
+        out[1] = (out[1] * 2) - 1;
+        return out;
     }
 
 
@@ -92,16 +97,15 @@ private:
         preprocess(in, 0);
 
         tk::dnn::dataDim_t dim = netRT->input_dim;
+        dnnType *output_d;
 
         float total_time = 0;
         TKDNN_TSTART
-        netRT->infer(dim, input_d);
+        output_d = netRT->infer(dim, input_d);
         TKDNN_TSTOP
         total_time+= t_ns;
 
-        postprocess();
-
-        return out_d;
+        return postprocess(output_d);
     }
 
     void processImage(const cinematography_msgs::msg::BoundingBox::SharedPtr msg) {
@@ -158,8 +162,8 @@ private:
 
         //float* array = infer(cv_ptr->image);
 
-        double hde0 = 0.5; //array[0];   // Output #1
-        double hde1 = 0.5; //array[1];   // Output #2
+        double hde0 = 0.813; //array[0];   // Output #1
+        double hde1 = 0.5;   //array[1];   // Output #2
 
         // Get the rotation of the actor relative to camera
         double angle = atan2(hde1, hde0);
@@ -183,12 +187,12 @@ public:
         bb_sub = this->create_subscription<cinematography_msgs::msg::BoundingBox>("bounding_box", 50, std::bind(&HeadingEstimation::processImage, this, _1));
         bb_pub = this->create_publisher<sensor_msgs::msg::Image>("bounding_box_out", 50);
 
-        netRT = new tk::dnn::NetworkRT(NULL, trt_engine_filename.c_str(), tk::dnn::NCHW);
+        //netRT = new tk::dnn::NetworkRT(NULL, trt_engine_filename.c_str());
         // These 3 lines fix a bug in the NetworkRT constructor
         
         // Allocate memory for input buffers
-        checkCuda(cudaMallocHost(&input, sizeof(dnnType) * netRT->input_dim.tot() * nBatches));
-        checkCuda(cudaMalloc(&input_d, sizeof(dnnType) * netRT->input_dim.tot() * nBatches));
+        // checkCuda(cudaMallocHost(&input, sizeof(dnnType) * netRT->input_dim.tot() * nBatches));
+        // checkCuda(cudaMalloc(&input_d, sizeof(dnnType) * netRT->input_dim.tot() * nBatches));
     }
 };
 
