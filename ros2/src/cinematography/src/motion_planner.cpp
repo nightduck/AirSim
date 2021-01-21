@@ -696,14 +696,14 @@ void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr act
     origin.point.x = 0;
     origin.point.y = 0;
     origin.point.z = 0;
-    // geometry_msgs::msg::PointStamped point = tf_buffer->transform<geometry_msgs::msg::PointStamped>(origin, world_frame);
+    geometry_msgs::msg::PointStamped point = tf_buffer->transform<geometry_msgs::msg::PointStamped>(origin, world_frame);
     cinematography_msgs::msg::MultiDOF currentState;
-    // currentState.x = point.point.x;
-    // currentState.y = point.point.y;
-    // currentState.z = point.point.z;
-    currentState.x = 0;
-    currentState.y = 0;
-    currentState.z = 0;
+    currentState.x = point.point.x;
+    currentState.y = point.point.y;
+    currentState.z = point.point.z;
+    // currentState.x = 0;
+    // currentState.y = 0;
+    // currentState.z = 0;
     currentState.vx = currentState.vy = currentState.vz = currentState.ax = currentState.ay = currentState.az = 0;
 
     cinematography_msgs::msg::MultiDOFarray drone_path;
