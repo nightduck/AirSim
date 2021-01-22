@@ -42,8 +42,6 @@ using namespace std;
 
 rclcpp::Publisher<cinematography_msgs::msg::MultiDOFarray>::SharedPtr traj_pub;
 
-bool path_found = false;
-
 // // TODO: change the bound to something meaningful
 // double x__low_bound__global = -200, x__high_bound__global = 200;
 // double y__low_bound__global = -200 , y__high_bound__global = 200;
@@ -74,17 +72,12 @@ tf2_ros::TransformListener* tf_listener;
 std::string world_frame;
 std::string drone_frame;
 
-double VOXEL_SIZE = .5; //todo: add this to tsdf msg
-double HALF_VOXEL_SIZE = VOXEL_SIZE / 2;
-
 double truncation_distance = 4;
 double voxel_size = .5;
 bool received_first_msg = false;
 
 std::vector<Voxel> voxels_set[NUM_BUCKETS];
 int voxels_set_size;
-
-std::unordered_map<Key, Voxel> voxel_map;
 
 std::chrono::time_point<std::chrono::high_resolution_clock> global_start;
 int global_iterations = 0;
@@ -101,11 +94,6 @@ cinematography_msgs::msg::MultiDOFarray calc_ideal_drone_traj(const cinematograp
     float horiz_dist = cos(viewport_pitch) * viewport_distance;
     float height = sin(viewport_pitch) * viewport_distance;
 
-    //used to calculate velocity of each point
-    cinematography_msgs::msg::MultiDOF last_point;
-    //using previous point to calculate velocity so skip first point in for loop
-    bool firstPoint = true;
-
     // For each point in the actor's trajectory...
     for (cinematography_msgs::msg::MultiDOF point : actor_traj.points) {
         cinematography_msgs::msg::MultiDOF n;
@@ -116,49 +104,17 @@ cinematography_msgs::msg::MultiDOFarray calc_ideal_drone_traj(const cinematograp
         n.z = point.z - height;
         n.yaw = point.yaw + M_PI + viewport_heading;
         n.duration = point.duration;
-        //set velocity
-        if(!firstPoint){
-            n.vx = (n.x - last_point.x) / n.duration;
-            n.vy = (n.y - last_point.y) / n.duration;
-            n.vz = (n.z - last_point.z) / n.duration;
-        }
-        else{
-            firstPoint = false;
-        }
 
         if (n.yaw > M_PI) {
             n.yaw -= 2*M_PI;
         }
         drone_traj.points.push_back(n);
-        last_point = n;
-    }
-
-    //set velocity of first point
-    if(drone_traj.points.size() > 1){
-        drone_traj.points[0].vx = drone_traj.points[1].vx;
-        drone_traj.points[0].vy = drone_traj.points[1].vy;
-        drone_traj.points[0].vz = drone_traj.points[1].vz;
     }
     
     return drone_traj;
 }
 
-// Moves the starting point to the drone's current position, leave the final point in place, and all the intermediate points are stretched in between
-void move_traj_start(cinematography_msgs::msg::MultiDOFarray& drone_traj, cinematography_msgs::msg::MultiDOF& drone_pose) {
-    cinematography_msgs::msg::MultiDOF traj_offset;
-    traj_offset.x = drone_traj.points[0].x - drone_pose.x;
-    traj_offset.y = drone_traj.points[0].y - drone_pose.y;
-    traj_offset.z = drone_traj.points[0].z - drone_pose.z;
-
-
-    for(int i = 0; i < drone_traj.points.size(); i++) {
-        float weight = 1.0 - (i / (float)(drone_traj.points.size() - 1));    // Fraction of the offset to subtract
-        drone_traj.points[i].x -= weight * (traj_offset.x);
-        drone_traj.points[i].y -= weight * (traj_offset.y);
-        drone_traj.points[i].z -= weight * (traj_offset.z);
-        drone_traj.points[i].ax = drone_traj.points[i].ay = drone_traj.points[i].az = 0;
-    }
-
+void update_traj_position_derivatives(cinematography_msgs::msg::MultiDOFarray& drone_traj){
     for(int i = 0; i < drone_traj.points.size() - 1; i++) {
         drone_traj.points[i].vx = (drone_traj.points[i+1].x - drone_traj.points[i].x) / drone_traj.points[i].duration;
         drone_traj.points[i].vy = (drone_traj.points[i+1].y - drone_traj.points[i].y) / drone_traj.points[i].duration;
@@ -185,6 +141,26 @@ void move_traj_start(cinematography_msgs::msg::MultiDOFarray& drone_traj, cinema
 
     drone_traj.points[drone_traj.points.size() - 2] = penultimitePoint;
     drone_traj.points[drone_traj.points.size() - 1] = finalPoint;
+
+}
+
+// Moves the starting point to the drone's current position, leave the final point in place, and all the intermediate points are stretched in between
+void move_traj_start(cinematography_msgs::msg::MultiDOFarray& drone_traj, cinematography_msgs::msg::MultiDOF& drone_pose) {
+    cinematography_msgs::msg::MultiDOF traj_offset;
+    traj_offset.x = drone_traj.points[0].x - drone_pose.x;
+    traj_offset.y = drone_traj.points[0].y - drone_pose.y;
+    traj_offset.z = drone_traj.points[0].z - drone_pose.z;
+
+
+    for(int i = 0; i < drone_traj.points.size(); i++) {
+        float weight = 1.0 - (i / (float)(drone_traj.points.size() - 1));    // Fraction of the offset to subtract
+        drone_traj.points[i].x -= weight * (traj_offset.x);
+        drone_traj.points[i].y -= weight * (traj_offset.y);
+        drone_traj.points[i].z -= weight * (traj_offset.z);
+        drone_traj.points[i].ax = drone_traj.points[i].ay = drone_traj.points[i].az = 0;
+    }
+
+    update_traj_position_derivatives(drone_traj);
 
     return;
 }
@@ -221,17 +197,12 @@ void face_actor(cinematography_msgs::msg::MultiDOFarray& drone_traj, const cinem
     return;
 }
 
-double floor_fun(const double & x, const double & scale){
-    return floor(x*scale) / scale;
+size_t get_bucket(const Eigen::Matrix<double, 3, 1> & position){
+    return abs((((int)position(0)*73856093) ^ ((int)position(1)*19349669) ^ ((int)position(2)*83492791)) % NUM_BUCKETS);
 }
 
-/*
-* Given world point return voxel center
-*/
-Key get_voxel_key_from_point(const double & x, const double & y, const double & z){
-    double scale = 1 / VOXEL_SIZE;
-    Key k(floor_fun(x, scale) + HALF_VOXEL_SIZE, floor_fun(y, scale) + HALF_VOXEL_SIZE, floor_fun(z, scale) + HALF_VOXEL_SIZE);
-    return k;
+double floor_fun(const double & x, const double & scale){
+    return floor(x*scale) / scale;
 }
 
 /*
@@ -263,16 +234,18 @@ bool check_floating_point_vectors_equal(Eigen::Matrix<double, 3, 1> A, Eigen::Ma
 * Get voxels between point start and point end
 * For more information on voxel traversal algo: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.42.3443&rep=rep1&type=pdf
 */
-void get_voxels(const cinematography_msgs::msg::MultiDOF pointStart, const cinematography_msgs::msg::MultiDOF pointEnd, std::vector<Key> & voxelKeys, const double & volume_size){
+std::vector<Eigen::Matrix<double, 3, 1>> get_voxels(const cinematography_msgs::msg::MultiDOF point_start, const cinematography_msgs::msg::MultiDOF point_end, const double & volume_size){
+    
+    std::vector<Eigen::Matrix<double, 3, 1>> traversed_voxels;
     const double half_volume_size = volume_size / 2;
     const double epsilon = volume_size / 4;
     const double volume_size_plus_epsilon = volume_size + epsilon;
     const double volume_size_minus_epsilon = volume_size - epsilon;
-    Eigen::Matrix<double, 3, 1> start(pointStart.x, pointStart.y, pointStart.z);
-    Eigen::Matrix<double, 3, 1> end(pointEnd.x, pointEnd.y, pointEnd.z);
+    Eigen::Matrix<double, 3, 1> start(point_start.x, point_start.y, point_start.z);
+    Eigen::Matrix<double, 3, 1> end(point_end.x, point_end.y, point_end.z);
     //   equation of line = u+tv
-    Eigen::Matrix<double, 3, 1> u(pointStart.x, pointStart.y, pointStart.z);
-    Eigen::Matrix<double, 3, 1> v(pointEnd.x - pointStart.x, pointEnd.y - pointStart.y, pointEnd.z- pointStart.z);
+    Eigen::Matrix<double, 3, 1> u(point_start.x, point_start.y, point_start.z);
+    Eigen::Matrix<double, 3, 1> v(point_end.x - point_start.x, point_end.y - point_start.y, point_end.z- point_start.z);
     double stepX = v(0) > 0 ? volume_size : -1 * volume_size;
     double stepY = v(1) > 0 ? volume_size : -1 * volume_size;
     double stepZ = v(2) > 0 ? volume_size : -1 * volume_size;
@@ -288,9 +261,13 @@ void get_voxels(const cinematography_msgs::msg::MultiDOF pointStart, const cinem
     Eigen::Matrix<double, 3, 1> end_voxel_center = get_volume_center_from_point(end, volume_size);
 
     while(!check_floating_point_vectors_equal(current_vol_center, end_voxel_center, epsilon)){
-        //add traversed voxel key to list of voxel keys
-        Key voxel_key = get_voxel_key_from_point(current_vol_center(0), current_vol_center(1), current_vol_center(2));
-        voxelKeys.push_back(voxel_key);
+        //add traversed voxel to list of voxels
+        traversed_voxels.push_back(current_vol_center);
+
+        if(traversed_voxels.size() >= 300){ //change to check if any of the points have been overrun
+            printf("\n!!!VOXEL TRAVERSAL ISSUE!!!\n\n");
+            return traversed_voxels;
+        }
         
         if(tMaxX < tMaxY){
             if(tMaxX < tMaxZ)
@@ -355,13 +332,13 @@ void get_voxels(const cinematography_msgs::msg::MultiDOF pointStart, const cinem
         if((diff(0) < volume_size_minus_epsilon && diff(1) < volume_size_minus_epsilon && diff(2) < volume_size_minus_epsilon) 
         || (diff(0) > volume_size_plus_epsilon || diff(1) > volume_size_plus_epsilon || diff(2) > volume_size_plus_epsilon))
         {
-            return;
+            return traversed_voxels;
         }
     }      
 
-    //add traversed voxel key to list of voxel keys
-    Key voxel_key = get_voxel_key_from_point(current_vol_center(0), current_vol_center(1), current_vol_center(2));
-    voxelKeys.push_back(voxel_key);
+    //add traversed voxel to list of voxels
+    traversed_voxels.push_back(current_vol_center);
+    return traversed_voxels;
 }
 
 /*
@@ -379,20 +356,12 @@ inline double get_cost(const double & sdf){
 
 }
 
-inline double get_voxel_cost(const Key k){
-    // std::unordered_map<Key,Voxel>::const_iterator it;
-    // it = voxel_map.find (k); //look for voxel if it exists, then it lies within truncation distance of a surface
-    // if ( it != voxel_map.end() )
-    // {
-    //     Voxel voxel = it->second;
-    //     return get_cost(voxel.sdf);
-    // }
+inline double get_voxel_cost(const Eigen::Matrix<double, 3, 1> & voxel_pos){
 
-    Voxel voxel(0, k.x, k.y,k.z);
-    size_t bucket = voxel.get_bucket();
+    size_t bucket = get_bucket(voxel_pos);
 
     for(Voxel v : voxels_set[bucket]){
-        if(check_floating_point_vectors_equal(voxel.position, v.position, voxel_size)){
+        if(check_floating_point_vectors_equal(voxel_pos, v.position, voxel_size)){
             return get_cost(v.sdf);
         }
     }
@@ -401,26 +370,26 @@ inline double get_voxel_cost(const Key k){
 }
 
 /*
-* Compute cost gradient for a voxel specified by key k. Check cost values of key k and voxels around
+* Compute cost gradient for a voxel specified by voxel_pos. Check cost values of voxel at voxel_pos and voxels around
 */
-Eigen::Matrix<double, 3, 1> get_voxel_cost_gradient(const Key k){
-    double cost = get_voxel_cost(k);
+Eigen::Matrix<double, 3, 1> get_voxel_cost_gradient(const Eigen::Matrix<double, 3, 1> & voxel_pos){
+    double cost = get_voxel_cost(voxel_pos);
     Eigen::Matrix<double, 3, 1> gradient_val;
 
-    Key xNext(k.x + VOXEL_SIZE, k.y, k.z);
-    Key xPrev(k.x - VOXEL_SIZE, k.y, k.z);
+    Eigen::Matrix<double, 3, 1> xNext(voxel_pos(0) + voxel_size, voxel_pos(1), voxel_pos(2));
+    Eigen::Matrix<double, 3, 1> xPrev(voxel_pos(0) - voxel_size, voxel_pos(1), voxel_pos(2));
     double xDiffNext = get_voxel_cost(xNext) - cost;
     double xDiffPrev = cost - get_voxel_cost(xPrev);
     gradient_val(0) = (xDiffNext + xDiffPrev) / 2;
 
-    Key yNext(k.x, k.y + VOXEL_SIZE, k.z);
-    Key yPrev(k.x, k.y - VOXEL_SIZE, k.z);
+    Eigen::Matrix<double, 3, 1> yNext(voxel_pos(0), voxel_pos(1) + voxel_size, voxel_pos(2));
+    Eigen::Matrix<double, 3, 1> yPrev(voxel_pos(0), voxel_pos(1) - voxel_size, voxel_pos(2));
     double yDiffNext = get_voxel_cost(yNext) - cost;
     double yDiffPrev = cost - get_voxel_cost(yPrev);
     gradient_val(1) = (yDiffNext + yDiffPrev) / 2;
 
-    Key zNext(k.x, k.y, k.z + VOXEL_SIZE);
-    Key zPrev(k.x, k.y, k.z - VOXEL_SIZE);
+    Eigen::Matrix<double, 3, 1> zNext(voxel_pos(0), voxel_pos(1), voxel_pos(2) + voxel_size);
+    Eigen::Matrix<double, 3, 1> zPrev(voxel_pos(0), voxel_pos(1), voxel_pos(2) - voxel_size);
     double zDiffNext = get_voxel_cost(zNext) - cost;
     double zDiffPrev = cost - get_voxel_cost(zPrev);
     gradient_val(2) = (zDiffNext + zDiffPrev) / 2;
@@ -494,14 +463,13 @@ double obstacle_avoidance(const cinematography_msgs::msg::MultiDOFarray& drone_t
     std::vector<cinematography_msgs::msg::MultiDOF> points = drone_traj.points;
     double cost = 0;
     for(size_t i = 0; i<points.size()-1; ++i){
-        cinematography_msgs::msg::MultiDOF pointStart = points[i];
-        cinematography_msgs::msg::MultiDOF pointEnd = points[i+1];
-        std::vector<Key> voxelKeys;
-        get_voxels(pointStart, pointEnd, voxelKeys, VOXEL_SIZE); //get traversed voxels between each drone point
-        double velocity = sqrt(pow(pointEnd.vx, 2) + pow(pointEnd.vy ,2) + pow(pointEnd.vz , 2));
+        cinematography_msgs::msg::MultiDOF point_start = points[i];
+        cinematography_msgs::msg::MultiDOF point_end = points[i+1];
+        std::vector<Eigen::Matrix<double, 3, 1>> traversed_voxels = get_voxels(point_start, point_end, voxel_size); //get traversed voxels between each drone point
+        double velocity = sqrt(pow(point_end.vx, 2) + pow(point_end.vy ,2) + pow(point_end.vz , 2));
 
-        for(size_t j = 1; j<voxelKeys.size(); ++j){ //skip first voxel for each drone point so not double counting voxel cost
-            cost += get_voxel_cost(voxelKeys[j]) * velocity;
+        for(size_t j = 1; j<traversed_voxels.size(); ++j){ //skip first voxel for each drone point so not double counting voxel cost
+            cost += get_voxel_cost(traversed_voxels[j]) * velocity;
         }
     }
     return cost;
@@ -512,16 +480,15 @@ double occlusion_avoidance(const cinematography_msgs::msg::MultiDOFarray& drone_
     std::vector<cinematography_msgs::msg::MultiDOF> actor_points = actor_traj.points;
     double cost = 0;
     for(size_t i = 1; i<drone_points.size(); ++i){ // skips first point since the drone is already there
-      cinematography_msgs::msg::MultiDOF pointStart = drone_points[i];
-      cinematography_msgs::msg::MultiDOF pointEnd = actor_points[i];
-      std::vector<Key> voxelKeys;
-      get_voxels(pointStart, pointEnd, voxelKeys, VOXEL_SIZE); //get voxels on 2d manifold between actor and drone traj
-      double drone_traj_velocity = sqrt(pow(pointStart.vx, 2) + pow(pointStart.vy ,2) + pow(pointStart.vz , 2));
+      cinematography_msgs::msg::MultiDOF point_start = drone_points[i];
+      cinematography_msgs::msg::MultiDOF point_end = actor_points[i];
+      std::vector<Eigen::Matrix<double, 3, 1>> traversed_voxels = get_voxels(point_start, point_end, voxel_size); //get voxels on 2d manifold between actor and drone traj
+      double drone_traj_velocity = sqrt(pow(point_start.vx, 2) + pow(point_start.vy ,2) + pow(point_start.vz , 2));
       double manifold_cost = 0;
-      double manifold_velocity = sqrt(pow(pointEnd.x - pointStart.x, 2) + pow(pointEnd.y - pointStart.y ,2) + pow(pointEnd.z - pointStart.z , 2));
-      for(size_t j = 0; j<voxelKeys.size(); ++j){
+      double manifold_velocity = sqrt(pow(point_end.x - point_start.x, 2) + pow(point_end.y - point_start.y ,2) + pow(point_end.z - point_start.z , 2));
+      for(size_t j = 0; j<traversed_voxels.size(); ++j){
         //for each voxel point check in the current tsdf if it exists and if it does then get the cost based of the sdf value or 0 otherwise
-        manifold_cost += get_voxel_cost(voxelKeys[j]) * manifold_velocity;
+        manifold_cost += get_voxel_cost(traversed_voxels[j]) * manifold_velocity;
       }
       cost+=manifold_cost * drone_traj_velocity;
 
@@ -591,15 +558,14 @@ Eigen::Matrix<double, Eigen::Dynamic, 3>  obstacle_avoidance_gradient(const cine
     int n = points.size();
     Eigen::MatrixXd gradient_vals(n-1,3);
     for(size_t i = 0; i<n-1; ++i){
-        cinematography_msgs::msg::MultiDOF pointStart = points[i];
-        cinematography_msgs::msg::MultiDOF pointEnd = points[i+1];
+        cinematography_msgs::msg::MultiDOF point_start = points[i];
+        cinematography_msgs::msg::MultiDOF point_end = points[i+1];
 
-        std::vector<Key> voxelKeys;
-        get_voxels(pointStart, pointEnd, voxelKeys, VOXEL_SIZE);
+        std::vector<Eigen::Matrix<double, 3, 1>> traversed_voxels = get_voxels(point_start, point_end, voxel_size);
 
-        double velocity_mag = sqrt(pow(pointEnd.vx, 2) + pow(pointEnd.vy ,2) + pow(pointEnd.vz , 2));
+        double velocity_mag = sqrt(pow(point_end.vx, 2) + pow(point_end.vy ,2) + pow(point_end.vz , 2));
 
-        Eigen::Matrix<double, 3, 1> p_hat(pointEnd.vx/velocity_mag, pointEnd.vy/velocity_mag, pointEnd.vz/velocity_mag);
+        Eigen::Matrix<double, 3, 1> p_hat(point_end.vx/velocity_mag, point_end.vy/velocity_mag, point_end.vz/velocity_mag);
         if(isnan(p_hat(0)) || isnan(p_hat(1)) || isnan(p_hat(2))){
           p_hat(0) = 0;
           p_hat(1) = 0;
@@ -609,14 +575,16 @@ Eigen::Matrix<double, Eigen::Dynamic, 3>  obstacle_avoidance_gradient(const cine
         Eigen::Matrix<double, 3, 3> identity_minus_p_hat_multiplied = Eigen::Matrix3d::Identity(3,3) - p_hat_multiplied;
         Eigen::Matrix<double, 3, 1> gradient_val(0,0,0);
 
-        for(size_t j = 1; j<voxelKeys.size(); ++j){ //skip first voxel for each drone point so not double counting voxel cost
-            Eigen::Matrix<double, 3, 1> cost_function_gradient = get_voxel_cost_gradient(voxelKeys[j]);
+        for(size_t j = 1; j<traversed_voxels.size(); ++j){ //skip first voxel for each drone point so not double counting voxel cost
+            Eigen::Matrix<double, 3, 1> cost_function_gradient = get_voxel_cost_gradient(traversed_voxels[j]);
             Eigen::Matrix<double, 3, 1> gradient_multiplied_result = identity_minus_p_hat_multiplied * cost_function_gradient;       
-            Eigen::Matrix<double, 3, 1> grad_j_obs = gradient_multiplied_result * velocity_mag;          
-            gradient_val+=grad_j_obs;
+            Eigen::Matrix<double, 3, 1> grad_j_obs = gradient_multiplied_result * velocity_mag;
+            if(!(isnan(grad_j_obs(0)) || isnan(grad_j_obs(1)) || isnan(grad_j_obs(2)))){
+                gradient_val+=grad_j_obs;
+            }          
         }
         //normalize
-        gradient_val/=voxelKeys.size();
+        gradient_val/=traversed_voxels.size();
 
         gradient_vals(i, 0) = gradient_val(0);
         gradient_vals(i, 1) = gradient_val(1);
@@ -631,17 +599,16 @@ Eigen::Matrix<double, Eigen::Dynamic, 3>  occlusion_avoidance_gradient(const cin
     int n = drone_points.size();
     Eigen::MatrixXd gradient_vals(n-1,3);
     for(size_t i = 1; i<n; ++i){ // skips first point since drone is already there
-        cinematography_msgs::msg::MultiDOF pointStart = drone_points[i];
-        cinematography_msgs::msg::MultiDOF pointEnd = actor_points[i];
-        std::vector<Key> voxelKeys;
-        get_voxels(pointStart, pointEnd, voxelKeys, VOXEL_SIZE);
+        cinematography_msgs::msg::MultiDOF point_start = drone_points[i];
+        cinematography_msgs::msg::MultiDOF point_end = actor_points[i];
+        std::vector<Eigen::Matrix<double, 3, 1>> traversed_voxels = get_voxels(point_start, point_end, voxel_size);
         double manifold_cost = 0;
         //velocity of the line between the drone and actor traj
-        double manifold_velocity = sqrt(pow(pointEnd.x - pointStart.x, 2) + pow(pointEnd.y - pointStart.y ,2) + pow(pointEnd.z - pointStart.z , 2));
+        double manifold_velocity = sqrt(pow(point_end.x - point_start.x, 2) + pow(point_end.y - point_start.y ,2) + pow(point_end.z - point_start.z , 2));
         
         Eigen::Matrix<double, 1, 3> gradient_val(0,0,0);
 
-        Eigen::Matrix<double, 3, 1> drone_point_velocity(pointStart.vx, pointStart.vy, pointStart.vz);
+        Eigen::Matrix<double, 3, 1> drone_point_velocity(point_start.vx, point_start.vy, point_start.vz);
         double drone_point_velocity_mag = drone_point_velocity.norm();
         Eigen::Matrix<double, 3, 1> normalized_drone_point_velocity = drone_point_velocity/drone_point_velocity_mag; 
         //if normalized_drone_point velocity is 0
@@ -652,32 +619,35 @@ Eigen::Matrix<double, Eigen::Dynamic, 3>  occlusion_avoidance_gradient(const cin
         }
         Eigen::Matrix<double, 1, 3> normalized_drone_point_velocity_transpose = normalized_drone_point_velocity.transpose();
         
-        Eigen::Matrix<double, 3, 1> actor_point_velocity(pointEnd.vx, pointEnd.vy, pointEnd.vz);
+        Eigen::Matrix<double, 3, 1> actor_point_velocity(point_end.vx, point_end.vy, point_end.vz);
 
-        Eigen::Matrix<double, 3, 1> L(pointEnd.x - pointStart.x, pointEnd.y - pointStart.y, pointEnd.z - pointStart.z);
+        Eigen::Matrix<double, 3, 1> L(point_end.x - point_start.x, point_end.y - point_start.y, point_end.z - point_start.z);
         double L_mag = L.norm();
         Eigen::Matrix<double, 3, 1> normalized_L = L/L_mag;
         Eigen::Matrix<double, 1, 3> normalized_L_transpose = normalized_L.transpose();
         Eigen::Matrix<double, 3, 1> L_velocity = actor_point_velocity - drone_point_velocity;
 
         //used for determining the value of τ
-        double increment = 1.0/(voxelKeys.size()-1);
+        double increment = 1.0/(traversed_voxels.size()-1);
 
-        for(size_t j = 0; j<voxelKeys.size(); ++j){
-            Eigen::Matrix<double, 3, 1> cost_function_gradient = get_voxel_cost_gradient(voxelKeys[j]);
-            Eigen::Matrix<double, 3, 1> innerFirstTerm = actor_point_velocity/drone_point_velocity_mag - normalized_drone_point_velocity;
-            innerFirstTerm*=j*increment;
-            innerFirstTerm +=normalized_drone_point_velocity;
-            Eigen::Matrix<double, 3, 3> innerFirstTermMatrix = innerFirstTerm * normalized_drone_point_velocity_transpose;
-            innerFirstTermMatrix = Eigen::Matrix3d::Identity(3,3) - innerFirstTermMatrix;
-            Eigen::Matrix<double, 1, 3> firstTerm = cost_function_gradient.transpose() * L_mag * drone_point_velocity_mag * innerFirstTermMatrix;
+        for(size_t j = 0; j<traversed_voxels.size(); ++j){
+            Eigen::Matrix<double, 3, 1> cost_function_gradient = get_voxel_cost_gradient(traversed_voxels[j]);
+            Eigen::Matrix<double, 3, 1> inner_first_term = actor_point_velocity/drone_point_velocity_mag - normalized_drone_point_velocity;
+            inner_first_term*=j*increment;
+            inner_first_term +=normalized_drone_point_velocity;
+            Eigen::Matrix<double, 3, 3> inner_first_term_matrix = inner_first_term * normalized_drone_point_velocity_transpose;
+            inner_first_term_matrix = Eigen::Matrix3d::Identity(3,3) - inner_first_term_matrix;
+            Eigen::Matrix<double, 1, 3> first_term = cost_function_gradient.transpose() * L_mag * drone_point_velocity_mag * inner_first_term_matrix;
 
-            Eigen::Matrix<double, 1, 3> innerSecondTerm = normalized_L_transpose + normalized_L_transpose * L_velocity * normalized_drone_point_velocity_transpose;
-            Eigen::Matrix<double, 1, 3> secondTerm = get_voxel_cost(voxelKeys[j]) * drone_point_velocity_mag * innerSecondTerm;
-            gradient_val += firstTerm - secondTerm;
+            Eigen::Matrix<double, 1, 3> inner_second_term = normalized_L_transpose + normalized_L_transpose * L_velocity * normalized_drone_point_velocity_transpose;
+            Eigen::Matrix<double, 1, 3> secondTerm = get_voxel_cost(traversed_voxels[j]) * drone_point_velocity_mag * inner_second_term;
+            Eigen::Matrix<double, 3, 1> grad_j_occ = first_term - secondTerm; 
+            if(!(isnan(grad_j_occ(0)) || isnan(grad_j_occ(1)) || isnan(grad_j_occ(2)))){
+                gradient_val+=grad_j_occ;
+            }  
         }
         // normalize 
-        gradient_val/=voxelKeys.size();
+        gradient_val/=traversed_voxels.size();
         gradient_vals(i-1, 0) = gradient_val(0);
         gradient_vals(i-1, 1) = gradient_val(1);
         gradient_vals(i-1, 2) = gradient_val(2); 
@@ -688,7 +658,7 @@ Eigen::Matrix<double, Eigen::Dynamic, 3>  occlusion_avoidance_gradient(const cin
 void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, const cinematography_msgs::msg::MultiDOFarray& actor_traj) {
     cinematography_msgs::msg::MultiDOFarray ideal_traj = calc_ideal_drone_traj(actor_traj);     // ξ_shot when calculating shot quality
 
-    int normalization = 1; // change
+    int normalization = 1; // todo: change
 
     // std::vector<MultiDOF> drone_traj_cuda;
     // std::vector<MultiDOF> actor_traj_cuda;
@@ -790,6 +760,8 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
             // drone_traj_cuda[i+1].y -= traj_change(i,1);
             // drone_traj_cuda[i+1].z -= traj_change(i,2);
         }
+
+        update_traj_position_derivatives(drone_traj);
     }
 }
 
@@ -838,7 +810,6 @@ void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr act
 
     // Publish the trajectory (for debugging purposes)
     drone_path.header.stamp = clock_->now();
-    path_found = true;
 
     RCLCPP_INFO(node->get_logger(), "Publishing drone trajectory\n");
 
@@ -859,7 +830,6 @@ void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr act
 
 void tsdf_callback(tsdf_package_msgs::msg::Tsdf::SharedPtr tsdf){
     auto start = std::chrono::high_resolution_clock::now();
-    // voxel_map.clear();
     for(int i=0;i<NUM_BUCKETS;++i){
         voxels_set[i].clear();
     }
@@ -867,10 +837,8 @@ void tsdf_callback(tsdf_package_msgs::msg::Tsdf::SharedPtr tsdf){
     std::vector<tsdf_package_msgs::msg::Voxel> voxels = tsdf->voxels;
     voxels_set_size = voxels.size();
     for (tsdf_package_msgs::msg::Voxel v : voxels){
-        // Key k(v.x, v.y, v.z);
         Voxel val(v.sdf, v.x, v.y, v.z);
-        // voxel_map[k] = val;
-        size_t bucket = val.get_bucket();
+        size_t bucket = get_bucket(val.position);
         voxels_set[bucket].push_back(val);
     }
 

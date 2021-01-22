@@ -17,6 +17,11 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
 }
 
 __device__
+size_t get_bucket_cuda(const Eigen::Matrix<double, 3, 1> & position){
+    return abs((((int)position(0)*73856093) ^ ((int)position(1)*19349669) ^ ((int)position(2)*83492791)) % NUM_BUCKETS);
+}
+
+__device__
 double floor_fun_cuda(const double & x, const double & scale){
     return floor(x*scale) / scale;
 }
@@ -194,9 +199,9 @@ double get_cost(const double & sdf, const double & truncation_distance){
 __device__
 inline double get_voxel_cost(const Eigen::Matrix<double, 3, 1> & voxel_pos, const double & volume_size, Voxel * set, int * bucket_indices, double * truncation_distance){
 
-    Voxel voxel(0, voxel_pos(0), voxel_pos(1), voxel_pos(2));
+    // Voxel voxel(0, voxel_pos(0), voxel_pos(1), voxel_pos(2));
 
-    size_t bucket = voxel.get_bucket();
+    size_t bucket = get_bucket_cuda(voxel_pos);
     // printf("upper: %d lower:%d\n", upper, lower);
     for(int i=bucket_indices[bucket]; i<bucket_indices[bucket+1]; ++i){
         if(check_floating_point_vectors_equal_cuda(voxel_pos, set[i].position, volume_size / 4)){
