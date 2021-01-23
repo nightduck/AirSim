@@ -35,6 +35,7 @@ bool created_slam_loss_traj = false;
 bool copy_slam_loss_traj = false;
 bool copy_panic_traj = false;
 bool copy_normal_traj = false;
+bool wasEmpty = true;
 
 struct multiDOFpoint {
     double x, y, z;
@@ -183,6 +184,11 @@ int main(int argc, char **argv)
         // Follow a single point in the trajectory. This will probably mean sleeping until the last one is reached
         if(following_traj) {
             if (likely(!traj->empty())){
+                if (wasEmpty) {
+                    RCLCPP_ERROR(node->get_logger(), "    forward trajectory now full");
+                    wasEmpty = false;
+                }
+
                 static double max_speed_so_far = 0;
                 static int ctr = 0;
 
@@ -250,7 +256,10 @@ int main(int argc, char **argv)
                 traj->pop_front();
             }
             else {
-                RCLCPP_ERROR(node->get_logger(), "!!! forward trajectory empty! Doing nothing");
+                if (!wasEmpty) {
+                    RCLCPP_ERROR(node->get_logger(), "!!! forward trajectory empty! Doing nothing");
+                    wasEmpty = true;
+                }
             }
         }
     }

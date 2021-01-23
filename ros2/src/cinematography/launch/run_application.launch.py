@@ -17,9 +17,9 @@ def generate_launch_description():
             PythonLaunchDescriptionSource([ThisLaunchFileDir(), '/vision_pipeline.launch.py'])
         ),
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource([ThisLaunchFileDir(), '/planning_pipeline.launch.py'])
-        ),
-        IncludeLaunchDescription(
             PythonLaunchDescriptionSource(tsdf_path)
         ),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource([ThisLaunchFileDir(), '/planning_pipeline.launch.py'])
+        )
     ])

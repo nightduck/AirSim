@@ -7,6 +7,7 @@ def generate_launch_description():
             package="cinematography",
             node_executable="follow_trajectory",
             node_name="follow_trajectory",
+            output="screen",
             remappings=[
                 ("drone_traj", "/auto_cinematography/planning/drone_traj"),
                 ("velocities", "/auto_cinematography/planning/velocities")

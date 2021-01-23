@@ -8,6 +8,7 @@ Panels:
         - /Status1
         - /PoseArray1
         - /PoseArray2
+        - /MarkerArray1
       Splitter Ratio: 0.32348597049713135
     Tree Height: 1156
   - Class: rviz_common/Selection
@@ -157,9 +158,9 @@ Visualization Manager:
       Enabled: true
       Name: MarkerArray
       Namespaces:
-        {}
+        occupied_voxels: true
       Queue Size: 10
-      Topic: /tsdf_occupied_voxels
+      Topic: /auto_cinematography/debug/markers
       Unreliable: false
       Value: true
   Enabled: true
@@ -188,7 +189,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 21.553665161132812
+      Distance: 50
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -198,15 +199,15 @@ Visualization Manager:
         X: 0
         Y: 0
         Z: 0
-      Focal Shape Fixed Size: true
+      Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.5047961473464966
+      Pitch: 0.7853981852531433
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 2.8549396991729736
+      Yaw: 0.7853981852531433
     Saved: ~
 Window Geometry:
   Displays:

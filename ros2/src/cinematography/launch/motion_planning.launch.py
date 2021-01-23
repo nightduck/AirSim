@@ -7,6 +7,7 @@ def generate_launch_description():
             package="cinematography",
             node_executable="motion_planner",
             node_name="motion_planner",
+            output="screen",
             remappings=[
                 ("actor_traj", "/auto_cinematography/planning/actor_traj"),
                 ("drone_traj", "/auto_cinematography/planning/drone_traj"),

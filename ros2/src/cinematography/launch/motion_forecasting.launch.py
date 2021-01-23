@@ -7,6 +7,7 @@ def generate_launch_description():
             package="cinematography",
             node_executable="motion_forecasting",
             node_name="motion_forecasting",
+            output="screen",
             remappings=[
                 ("pred_path", "/auto_cinematography/planning/actor_traj"),
                 ("vision_measurements", "/auto_cinematography/vision/vision_measurements")

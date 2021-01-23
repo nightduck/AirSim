@@ -14,9 +14,6 @@ def generate_launch_description():
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource([ThisLaunchFileDir(), '/vision_pipeline.launch.py'])
         ),
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource([ThisLaunchFileDir(), '/planning_pipeline.launch.py'])
-        ),
         Node(
             package='tsdf_package',
             node_executable='tsdf_node',
@@ -37,6 +34,9 @@ def generate_launch_description():
                     "lidar_frame" : "drone_1/LidarCustom"
                 }
             ]
+        ),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource([ThisLaunchFileDir(), '/planning_pipeline.launch.py'])
         ),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource([ThisLaunchFileDir(), '/debug_viz.launch.py'])

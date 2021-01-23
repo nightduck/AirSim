@@ -7,6 +7,7 @@ def generate_launch_description():
             package="cinematography",
             node_executable="actor_detection",
             node_name="actor_detection",
+            output="screen",
             remappings=[
                 ("actor_pose", "/airsim_ros2_wrapper/pose/drone_1/front_center_custom"),
                 ("camera", "/airsim_ros2_wrapper/camera"),

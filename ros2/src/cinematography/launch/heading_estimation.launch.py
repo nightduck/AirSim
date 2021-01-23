@@ -7,6 +7,7 @@ def generate_launch_description():
             package="cinematography",
             node_executable="heading_estimation",
             node_name="heading_estimation",
+            output="screen",
             remappings=[
                 ("rviz_pose", "/rviz/pose"),
                 ("vision_measurements", "/auto_cinematography/vision/vision_measurements"),
