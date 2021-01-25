@@ -16,7 +16,7 @@ def generate_launch_description():
             parameters=[
                 {"airsim_hostname" : "localhost"},
                 {"drone_frame" : "drone_1"},
-                {"max_iterations" : 1}
+                {"max_iterations" : 20}
             ]
         )
     ])

@@ -502,6 +502,10 @@ double traj_cost_function(const cinematography_msgs::msg::MultiDOFarray& drone_t
     return traj_smoothness(drone_traj, t) + LAMBDA_1 * obstacle_avoidance(drone_traj) + LAMBDA_2 * occlusion_avoidance(drone_traj, actor_traj) + LAMBDA_3 * shot_quality(drone_traj, ideal_traj);
 }
 
+//======================^^^==Cost functions==^^^====================================
+
+//======================VVV==Gradient functions==VVV====================================
+
 // TODO: Implement gradient equivalents of all the above, and hessian approximations (A_smooth + delta_1 * A_shot)
 Eigen::Matrix<double, Eigen::Dynamic, 3> traj_smoothness_gradient(const cinematography_msgs::msg::MultiDOFarray& drone_traj, double delta_t, const Eigen::MatrixXd  & K, const Eigen::MatrixXd  & K0, const Eigen::MatrixXd  & K1, const Eigen::MatrixXd  & K2, const Eigen::MatrixXd  & A) {
     int a0 = 1, a1 = 0.5, a2 = 0;       // TODO: Fix these somehow
@@ -655,6 +659,8 @@ Eigen::Matrix<double, Eigen::Dynamic, 3>  occlusion_avoidance_gradient(const cin
     return gradient_vals;
 }
 
+//======================^^^==Gradient functions==^^^====================================
+
 void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, const cinematography_msgs::msg::MultiDOFarray& actor_traj) {
     cinematography_msgs::msg::MultiDOFarray ideal_traj = calc_ideal_drone_traj(actor_traj);     // ξ_shot when calculating shot quality
 
@@ -665,7 +671,9 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
 
     double t = 0;
 
-    double LAMBDA_1, LAMBDA_2, LAMBDA_3 = 1;    // TODO: Have these specified as ROS parameters
+    double LAMBDA_2, LAMBDA_3 = 1;    // TODO: Have these specified as ROS parameters
+    double LAMBDA_1 = 50;
+
 
     int n = drone_traj.points.size();
 
@@ -684,6 +692,7 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
 
     //Intializing A_smooth
     int a0 = 1, a1 = 0.5, a2 = 0;  // TODO: Fix these somehow
+    double e_1 = .01;
 
     Eigen::MatrixXd K = Eigen::MatrixXd::Identity(n-1,n-1);
     for(int i = 0; i < n-1; i++) {
@@ -712,60 +721,65 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
     // std::cout << average/global_iterations << std::endl; 
 
     for(int i = 0; i < MAX_ITERATIONS; i++) {
-        auto start = std::chrono::high_resolution_clock::now();
-        Eigen::Matrix<double, Eigen::Dynamic, 3> smooth_grad = traj_smoothness_gradient(drone_traj, t, K, K0, K1, K2, A_smooth);
-        auto stop = std::chrono::high_resolution_clock::now(); 
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start); 
-        std::cout << "smooth grad duration: ";
-        std::cout << duration.count() << std::endl;
+        // auto start = std::chrono::high_resolution_clock::now();
+        // Eigen::Matrix<double, Eigen::Dynamic, 3> smooth_grad = traj_smoothness_gradient(drone_traj, t, K, K0, K1, K2, A_smooth);
+        // auto stop = std::chrono::high_resolution_clock::now(); 
+        // auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start); 
+        // std::cout << "smooth grad duration: ";
+        // std::cout << duration.count() << std::endl;
 
-        auto start1 = std::chrono::high_resolution_clock::now();
-        Eigen::Matrix<double, Eigen::Dynamic, 3> shot_grad = shot_quality_gradient(drone_traj, ideal_traj, A_shot);
-        auto stop1 = std::chrono::high_resolution_clock::now(); 
-        auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(stop1 - start1); 
-        std::cout << "shot grad duration: ";
-        std::cout << duration1.count() << std::endl;
+        // auto start1 = std::chrono::high_resolution_clock::now();
+        // Eigen::Matrix<double, Eigen::Dynamic, 3> shot_grad = shot_quality_gradient(drone_traj, ideal_traj, A_shot);
+        // auto stop1 = std::chrono::high_resolution_clock::now(); 
+        // auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(stop1 - start1); 
+        // std::cout << "shot grad duration: ";
+        // std::cout << duration1.count() << std::endl;
 
-        auto start2 = std::chrono::high_resolution_clock::now();
+        // auto start2 = std::chrono::high_resolution_clock::now();
         Eigen::Matrix<double, Eigen::Dynamic, 3> obs_grad = obstacle_avoidance_gradient(drone_traj);
-        auto stop2 = std::chrono::high_resolution_clock::now(); 
-        auto duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(stop2 - start2); 
-        std::cout << "obs grad duration: ";
-        std::cout << duration2.count() << std::endl;
+        // auto stop2 = std::chrono::high_resolution_clock::now(); 
+        // auto duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(stop2 - start2); 
+        // std::cout << "obs grad duration: ";
+        // std::cout << duration2.count() << std::endl;
 
-        auto start3 = std::chrono::high_resolution_clock::now();
-        Eigen::Matrix<double, Eigen::Dynamic, 3> occ_grad = occlusion_avoidance_gradient(drone_traj, actor_traj);
-        auto stop3 = std::chrono::high_resolution_clock::now(); 
-        auto duration3 = std::chrono::duration_cast<std::chrono::milliseconds>(stop3 - start3); 
-        std::cout << "occ grad duration: ";
-        std::cout << duration3.count() << std::endl;
+        // auto start3 = std::chrono::high_resolution_clock::now();
+        // Eigen::Matrix<double, Eigen::Dynamic, 3> occ_grad = occlusion_avoidance_gradient(drone_traj, actor_traj);
+        // auto stop3 = std::chrono::high_resolution_clock::now(); 
+        // auto duration3 = std::chrono::duration_cast<std::chrono::milliseconds>(stop3 - start3); 
+        // std::cout << "occ grad duration: ";
+        // std::cout << duration3.count() << std::endl;
         // Eigen::Matrix<double, Eigen::Dynamic, 3> obs_grad = obstacle_avoidance_gradient_cuda(drone_traj_cuda, voxels_set, curr_voxels_set_size, truncation_distance, voxel_size);
         // Eigen::Matrix<double, Eigen::Dynamic, 3> occ_grad = occlusion_avoidance_gradient_cuda(drone_traj_cuda, actor_traj_cuda, voxels_set, curr_voxels_set_size, truncation_distance, voxel_size);
 
-        Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = smooth_grad + LAMBDA_1 * obs_grad + LAMBDA_2 * occ_grad + LAMBDA_3 * shot_grad;
-        // Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = LAMBDA_1 * obs_grad + LAMBDA_2 * occ_grad;
+        // Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = smooth_grad + LAMBDA_1 * obs_grad + LAMBDA_2 * occ_grad + LAMBDA_3 * shot_grad;
+        Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = LAMBDA_1 * obs_grad;
         // Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = smooth_grad + LAMBDA_3 * shot_grad;
 
-        //Todo:
-        // if((j_grad.transpose()*M_inv * j_grad).array().pow(2) / 2 < e0){
-          
-        // }
 
         Eigen::MatrixXd traj_change = (1 / normalization) * M_inv * j_grad;
+
+        bool converged = true;
+
         for(size_t i = 0; i < n-1; ++i){
             drone_traj.points[i+1].x -= traj_change(i, 0);
             drone_traj.points[i+1].y -= traj_change(i, 1);
             drone_traj.points[i+1].z -= traj_change(i, 2);
+
+            if(traj_change(i,0) > e_1 || traj_change(i,1) > e_1 || traj_change(i,2) > e_1){
+                converged = false;
+            }
             // drone_traj_cuda[i+1].x -= traj_change(i,0);
             // drone_traj_cuda[i+1].y -= traj_change(i,1);
             // drone_traj_cuda[i+1].z -= traj_change(i,2);
         }
 
         update_traj_position_derivatives(drone_traj);
+
+        if(converged){
+            return;
+        }
     }
 }
-
-//======================^^^==Cost functions==^^^====================================
 
 //bool get_trajectory_fun(airsim_ros_pkgs::get_trajectory::Request &req, airsim_ros_pkgs::get_trajectory::Response &res)
 // Get actor's predicted trajectory (in NED and radians)
@@ -817,15 +831,15 @@ void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr act
 
     auto stop = std::chrono::high_resolution_clock::now(); 
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start); 
-    std::cout << "Actor Traj Callback Duration: ";
-    std::cout << duration.count() << std::endl;
+    // std::cout << "Actor Traj Callback Duration: ";
+    // std::cout << duration.count() << std::endl;
 
     auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(stop - global_start); 
-    std::cout << "Global Duration: ";
-    std::cout << duration1.count() << std::endl;
+    // std::cout << "Global Duration: ";
+    // std::cout << duration1.count() << std::endl;
 
-    printf("num callbacks: %d\n", global_iterations);
-    printf("---------------------------------------------\n");
+    // printf("num callbacks: %d\n", global_iterations);
+    // printf("---------------------------------------------\n");
 }
 
 void tsdf_callback(tsdf_package_msgs::msg::Tsdf::SharedPtr tsdf){
@@ -849,12 +863,13 @@ void tsdf_callback(tsdf_package_msgs::msg::Tsdf::SharedPtr tsdf){
     }
     auto stop = std::chrono::high_resolution_clock::now(); 
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start); 
-    std::cout << "tsdf callback duration: ";
-    std::cout << duration.count() << std::endl;
+    // std::cout << "tsdf callback duration: ";
+    // std::cout << duration.count() << std::endl;
 }
 
 int main(int argc, char ** argv)
 {
+    sleep(3);
     rclcpp::init(argc, argv);
     node = rclcpp::Node::make_shared("motion_planner");
     clock_ = node->get_clock();

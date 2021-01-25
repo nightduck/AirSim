@@ -37,6 +37,8 @@ bool copy_panic_traj = false;
 bool copy_normal_traj = false;
 bool wasEmpty = true;
 
+float yaw_threshold = 30;
+
 struct multiDOFpoint {
     double x, y, z;
     double vx, vy, vz;
@@ -50,7 +52,7 @@ trajectory_t normal_traj;
 trajectory_t rev_normal_traj;
 trajectory_t slam_loss_traj;
 trajectory_t panic_traj;
-float g_v_max = 2.5;
+float g_v_max = 1.5;
 
 float g_max_yaw_rate = 90;
 float g_max_yaw_rate_during_flight = 90;
@@ -211,14 +213,14 @@ int main(int argc, char **argv)
                 // Make sure we're not going over the maximum speed
                 double speed = std::sqrt((v_x*v_x + v_y*v_y + v_z*v_z));
                 double scale = 1;
-//                if (speed > g_v_max) {
-//                    scale = g_v_max / speed;
-//
-//                    v_x *= scale;
-//                    v_y *= scale;
-//                    v_z *= scale;
-//                    speed = std::sqrt((v_x*v_x + v_y*v_y + v_z*v_z));
-//                }
+               if (speed > g_v_max) {
+                   scale = g_v_max / speed;
+
+                   v_x *= scale;
+                   v_y *= scale;
+                   v_z *= scale;
+                   speed = std::sqrt((v_x*v_x + v_y*v_y + v_z*v_z));
+               }
 
                 // Calculate the time for which this point's flight commands should run
                 auto scaled_flight_time = std::chrono::duration<double>(p.duration / scale);
@@ -233,6 +235,16 @@ int main(int argc, char **argv)
 
                 float yaw_diff = (int(yaw - current_yaw) + 360) % 360;
                 yaw_diff = yaw_diff <= 180 ? yaw_diff : yaw_diff - 360;
+
+                if(yaw_diff >= yaw_threshold){
+                    yaw_diff -= yaw_threshold;
+                }
+                else if(yaw_diff <= (-1)*yaw_threshold){
+                    yaw_diff += yaw_threshold;
+                }
+                else{
+                    yaw_diff = 0;
+                }
                 
                 float yaw_rate = yaw_diff / scaled_flight_time.count();
 
