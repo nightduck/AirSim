@@ -52,7 +52,7 @@ trajectory_t normal_traj;
 trajectory_t rev_normal_traj;
 trajectory_t slam_loss_traj;
 trajectory_t panic_traj;
-float g_v_max = 1.5;
+float g_v_max = 4.0;
 
 float g_max_yaw_rate = 90;
 float g_max_yaw_rate_during_flight = 90;
@@ -75,7 +75,7 @@ rclcpp::Clock::SharedPtr clock_;
 
 void callback_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr msg)
 {
-	RCLCPP_INFO(node->get_logger(), "call back trajectory");
+	// RCLCPP_INFO(node->get_logger(), "call back trajectory");
     normal_traj.clear();
     rev_normal_traj.clear();
     for (auto point : msg->points){
@@ -128,6 +128,9 @@ int main(int argc, char **argv)
 
     airsim_client = new msr::airlib::MultirotorRpcLibClient(host_ip);
     airsim_client->enableApiControl(true);
+    // airsim_client->takeoffAsync()->waitOnLastTask();
+    airsim_client->moveToPositionAsync(0,0,-30,3)->waitOnLastTask();
+    airsim_client->moveToPositionAsync(0,0,0,3)->waitOnLastTask();
     airsim_client->takeoffAsync()->waitOnLastTask();
 
     //variable     
@@ -259,7 +262,7 @@ int main(int argc, char **argv)
                 airsim_client->moveByVelocityAsync(v_x, v_y, v_z, scaled_flight_time.count(), drivetrain, yawmode);
 
                 print_rviz_vel(pos.y(), pos.x(), -1*pos.z(), v_x, v_y, v_z);
-                RCLCPP_INFO(node->get_logger(), "Flying at (%f, %f, %f) for %f seconds", v_x, v_y, v_z, p.duration);
+                // RCLCPP_INFO(node->get_logger(), "Flying at (%f, %f, %f) for %f seconds", v_x, v_y, v_z, p.duration);
 
                 // Get deadline to process next point
                 sleep_time += std::chrono::duration_cast<std::chrono::system_clock::duration>(scaled_flight_time);
