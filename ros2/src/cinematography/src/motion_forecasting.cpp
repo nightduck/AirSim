@@ -53,7 +53,7 @@ private:
         pred_traj.points.reserve(fws / duration.seconds() + 1);
         msr::airlib::Vector3r posDiff = pose.position - lastPose.position;
         double yawDiff = getYaw(pose.orientation) - getYaw(lastPose.orientation);
-        for(int i = 0; i < pred_traj.points.capacity(); i++) {
+        for(int i = 0; i < (int) (10 / duration.seconds()); i++) {
             cinematography_msgs::msg::MultiDOF point;
             //trajectory_msgs::msg::MultiDOFJointTrajectoryPoint point;
             point.x = pose.position.x() + posDiff.x() * i;

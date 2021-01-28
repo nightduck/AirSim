@@ -26,7 +26,7 @@ def generate_launch_description():
             parameters=[
                 {
                     "voxel_size" : .5,
-                    "truncation_distance" : 2.0,
+                    "truncation_distance" : 4.0,
                     "max_weight" : 10000.0,
                     "visualize_published_voxels" : True,
                     "publish_distance_squared" : 2500.0,

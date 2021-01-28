@@ -563,6 +563,8 @@ Eigen::Matrix<double, Eigen::Dynamic, 3>  obstacle_avoidance_gradient(const cine
     std::vector<cinematography_msgs::msg::MultiDOF> points = drone_traj.points;
     int n = points.size();
     Eigen::MatrixXd gradient_vals(n-1,3);
+    gradient_vals = Eigen::MatrixXd::Zero(n-1,3);
+
     for(size_t i = 0; i<n-1; ++i){
         cinematography_msgs::msg::MultiDOF point_start = points[i];
         cinematography_msgs::msg::MultiDOF point_end = points[i+1];
@@ -598,9 +600,33 @@ Eigen::Matrix<double, Eigen::Dynamic, 3>  obstacle_avoidance_gradient(const cine
         //normalize
         gradient_val/=traversed_voxels.size();
 
-        gradient_vals(i, 0) = gradient_val(0);
-        gradient_vals(i, 1) = gradient_val(1);
-        gradient_vals(i, 2) = gradient_val(2); 
+        gradient_vals(i, 0) += gradient_val(0);
+        gradient_vals(i, 1) += gradient_val(1);
+        gradient_vals(i, 2) += gradient_val(2);
+
+        for(int k = i + 1; k < i + 5; ++k){
+            if(k >=  n-1){
+                break;
+            }
+
+            int iter = k - i;
+
+            gradient_vals(k,0) += (1 - .2 * iter) * gradient_val(0);
+            gradient_vals(k,1) += (1 - .2 * iter) * gradient_val(1);
+            gradient_vals(k,2) += (1 - .2 * iter) * gradient_val(2);
+        }
+
+        for(int k = i - 1; k > i - 5; --k){
+            if(k < 0){
+                break;
+            }
+
+            int iter = i - k;
+
+            gradient_vals(k,0) += (1 - .2 * iter) * gradient_val(0);
+            gradient_vals(k,1) += (1 - .2 * iter) * gradient_val(1);
+            gradient_vals(k,2) += (1 - .2 * iter) * gradient_val(2);
+        }
     }
     return gradient_vals;
 }
@@ -610,6 +636,7 @@ Eigen::Matrix<double, Eigen::Dynamic, 3>  occlusion_avoidance_gradient(const cin
     std::vector<cinematography_msgs::msg::MultiDOF> actor_points = actor_traj.points;
     int n = drone_points.size();
     Eigen::MatrixXd gradient_vals(n-1,3);
+    gradient_vals = Eigen::MatrixXd::Zero(n-1,3);
     for(size_t i = 1; i<n; ++i){ // skips first point since drone is already there
         cinematography_msgs::msg::MultiDOF point_start = drone_points[i];
         cinematography_msgs::msg::MultiDOF point_end = actor_points[i];
@@ -644,25 +671,50 @@ Eigen::Matrix<double, Eigen::Dynamic, 3>  occlusion_avoidance_gradient(const cin
 
         for(size_t j = 0; j<traversed_voxels.size(); ++j){
             Eigen::Matrix<double, 3, 1> cost_function_gradient = get_voxel_cost_gradient(traversed_voxels[j]);
-            Eigen::Matrix<double, 3, 1> inner_first_term = actor_point_velocity/drone_point_velocity_mag - normalized_drone_point_velocity;
-            inner_first_term*=j*increment;
-            inner_first_term +=normalized_drone_point_velocity;
-            Eigen::Matrix<double, 3, 3> inner_first_term_matrix = inner_first_term * normalized_drone_point_velocity_transpose;
-            inner_first_term_matrix = Eigen::Matrix3d::Identity(3,3) - inner_first_term_matrix;
-            Eigen::Matrix<double, 1, 3> first_term = cost_function_gradient.transpose() * L_mag * drone_point_velocity_mag * inner_first_term_matrix;
+            // Eigen::Matrix<double, 3, 1> inner_first_term = actor_point_velocity/drone_point_velocity_mag - normalized_drone_point_velocity;
+            // inner_first_term*=j*increment;
+            // inner_first_term +=normalized_drone_point_velocity;
+            // Eigen::Matrix<double, 3, 3> inner_first_term_matrix = inner_first_term * normalized_drone_point_velocity_transpose;
+            // inner_first_term_matrix = Eigen::Matrix3d::Identity(3,3) - inner_first_term_matrix;
+            // Eigen::Matrix<double, 1, 3> first_term = cost_function_gradient.transpose() * L_mag * drone_point_velocity_mag * inner_first_term_matrix;
 
-            Eigen::Matrix<double, 1, 3> inner_second_term = normalized_L_transpose + normalized_L_transpose * L_velocity * normalized_drone_point_velocity_transpose;
-            Eigen::Matrix<double, 1, 3> secondTerm = get_voxel_cost(traversed_voxels[j]) * drone_point_velocity_mag * inner_second_term;
-            Eigen::Matrix<double, 3, 1> grad_j_occ = first_term - secondTerm; 
-            if(!(isnan(grad_j_occ(0)) || isnan(grad_j_occ(1)) || isnan(grad_j_occ(2)))){
-                gradient_val+=grad_j_occ;
-            }  
+            // Eigen::Matrix<double, 1, 3> inner_second_term = normalized_L_transpose + normalized_L_transpose * L_velocity * normalized_drone_point_velocity_transpose;
+            // Eigen::Matrix<double, 1, 3> secondTerm = get_voxel_cost(traversed_voxels[j]) * drone_point_velocity_mag * inner_second_term;
+            // Eigen::Matrix<double, 3, 1> grad_j_occ = first_term - secondTerm; 
+            // if(!(isnan(grad_j_occ(0)) || isnan(grad_j_occ(1)) || isnan(grad_j_occ(2)))){
+            //     gradient_val+=grad_j_occ;
+            // }  
+            gradient_val += cost_function_gradient;
         }
         // normalize 
         gradient_val/=traversed_voxels.size();
-        gradient_vals(i-1, 0) = gradient_val(0);
-        gradient_vals(i-1, 1) = gradient_val(1);
-        gradient_vals(i-1, 2) = gradient_val(2); 
+        gradient_vals(i-1, 0) += gradient_val(0);
+        gradient_vals(i-1, 1) += gradient_val(1);
+        gradient_vals(i-1, 2) += gradient_val(2); 
+
+        for(int k = i + 1; k < i + 5; ++k){
+            if(k >=  n-1){
+                break;
+            }
+
+            int iter = k - i;
+
+            gradient_vals(k,0) += (1 - .2 * iter) * gradient_val(0);
+            gradient_vals(k,1) += (1 - .2 * iter) * gradient_val(1);
+            gradient_vals(k,2) += (1 - .2 * iter) * gradient_val(2);
+        }
+
+        for(int k = i - 1; k > i - 5; --k){
+            if(k <= 0){
+                break;
+            }
+
+            int iter = i - k;
+
+            gradient_vals(k,0) += (1 - .2 * iter) * gradient_val(0);
+            gradient_vals(k,1) += (1 - .2 * iter) * gradient_val(1);
+            gradient_vals(k,2) += (1 - .2 * iter) * gradient_val(2);
+        }
     }
     return gradient_vals;
 }
@@ -677,7 +729,7 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
     double t = 0;
 
     double LAMBDA_2, LAMBDA_3 = 1;    // TODO: Have these specified as ROS parameters
-    double LAMBDA_1 = 5;
+    double LAMBDA_1 = 15;
 
 
     int n = drone_traj.points.size();
@@ -720,7 +772,7 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
         // std::cout << duration.count() << std::endl;
 
         // auto start1 = std::chrono::high_resolution_clock::now();
-        // Eigen::Matrix<double, Eigen::Dynamic, 3> shot_grad = shot_quality_gradient(drone_traj, ideal_traj, A_shot);
+        Eigen::Matrix<double, Eigen::Dynamic, 3> shot_grad = shot_quality_gradient(drone_traj, ideal_traj, A_shot);
         // auto stop1 = std::chrono::high_resolution_clock::now(); 
         // auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(stop1 - start1); 
         // std::cout << "shot grad duration: ";
@@ -734,14 +786,14 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
         // std::cout << duration2.count() << std::endl;
 
         // auto start3 = std::chrono::high_resolution_clock::now();
-        // Eigen::Matrix<double, Eigen::Dynamic, 3> occ_grad = occlusion_avoidance_gradient(drone_traj, actor_traj);
+        Eigen::Matrix<double, Eigen::Dynamic, 3> occ_grad = occlusion_avoidance_gradient(drone_traj, actor_traj);
         // auto stop3 = std::chrono::high_resolution_clock::now(); 
         // auto duration3 = std::chrono::duration_cast<std::chrono::milliseconds>(stop3 - start3); 
         // std::cout << "occ grad duration: ";
         // std::cout << duration3.count() << std::endl;
     
         // Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = smooth_grad + LAMBDA_1 * obs_grad + LAMBDA_2 * occ_grad + LAMBDA_3 * shot_grad;
-        Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = LAMBDA_1 * obs_grad;
+        Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = LAMBDA_1 * obs_grad + LAMBDA_2 * occ_grad + LAMBDA_3 * shot_grad;
         // Eigen::Matrix<double, Eigen::Dynamic, 3> j_grad = smooth_grad + LAMBDA_3 * shot_grad;
 
 
@@ -749,10 +801,10 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
 
         bool converged = true;
 
-        for(size_t i = 0; i < n-1; ++i){
-            drone_traj.points[i+1].x -= traj_change(i, 0);
-            drone_traj.points[i+1].y -= traj_change(i, 1);
-            drone_traj.points[i+1].z -= traj_change(i, 2);
+        for(size_t j = 0; j < n-1; ++j){
+            drone_traj.points[j+1].x -= traj_change(j, 0);
+            drone_traj.points[j+1].y -= traj_change(j, 1);
+            drone_traj.points[j+1].z -= traj_change(j, 2);
 
             if(traj_change(i,0) > e_1 || traj_change(i,1) > e_1 || traj_change(i,2) > e_1){
                 converged = false;
@@ -762,7 +814,7 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
         update_traj_position_derivatives(drone_traj);
 
         if(converged){
-            // RCLCPP_INFO(node->get_logger(), "Converged\n");
+            // RCLCPP_INFO(node->get_logger(), "Converged: %d\n", i);
             return;
         }
     }
@@ -829,6 +881,8 @@ void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr act
 
     // printf("num callbacks: %d\n", global_iterations);
     // printf("---------------------------------------------\n");
+
+    // RCLCPP_INFO(node->get_logger(), "average time: %ld\n", duration1.count() / global_iterations);
 }
 
 void tsdf_callback(tsdf_package_msgs::msg::Tsdf::SharedPtr tsdf){

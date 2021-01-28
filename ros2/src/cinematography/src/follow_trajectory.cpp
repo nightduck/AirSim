@@ -52,7 +52,7 @@ trajectory_t normal_traj;
 trajectory_t rev_normal_traj;
 trajectory_t slam_loss_traj;
 trajectory_t panic_traj;
-float g_v_max = 4.0;
+float g_v_max = 6.0;
 
 float g_max_yaw_rate = 90;
 float g_max_yaw_rate_during_flight = 90;
