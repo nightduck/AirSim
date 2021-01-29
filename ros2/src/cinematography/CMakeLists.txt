@@ -157,6 +157,9 @@ cuda_add_library(motion_planner_cuda STATIC
 # add_library(tkDNN SHARED ${tkdnn_SRC})
 # target_link_libraries(tkDNN ${tkdnn_LIBS})
 
+add_library(ioHelper SHARED src/ioHelper.cpp)
+target_link_libraries(ioHelper ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES} ${CUDNN_LIBRARIES} ${OpenCV_LIBS})
+
 
 #-------------------------------------------------------------------------------
 # Build ROS2 Nodes
@@ -169,7 +172,7 @@ target_link_libraries(actor_detection AirLib tkDNN ${CUDA_LIBRARIES} ${CUDA_CUBL
 
 add_executable(heading_estimation src/heading_estimation.cpp)
 ament_target_dependencies(heading_estimation rclcpp cinematography_msgs sensor_msgs geometry_msgs nav_msgs cv_bridge tf2_geometry_msgs)
-target_link_libraries(heading_estimation tkDNN ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES} ${CUDNN_LIBRARIES} ${OpenCV_LIBS})
+target_link_libraries(heading_estimation ioHelper ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES} ${CUDNN_LIBRARIES} ${OpenCV_LIBS} ${NVINFER_LIBRARY})
 
 add_executable(motion_forecasting src/motion_forecasting.cpp src/filter.cpp)
 ament_target_dependencies(motion_forecasting rclcpp geometry_msgs cinematography_msgs)
@@ -203,7 +206,7 @@ if(BUILD_TESTING)
 endif()
 
 install(TARGETS
-        actor_detection heading_estimation motion_forecasting motion_planner motion_planner_cuda follow_trajectory airsim_ros2_wrapper debug_viz
+        ioHelper actor_detection heading_estimation motion_forecasting motion_planner motion_planner_cuda follow_trajectory airsim_ros2_wrapper debug_viz
         DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/
         DESTINATION include)

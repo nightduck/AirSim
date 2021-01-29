@@ -99,7 +99,7 @@ private:
         int length = lastFrame.cols / 10;
         cv::Point center = cv::Point(vm->centerx * lastFrame.cols, vm->centery * lastFrame.rows);
         cv::Point endpoint = cv::Point(vm->centerx * lastFrame.cols + length * sin(vm->hde),
-                                       vm->centery * lastFrame.rows + length * cos(vm->hde));
+                                       vm->centery * lastFrame.rows - length * cos(vm->hde));
 
 
         cv_bridge::CvImage cv_msg;
