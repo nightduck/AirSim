@@ -55,9 +55,6 @@ private:
 
     rclcpp::Clock clock = rclcpp::Clock(RCL_SYSTEM_TIME);
 
-    // tk::dnn::NetworkRT* netRT;
-    // //tk::dnn::Network* net;
-    // dnnType *input_d;
     const int nBatches = 1;
 
     #ifdef OPENCV_CUDACONTRIB
@@ -69,7 +66,6 @@ private:
         //dnnType *input;
     #endif
 
-    //==========================AI=============================================
     nvinfer1::Logger gLogger;
 
     // Declaring cuda engine.
@@ -78,9 +74,7 @@ private:
     std::unique_ptr<nvinfer1::IExecutionContext, nvinfer1::Destroy<nvinfer1::IExecutionContext>> context{nullptr};
     std::vector<float> inputTensor;
     std::vector<float> outputTensor;
-    // std::vector<float> referenceTensor;
     void* bindings[2]{0};
-    // std::vector<std::string> inputFiles;
     cudawrapper::CudaStream stream;
 
     nvinfer1::ICudaEngine* getCudaEngine(std::string enginePath) {
@@ -110,8 +104,6 @@ private:
         cudaMemcpyAsync(outputTensor.data(), bindings[1 - inputId], outputTensor.size() * sizeof(float), cudaMemcpyDeviceToHost, stream);
     }
 
-    //==========================AI=============================================
-
     void flatten(tf2::Quaternion &quat) {
         quat.setX(0);
         quat.setY(0);
@@ -121,27 +113,32 @@ private:
     }
 
     void preprocess(cv::Mat &frame, const int bi) {
-        //resize image, remove mean, divide by std
+        int c, h, w;
         nvinfer1::Dims dims_o{engine->getBindingDimensions(0)};
-        resize(frame, frame, cv::Size(dims_o.d[2], dims_o.d[3]));
+        #ifdef NCHW
+            c = dims_o.d[1];
+            h = dims_o.d[2];
+            w = dims_o.d[3];
+        #else
+            h = dims_o.d[1];
+            w = dims_o.d[2];
+            c = dims_o.d[3];
+        #endif
+
+        //resize image, remove mean, divide by std
+        resize(frame, frame, cv::Size(h, w));
 
         frame.convertTo(imagePreproc, CV_32FC3, 1 / 255.0, 0);
 
         //copy image into tensor and copy it into GPU
         cv::split(imagePreproc, bgr);
-        int channels = engine->getBindingDimensions(0).d[1];
         inputTensor.clear();
-        for (int i = 0; i < channels; i++){
+        for (int i = 0; i < c; i++){
             inputTensor.insert(inputTensor.end(), (float*)bgr[i].data, (float*)bgr[i].dataend);
         }
     }
 
     void postprocess(){
-        // float* out = (float*)malloc(netRT->output_dim.tot() * sizeof(dnnType));
-        // checkCuda(cudaDeviceSynchronize());
-        // checkCuda(cudaMemcpy(out, output_d, netRT->output_dim.tot() * sizeof(dnnType), cudaMemcpyDeviceToHost));
-        // checkCuda(cudaDeviceSynchronize());
-
         outputTensor[0] = (outputTensor[0] * 2) - 1;
         outputTensor[1] = (outputTensor[1] * 2) - 1;
     }
@@ -257,13 +254,6 @@ public:
         nvinfer1::Dims dims_i{engine->getBindingDimensions(0)};
         nvinfer1::Dims4 inputDims{BATCH_SIZE, dims_i.d[1], dims_i.d[2], dims_i.d[3]};
         context->setBindingDimensions(0, inputDims);
-
-        //netRT = new tk::dnn::NetworkRT(NULL, trt_engine_filename.c_str());
-        // These 3 lines fix a bug in the NetworkRT constructor
-        
-        // Allocate memory for input buffers
-        // checkCuda(cudaMallocHost(&input, sizeof(dnnType) * netRT->input_dim.tot() * nBatches));
-        // checkCuda(cudaMalloc(&input_d, sizeof(dnnType) * netRT->input_dim.tot() * nBatches));
 
         hde_pub = this->create_publisher<cinematography_msgs::msg::VisionMeasurements>("vision_measurements", 50);
         bb_sub = this->create_subscription<cinematography_msgs::msg::BoundingBox>("bounding_box", 50, std::bind(&HeadingEstimation::processImage, this, _1));

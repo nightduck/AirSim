@@ -206,8 +206,11 @@ if(BUILD_TESTING)
 endif()
 
 install(TARGETS
-        ioHelper actor_detection heading_estimation motion_forecasting motion_planner motion_planner_cuda follow_trajectory airsim_ros2_wrapper debug_viz
+        actor_detection heading_estimation motion_forecasting motion_planner motion_planner_cuda follow_trajectory airsim_ros2_wrapper debug_viz
         DESTINATION lib/${PROJECT_NAME})
+install(TARGETS
+        ioHelper
+        DESTINATION lib)
 install(DIRECTORY include/
         DESTINATION include)
 install(DIRECTORY launch

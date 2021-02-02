@@ -1,6 +1,7 @@
 [submodule "ros/src/mav_trajectory_generation"]
 	path = ros/src/mav_trajectory_generation
 	url = https://github.com/ethz-asl/mav_trajectory_generation.git
+	branch = master
 [submodule "ros/src/eigen_catkin"]
 	path = ros/src/eigen_catkin
 	url = https://github.com/ethz-asl/eigen_catkin.git
@@ -29,9 +30,11 @@
 [submodule "ros2/src/ros_tsdf"]
 	path = ros2/src/ros_tsdf
 	url = https://github.com/naraharip2017/ros_tsdf.git
+	branch = main
 [submodule "ros2/src/cinematography/tkDNN"]
 	path = ros2/src/cinematography/tkDNN
 	url = https://github.com/ceccocats/tkDNN.git
+	branch = master
 [submodule "ros2/src/cinematography/ukf"]
 	path = ros2/src/cinematography/ukf
 	url = https://github.com/sfwa/ukf.git
