@@ -932,6 +932,11 @@ int main(int argc, char ** argv)
     tf_buffer = new tf2_ros::Buffer(node->get_clock()); 
     tf_listener = new tf2_ros::TransformListener(*tf_buffer);
 
+    while(!tf_buffer->canTransform(world_frame, drone_frame, tf2::TimePointZero)) {
+        std::cout << "Waiting for world to drone frame transform..." << std::endl;
+        sleep(1);
+    };
+
     auto actor_traj_sub = node->create_subscription<cinematography_msgs::msg::MultiDOFarray>("actor_traj", 1, get_actor_trajectory); 
     auto tsdf_sub = node->create_subscription<tsdf_package_msgs::msg::Tsdf>("tsdf", 1, tsdf_callback);
 

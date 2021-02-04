@@ -68,7 +68,19 @@ find_package(CUDA 9.0 REQUIRED)
 SET(CUDA_SEPARABLE_COMPILATION ON)
 #set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -arch=sm_30 --compiler-options '-fPIC'")
 CUDA_SELECT_NVCC_ARCH_FLAGS(ARCH_FLAGS Auto)
-set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -arch=sm_60)
+SET(CUDA_NVCC_FLAGS ${ARCH_FLAGS} CACHE STRING "nvcc flags" FORCE)
+
+## For cross compilation in the future
+# string(APPEND CMAKE_CUDA_FLAGS " -gencode arch=compute_52,code=sm_52")  # GTX 9xx series
+# string(APPEND CMAKE_CUDA_FLAGS " -gencode arch=compute_53,code=sm_53")  # Jetson TX2/Nano
+# string(APPEND CMAKE_CUDA_FLAGS " -gencode arch=compute_60,code=sm_60")  # Tesla/Quadro P100 series
+# string(APPEND CMAKE_CUDA_FLAGS " -gencode arch=compute_61,code=sm_61")  # GTX 10xx series
+# string(APPEND CMAKE_CUDA_FLAGS " -gencode arch=compute_62,code=sm_62")  # Jetson TX2
+# string(APPEND CMAKE_CUDA_FLAGS " -gencode arch=compute_70,code=sm_70")  # Titan V
+# string(APPEND CMAKE_CUDA_FLAGS " -gencode arch=compute_72,code=sm_72")  # Jetson AGX
+# string(APPEND CMAKE_CUDA_FLAGS " -gencode arch=compute_75,code=sm_75")  # RTX 20xx series, GTX 1660, Titan/Quadro RTX
+# string(APPEND CMAKE_CUDA_FLAGS " -gencode arch=compute_80,code=sm_80")  # A100
+# string(APPEND CMAKE_CUDA_FLAGS " -gencode arch=compute_86,code=sm_86")  # RTX 30xx series
 
 # set(msgs
 # 	"msg/BoundingBox.msg"
@@ -160,6 +172,10 @@ cuda_add_library(motion_planner_cuda STATIC
 add_library(ioHelper SHARED src/ioHelper.cpp)
 target_link_libraries(ioHelper ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES} ${CUDNN_LIBRARIES} ${OpenCV_LIBS})
 
+install(TARGETS
+        ioHelper
+        DESTINATION lib)
+
 
 #-------------------------------------------------------------------------------
 # Build ROS2 Nodes
@@ -208,9 +224,6 @@ endif()
 install(TARGETS
         actor_detection heading_estimation motion_forecasting motion_planner motion_planner_cuda follow_trajectory airsim_ros2_wrapper debug_viz
         DESTINATION lib/${PROJECT_NAME})
-install(TARGETS
-        ioHelper
-        DESTINATION lib)
 install(DIRECTORY include/
         DESTINATION include)
 install(DIRECTORY launch

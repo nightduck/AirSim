@@ -36,7 +36,10 @@ Execute the following to download this repo and build ROS packages
 
     # Install ROS2 dependencies
     sudo apt install python3-colcon-common-extensions ros-dashing-tf2-sensor-msgs \
-    ros-dashing-launch-testing-ament-cmake
+    ros-dashing-launch-testing-ament-cmake gcc-8 g++-8 libprotobuf-dev protobuf-compiler \
+    libyaml-cpp-dev
+
+    # TODO: Add note about cmake >=3.15 and Eigen 3.3.8
 
     cd ../ros2                                                      # Build ROS2 code
     source /opt/ros/dashing/setup.bash

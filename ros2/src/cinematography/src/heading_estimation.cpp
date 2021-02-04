@@ -115,15 +115,9 @@ private:
     void preprocess(cv::Mat &frame, const int bi) {
         int c, h, w;
         nvinfer1::Dims dims_o{engine->getBindingDimensions(0)};
-        #ifdef NCHW
-            c = dims_o.d[1];
-            h = dims_o.d[2];
-            w = dims_o.d[3];
-        #else
-            h = dims_o.d[1];
-            w = dims_o.d[2];
-            c = dims_o.d[3];
-        #endif
+        c = dims_o.d[1];
+        h = dims_o.d[2];
+        w = dims_o.d[3];
 
         //resize image, remove mean, divide by std
         resize(frame, frame, cv::Size(h, w));
