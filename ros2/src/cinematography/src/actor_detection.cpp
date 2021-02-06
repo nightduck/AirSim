@@ -177,19 +177,24 @@ public:
     ActorDetection() : Node("actor_detection") {
         declare_parameter<std::string>("tensorrt_engine", "yolo4_deer_fp32.rt");
         get_parameter("tensorrt_engine", trt_engine_filename);
-        declare_parameter<std::string>("airsim_hostname", "localhost");
-        get_parameter("airsim_hostname", airsim_hostname);
-        declare_parameter<std::string>("world_frame", "world_ned");
-        get_parameter("world_frame", world_frame);
-        declare_parameter<std::string>("vehicle_name", "drone_1");
-        get_parameter("vehicle_name", vehicle_name);
-        declare_parameter<std::string>("camera_name", "camera");
-        get_parameter("camera_name", camera_name);
 
         pose_frame = vehicle_name + "/" + camera_name;
 
         tf_buffer = new tf2_ros::Buffer(this->get_clock()); 
         tf_listener = new tf2_ros::TransformListener(*tf_buffer);
+
+        auto parameters_client = std::make_shared<rclcpp::SyncParametersClient>(this, "airsim_ros2_wrapper");
+        while (!parameters_client->wait_for_service(1s)) {
+            if (!rclcpp::ok()) {
+                RCLCPP_ERROR(this->get_logger(), "Interrupted while waiting for the service. Exiting.");
+                rclcpp::shutdown();
+            }
+            RCLCPP_INFO(this->get_logger(), "service not available, waiting again...");
+        }
+        airsim_hostname = parameters_client->get_parameter<std::string>("airsim_hostname");
+        vehicle_name = parameters_client->get_parameter<std::string>("vehicle");
+        camera_name = parameters_client->get_parameter<std::string>("camera");
+        world_frame = parameters_client->get_parameter<std::string>("world_frame");
         
         airsim_client = new msr::airlib::MultirotorRpcLibClient(airsim_hostname);
         gimbal_setpoint = tf2::Quaternion(0,0,0,1);

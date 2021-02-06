@@ -11,9 +11,6 @@ def generate_launch_description():
             remappings=[
                 ("pred_path", "/auto_cinematography/planning/actor_traj"),
                 ("vision_measurements", "/auto_cinematography/vision/vision_measurements")
-            ],
-            parameters=[
-                {"airsim_hostname": "localhost"}
             ]
         )
     ])

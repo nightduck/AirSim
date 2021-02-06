@@ -8,6 +8,7 @@
 #include "vehicles/multirotor/api/MultirotorRpcLibClient.hpp"
 #include <Eigen/Dense>
 
+using namespace std::chrono_literals;
 using std::placeholders::_1;
 
 class MotionForecasting : public rclcpp::Node {
@@ -81,8 +82,16 @@ public:
         declare_parameter<double>("forecast_window_secs", 10);
         declare_parameter<std::string>("actor_name", "DeerBothBP2_19");
         get_parameter("actor_name", ACTOR_NAME);
-        declare_parameter<std::string>("airsim_hostname", "localhost");
-        get_parameter("airsim_hostname", airsim_hostname);
+
+        auto parameters_client = std::make_shared<rclcpp::SyncParametersClient>(this, "airsim_ros2_wrapper");
+        while (!parameters_client->wait_for_service(1s)) {
+            if (!rclcpp::ok()) {
+                RCLCPP_ERROR(this->get_logger(), "Interrupted while waiting for the service. Exiting.");
+                rclcpp::shutdown();
+            }
+            RCLCPP_INFO(this->get_logger(), "service not available, waiting again...");
+        }
+        airsim_hostname = parameters_client->get_parameter<std::string>("airsim_hostname");
 
         airsim_client = new msr::airlib::MultirotorRpcLibClient(airsim_hostname);
 

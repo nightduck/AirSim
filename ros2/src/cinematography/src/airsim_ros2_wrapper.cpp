@@ -43,7 +43,7 @@ private:
     int lidar_fps;
     int pose_update;
 
-    std::string world_frame_id_ = "world_ned";
+    std::string world_frame_id_;
     bool is_vulkan_;
 
     std::string airsim_hostname;
@@ -184,6 +184,8 @@ public:
         get_parameter("lidar_name", lidar_name);
         declare_parameter<std::string>("vehicle_name", "drone_1");
         get_parameter("vehicle_name", vehicle_name);
+        declare_parameter<std::string>("world_frame", "world_ned");
+        get_parameter("world_frame", world_frame_id_);
         declare_parameter<int>("camera_fps", 4);
         get_parameter("camera_fps", camera_fps);
         declare_parameter<int>("lidar_fps", 4);

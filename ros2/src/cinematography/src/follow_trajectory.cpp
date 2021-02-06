@@ -120,11 +120,15 @@ int main(int argc, char **argv)
 
     clock_ = node->get_clock();
 
-    node->declare_parameter<std::string>("airsim_hostname", "localhost");
-
-    std::string host_ip;
-
-    node->get_parameter("airsim_hostname", host_ip);
+    auto parameters_client = std::make_shared<rclcpp::SyncParametersClient>(node, "airsim_ros2_wrapper");
+    while (!parameters_client->wait_for_service(1s)) {
+        if (!rclcpp::ok()) {
+            RCLCPP_ERROR(node->get_logger(), "Interrupted while waiting for the service. Exiting.");
+            rclcpp::shutdown();
+        }
+        RCLCPP_INFO(node->get_logger(), "service not available, waiting again...");
+    }
+    std::string host_ip = parameters_client->get_parameter<std::string>("airsim_hostname");
 
     airsim_client = new msr::airlib::MultirotorRpcLibClient(host_ip);
     airsim_client->enableApiControl(true);
