@@ -14,10 +14,9 @@ Cars in AirSim
 
 [![AirSim Car Demo Video](docs/images/car_demo_video.png)](https://youtu.be/gnz1X3UNM5Y)
 
-## ROS Build Instructions
+## Build Instructions
 
-This guide assumes you've installed ROS Melodic following the [instructions here](http://wiki.ros.org/melodic/Installation/Ubuntu), and ROS2 Dashing has been installed via package management as per the [instructions here](https://index.ros.org/doc/ros2/Installation/Dashing/Linux-Install-Debians/)
-Execute the following to download this repo and build ROS packages
+Execute the following to download this repo and build the AirSim component
 
     git clone https://github.com/nightduck/AirSim.git               # Clone this repo
     cd AirSim
@@ -25,30 +24,14 @@ Execute the following to download this repo and build ROS packages
     ./setup.sh                                                      # Build repo
     ./build.sh
 
-    # Install ROS1 dependencies
-    sudo apt install python-catkin-tools ros-melodic-octomap ros-melodic-octomap-server \
-    ros-melodic-ompl ros-melodic-mavros-msgs ros-melodic-tf2-geometry-msgs libompl12 \
-    libompl-dev libcv-bridge1d gcc-8 g++-8
+The environment required to run the ros packages is provided, just run
 
-    cd ros                                                          # Build ROS code
-    source /opt/ros/melodic/setup.bash
-    catkin build -DCMAKE_C_COMPILER=gcc-8 -DCMAKE_CXX_COMPILER=g++-8
+    docker run --gpus all -it --rm -v /path/to/this/repo:/workspace/AirSim \
+        nightduck/airsim_cinematography:jp4.5_dashing_devel
 
-    # Install ROS2 dependencies
-    sudo apt install python3-colcon-common-extensions ros-dashing-tf2-sensor-msgs \
-    ros-dashing-launch-testing-ament-cmake gcc-8 g++-8 libprotobuf-dev protobuf-compiler \
-    libyaml-cpp-dev
+This will open a new shell. In the current directory is this repo, as well as the 2 appropriate tensorrt engines.
 
-    # TODO: Add note about cmake >=3.15 and Eigen 3.3.8
-
-    cd ../ros2                                                      # Build ROS2 code
-    source /opt/ros/dashing/setup.bash
-    colcon build --cmake-args -DCMAKE_C_COMPILER=gcc-8 -DCMAKE_CXX_COMPILER=g++-8
-
-Then, in a new terminal, build the ROS1 bridge
-
-    cd AirSim/bridge_ws
-    ./build_bridge.sh
+There are separately tagged docker images, built for arm64, that run the full application pipeline instead of a ros shell. They are not stable yet, but the in-progress dockerfile for the Jetson AGX is still source controlled here.
 
 ## Running on Jetson
 
