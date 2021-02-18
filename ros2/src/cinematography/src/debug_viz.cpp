@@ -6,6 +6,9 @@
 #include "sensor_msgs/msg/image.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/pose_array.hpp"
+#include <visualization_msgs/msg/marker_array.hpp>
+#include "tsdf_package_msgs/msg/tsdf.hpp"
+#include "tsdf_package_msgs/msg/voxel.hpp"
 #include <opencv2/opencv.hpp>
 #include <cv_bridge/cv_bridge.h>
 
@@ -20,18 +23,23 @@ private:
     rclcpp::Subscription<cinematography_msgs::msg::MultiDOFarray>::SharedPtr ideal_traj_sub;
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr img_sub;
     rclcpp::Subscription<cinematography_msgs::msg::VisionMeasurements>::SharedPtr vm_sub;
+    rclcpp::Subscription<tsdf_package_msgs::msg::Tsdf>::SharedPtr tsdf_occupied_voxels_sub;
 
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_pub;
     rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr actor_traj_pub;
     rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr drone_traj_pub;
     rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr ideal_traj_pub;
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr img_pub;
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr tsdf_occupied_voxels_pub;
 
     std::recursive_mutex m;
     rclcpp::Clock clock = rclcpp::Clock(RCL_SYSTEM_TIME);
     std::string world_frame_id_ = "world_ned";
 
     cv::Mat lastFrame;
+
+    visualization_msgs::msg::MarkerArray markerArray;
+    rclcpp::Time last_time;
 
     void fetchDronePose(const geometry_msgs::msg::Pose::SharedPtr pose) {
         geometry_msgs::msg::PoseStamped ps;
@@ -121,6 +129,55 @@ private:
         img_pub->publish(cv_msg.toImageMsg());
         m.unlock();
     }
+
+    void fetchTSDF(const tsdf_package_msgs::msg::Tsdf::SharedPtr tsdf) {
+        rclcpp::Time now = clock.now();
+        rclcpp::Duration duration = now - last_time;
+        double duration_seconds = duration.seconds();
+
+        if(duration_seconds > 5){
+            last_time = now;
+
+            float voxel_size = tsdf->voxel_size;
+
+            markerArray.markers.clear(); 
+            visualization_msgs::msg::Marker markerGreen, markerRed;
+            markerGreen.type = markerRed.type = visualization_msgs::msg::Marker::CUBE_LIST;
+            markerGreen.action = markerRed.action = visualization_msgs::msg::Marker::ADD;
+            markerGreen.header.frame_id = markerRed.header.frame_id= "world_ned";
+            markerGreen.ns = markerRed.ns = "occupied_voxels";
+            markerGreen.id = 0;
+            markerRed.id = 1;
+            markerGreen.scale.x = markerRed.scale.x = voxel_size;
+            markerGreen.scale.y = markerRed.scale.y = voxel_size;
+            markerGreen.scale.z = markerRed.scale.z = voxel_size;
+            markerGreen.color.a = markerRed.color.a = 1.0;
+            markerGreen.color.r = 0.0;
+            markerRed.color.g = 0.0;
+            markerGreen.color.b = markerRed.color.b = 0.0;
+            markerRed.color.r = 1.0;
+            markerGreen.color.g = 1.0;
+
+            std::vector<tsdf_package_msgs::msg::Voxel> voxels = tsdf->voxels;
+            for (tsdf_package_msgs::msg::Voxel v : voxels){
+                geometry_msgs::msg::Point p;
+                //although in ned frame this swaps the points to enu for easier visualization in rviz
+                p.x = -1 * v.x; //todo: fix, swapping so visualization looks right in rviz
+                p.y = -1 * v.y;
+                p.z = -1 * v.z;
+                if(v.sdf >= 0){
+                    markerGreen.points.push_back(p);
+                }
+                else{
+                    markerRed.points.push_back(p);
+                }
+            }
+
+            markerArray.markers.push_back(markerGreen);
+            markerArray.markers.push_back(markerRed);
+            tsdf_occupied_voxels_pub->publish(markerArray);
+        }
+    }
     
 
 public:
@@ -130,6 +187,7 @@ public:
         drone_traj_pub = this->create_publisher<geometry_msgs::msg::PoseArray>("drone_traj_out", 1);
         ideal_traj_pub = this->create_publisher<geometry_msgs::msg::PoseArray>("ideal_traj_out", 1);
         img_pub = this->create_publisher<sensor_msgs::msg::Image>("img_out", 20);
+        tsdf_occupied_voxels_pub = this->create_publisher<visualization_msgs::msg::MarkerArray>("tsdf_occupied_voxels", 1);
         
         pose_sub = this->create_subscription<geometry_msgs::msg::Pose>("pose_in", 1,
             std::bind(&DebugViz::fetchDronePose, this, _1));
@@ -143,6 +201,10 @@ public:
             std::bind(&DebugViz::fetchImage, this, _1));
         vm_sub = this->create_subscription<cinematography_msgs::msg::VisionMeasurements>("vm_in", 1,
             std::bind(&DebugViz::fetchVisionMeasurements, this, _1));
+        tsdf_occupied_voxels_sub = this->create_subscription<tsdf_package_msgs::msg::Tsdf>("tsdf", 1, 
+            std::bind(&DebugViz::fetchTSDF, this, _1));
+
+        last_time = clock.now();
     }
 };
 

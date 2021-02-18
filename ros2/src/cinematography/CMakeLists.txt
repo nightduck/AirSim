@@ -46,6 +46,7 @@ find_package(tf2_sensor_msgs REQUIRED)
 find_package(cinematography_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(message_filters REQUIRED)
+find_package(visualization_msgs REQUIRED)
 find_package(tsdf_package REQUIRED)
 find_package(tsdf_package_msgs REQUIRED)
 
@@ -211,7 +212,7 @@ ament_target_dependencies(airsim_ros2_wrapper rclcpp sensor_msgs tf2 tf2_ros)
 target_link_libraries(airsim_ros2_wrapper AirLib)
 
 add_executable(debug_viz src/debug_viz.cpp)
-ament_target_dependencies(debug_viz rclcpp sensor_msgs geometry_msgs cinematography_msgs cv_bridge)
+ament_target_dependencies(debug_viz rclcpp sensor_msgs geometry_msgs cinematography_msgs cv_bridge visualization_msgs tsdf_package_msgs)
 target_link_libraries(debug_viz ${OpenCV_LIBS})
 
 if(BUILD_TESTING)
