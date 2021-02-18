@@ -46,6 +46,7 @@ find_package(tf2_sensor_msgs REQUIRED)
 find_package(cinematography_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(message_filters REQUIRED)
+find_package(tsdf_package REQUIRED)
 find_package(tsdf_package_msgs REQUIRED)
 
 # TODO eigen3 in AirLib already
@@ -194,6 +195,9 @@ add_executable(motion_forecasting src/motion_forecasting.cpp src/filter.cpp)
 ament_target_dependencies(motion_forecasting rclcpp geometry_msgs cinematography_msgs)
 target_link_libraries(motion_forecasting AirLib)
 
+add_executable(mapping src/mapping.cpp)
+target_link_libraries(mapping tsdf_package::tsdf_node)
+
 add_executable(motion_planner src/motion_planner.cpp)
 ament_target_dependencies(motion_planner rclcpp geometry_msgs cinematography_msgs tf2_geometry_msgs tsdf_package_msgs)
 target_link_libraries(motion_planner AirLib motion_planner_cuda)
@@ -222,7 +226,7 @@ if(BUILD_TESTING)
 endif()
 
 install(TARGETS
-        actor_detection heading_estimation motion_forecasting motion_planner motion_planner_cuda follow_trajectory airsim_ros2_wrapper debug_viz
+        actor_detection heading_estimation motion_forecasting mapping motion_planner motion_planner_cuda follow_trajectory airsim_ros2_wrapper debug_viz
         DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/
         DESTINATION include)
