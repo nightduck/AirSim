@@ -15,6 +15,10 @@ def generate_launch_description():
             node_executable="airsim_ros2_wrapper",
             node_name="airsim_ros2_wrapper",
             output="screen",
+            remappings=[
+                ("camera", "/airsim_ros2_wrapper/camera"),
+                ("lidar", "/airsim_ros2_wrapper/lidar")
+            ],
             parameters=[
                 {"vehicle" : "drone_1"},
                 {"camera" : "front_center_custom"},

@@ -192,8 +192,8 @@ public:
             RCLCPP_INFO(this->get_logger(), "service not available, waiting again...");
         }
         airsim_hostname = parameters_client->get_parameter<std::string>("airsim_hostname");
-        vehicle_name = parameters_client->get_parameter<std::string>("vehicle");
-        camera_name = parameters_client->get_parameter<std::string>("camera");
+        vehicle_name = parameters_client->get_parameter<std::string>("vehicle_name");
+        camera_name = parameters_client->get_parameter<std::string>("camera_name");
         world_frame = parameters_client->get_parameter<std::string>("world_frame");
         
         airsim_client = new msr::airlib::MultirotorRpcLibClient(airsim_hostname);

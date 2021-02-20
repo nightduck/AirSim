@@ -936,7 +936,7 @@ int main(int argc, char ** argv)
     }
     airsim_hostname = parameters_client->get_parameter<std::string>("airsim_hostname");
     world_frame = parameters_client->get_parameter<std::string>("world_frame");
-    drone_frame = parameters_client->get_parameter<std::string>("vehicle");
+    drone_frame = parameters_client->get_parameter<std::string>("vehicle_name");
 
     while(!tf_buffer->canTransform(world_frame, drone_frame, tf2::TimePointZero)) {
         std::cout << "Waiting for world to drone frame transform..." << std::endl;

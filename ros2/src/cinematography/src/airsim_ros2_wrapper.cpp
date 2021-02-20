@@ -175,7 +175,7 @@ private:
     }
 
 public:
-    AirsimROS2Wrapper() : Node("airsim_ros2_wrapper", "/airsim_ros2_wrapper"), tf_broadcaster(this) {
+    AirsimROS2Wrapper() : Node("airsim_ros2_wrapper"), tf_broadcaster(this) {
         declare_parameter<std::string>("airsim_hostname", "localhost");
         get_parameter("airsim_hostname", airsim_hostname);
         declare_parameter<std::string>("camera_name", "front_center_custom");
