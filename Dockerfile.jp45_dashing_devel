@@ -13,36 +13,52 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /workspace
 
-RUN apt-get update && \
-    apt-get install locales \
-    && rm -rf /var/lib/apt/lists/*
-ENV LANG=en_US.UTF-8
-
 # change the locale from POSIX to UTF-8
-RUN locale-gen en_US en_US.UTF-8 && update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+RUN apt-get update && \
+    apt-get install -y locales && \
+    locale-gen en_US en_US.UTF-8 && update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 && \
+    rm -rf /var/lib/apt/lists/*
 ENV LANG=en_US.UTF-8
 
-# Install TensorRT
-RUN apt-get update && \
-    apt install libnvinfer7=7.1.3-1+cuda10.2 \
-        libnvinfer-dev=7.1.3-1+cuda10.2 \
-        libnvinfer-plugin7=7.1.3-1+cuda10.2 \
-    && rm -rf /var/lib/apt/lists/*
-
-# add the ROS deb repo to the apt sources list
+# Install some utilities
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         git \
-		cmake \
-		build-essential \
+        build-essential \
 		curl \
 		wget \
 		gnupg2 \
 		lsb-release \
+        vim \
+        gdb \
+        libssl-dev \
+        python3 \
+        python3-numpy \
     && rm -rf /var/lib/apt/lists/*
 
-RUN wget --no-check-certificate https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc && apt-key add ros.asc && rm ros.asc
-RUN sh -c 'echo "deb [arch=$(dpkg --print-architecture)] http://packages.ros.org/ros2/ubuntu $(lsb_release -cs) main" > /etc/apt/sources.list.d/ros2-latest.list'
+# Install CMake 3.18
+RUN git clone -b v3.18.6 https://github.com/Kitware/CMake.git /usr/local/src/CMake \
+        && cd /usr/local/src/CMake && bash bootstrap && \
+        make -j $(nproc) && make install && \
+        rm -r /usr/local/src/CMake
+
+# Install TensorRT and Onnx
+RUN apt-get update && \
+    apt install -y --no-install-recommends \
+        libnvinfer7=7.1.3-1+cuda10.2 \
+        libnvinfer-dev=7.1.3-1+cuda10.2 \
+        libnvinfer-plugin7=7.1.3-1+cuda10.2 \
+        libnvonnxparsers7=7.1.3-1+cuda10.2 \
+        libnvonnxparsers-dev=7.1.3-1+cuda10.2 \
+        libprotobuf-dev protobuf-compiler && \
+    git clone --recursive https://github.com/onnx/onnx.git && \
+    mkdir onnx/build && cd onnx/build && \
+    cmake .. && make && make install && \
+    rm -rf /var/lib/apt/lists/*
+
+# add the ROS deb repo to the apt sources list
+RUN wget --no-check-certificate https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc && apt-key add ros.asc && rm ros.asc \
+    && sh -c 'echo "deb [arch=$(dpkg --print-architecture)] http://packages.ros.org/ros2/ubuntu $(lsb_release -cs) main" > /etc/apt/sources.list.d/ros2-latest.list'
 
 # install ROS packages
 RUN apt-get update && \
@@ -52,7 +68,6 @@ RUN apt-get update && \
         ros-dashing-tf2-sensor-msgs \
         ros-dashing-launch-testing-ament-cmake \
         gcc-8 g++-8 \
-        libprotobuf-dev protobuf-compiler \
         libyaml-cpp-dev \
 		libpython3-dev \
 		python3-colcon-common-extensions \
@@ -68,15 +83,11 @@ RUN apt-get update && \
 
 # Replace default eigen with 3.3.7 (PCL wants it to be at this location, and refuses to check /usr/local/include/eigen3, idfk)
 RUN rm -r /usr/include/eigen3 \
-        && git clone -b 3.3.7 https://gitlab.com/libeigen/eigen.git /usr/include/eigen3
+    && git clone -b 3.3.7 https://gitlab.com/libeigen/eigen.git /usr/include/eigen3
 
-# Install CMake 3.18
-RUN git clone -b v3.18.6 https://github.com/Kitware/CMake.git /usr/local/src/CMake \
-        && cd /usr/local/src/CMake && bash bootstrap && make -j $(nproc) && sudo make install
-
-# Install OpenCV 4.4
-RUN git clone -b 4.2.0 https://github.com/opencv/opencv /usr/local/src/opencv && \
-    git clone -b 4.2.0 https://github.com/opencv/opencv_contrib /usr/local/src/opencv_contrib && \
+# Install OpenCV 4.1.1
+RUN git clone -b 4.1.1 https://github.com/opencv/opencv /usr/local/src/opencv && \
+    git clone -b 4.1.1 https://github.com/opencv/opencv_contrib /usr/local/src/opencv_contrib && \
     cd /usr/local/src/opencv && mkdir build && cd build && \
     cmake -D CMAKE_BUILD_TYPE=RELEASE \
 	    -D CMAKE_C_COMPILER=/usr/bin/gcc-7 \
@@ -99,15 +110,18 @@ RUN git clone -b 4.2.0 https://github.com/opencv/opencv /usr/local/src/opencv &&
         -D OPENCV_PYTHON3_INSTALL_PATH=~/.virtualenvs/cv/lib/python3.6/site-packages \
         -D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules \
         -D PYTHON_EXECUTABLE=~/.virtualenvs/cv/bin/python3 \
-        -D BUILD_EXAMPLES=ON .. && \
+        -D BUILD_EXAMPLES=ON \
+        -DENABLE_PRECOMPILED_HEADERS=OFF .. && \
     make -j $(nproc) && \
-    sudo make install && \
-    sudo /bin/bash -c 'echo "/usr/local/lib" >> /etc/ld.so.conf.d/opencv.conf' && \
-    sudo ldconfig
+    make install && \
+    /bin/bash -c 'echo "/usr/local/lib" >> /etc/ld.so.conf.d/opencv.conf' && \
+    ldconfig && \
+    rm -r /usr/local/src/opencv /usr/local/src/opencv_contrib
 
 RUN wget https://cloud.orenbell.com/index.php/s/5To35xzwSH43Csn/download -O deer_hde_fp32.rt
 RUN wget https://cloud.orenbell.com/index.php/s/rLA6xWPH2MLRWn3/download -O yolo4_deer_fp32.rt
 
 # setup entrypoint
-RUN echo 'source ${ROS_ROOT}/setup.bash' >> /root/.bashrc
-CMD ["bash"]
+COPY ./ros_entrypoint.sh /
+ENTRYPOINT ["/ros_entrypoint.sh"]
+CMD ["",""]

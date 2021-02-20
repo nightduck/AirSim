@@ -1,7 +1,11 @@
 from launch import LaunchDescription
 from launch_ros.actions import Node
+import os
 
 def generate_launch_description():
+    hostname = os.environ["AIRSIM_HOSTNAME"]
+    if len(hostname) == 0:
+        hostname = 'localhost'
     return LaunchDescription([
         Node(
             package="tf2_ros",
@@ -20,6 +24,7 @@ def generate_launch_description():
                 ("lidar", "/airsim_ros2_wrapper/lidar")
             ],
             parameters=[
+                {"airsim_hostname": hostname},
                 {"vehicle" : "drone_1"},
                 {"camera" : "front_center_custom"},
                 {"lidar_name" : "LidarCustom"},

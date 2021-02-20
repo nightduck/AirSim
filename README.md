@@ -26,12 +26,22 @@ Execute the following to download this repo and build the AirSim component
 
 The environment required to run the ros packages is provided, just run
 
-    docker run --gpus all -it --rm -v /path/to/this/repo:/workspace/AirSim \
-        nightduck/airsim_cinematography:jp4.5_dashing_devel
+    docker run -e DISPLAY=$DISPLAY --gpus all -it --rm -v /path/to/this/repo:/workspace/AirSim \
+        nightduck/airsim_cinematography:jp4.5_dashing_devel airsim_hostname 192.168.0.255
 
-This will open a new shell. In the current directory is this repo, as well as the 2 appropriate tensorrt engines.
+Set /path/to/repo to this absolute path to this repository, so you can mount it in the docker container. Set airsim_hostname and 192.168.0.255 to the hostname and IP address of the machine running airsim (likely the one you're typing on)
 
-There are separately tagged docker images, built for arm64, that run the full application pipeline instead of a ros shell. They are not stable yet, but the in-progress dockerfile for the Jetson AGX is still source controlled here.
+This will open a new shell. In the current directory is this repo, as well as the 2 appropriate tensorrt engines. To build the ros2 application:
+
+    cd ros2
+    ./build.sh
+
+There are separately tagged docker images, built for arm64, that run the full application pipeline instead of a bash shell. They are not stable yet, but the in-progress dockerfile for the Jetson AGX is still source controlled here.
+
+## Specifying Airsim Host
+The ROS launch file at `ros/launch/ros2_wrapper.launch.py` will look for the environment variable `AIRSIM_HOSTNAME`, and use that to connect to airsim. This is set automatically when a docker container is launched with the hostname and IP arguments. If you are not working in a docker container: a) why? b) you'll have to export this variable yourself, otherwise it defaults to localhost.
+
+All other nodes that need to connect to airsim will use the ros2_wrapper as a parameter server to get this value, so as long as `AIRSIM_HOSTNAME` is exported, no code modification is needed.
 
 ## Running on Jetson
 
@@ -40,8 +50,6 @@ Cross compilation is not yet available, so this repo has to be built on the Jets
     192.168.0.14  ubuntu-workstation
 
 And vice-versa for the Jetson's hostname on the workstation's hosts file. A machine's hostname can be found by running `hostname`.
-
-The ROS launch files in `ros/launch/planning_pipeline.launch` and `ros2/launch/vision_pipeline.launch.py` specify the hostname of the machine running AirSim as ros parameters. These will have to be updated for your own machine.
 
 ## What's New
 * A ROS wrapper for multirotors is available. See [airsim_ros_pkgs](https://github.com/microsoft/AirSim/blob/master/ros/src/airsim_ros_pkgs) for the ROS API, and [airsim_tutorial_pkgs](https://github.com/microsoft/AirSim/blob/master/ros/src/airsim_tutorial_pkgs) for tutorials.
