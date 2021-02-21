@@ -18,15 +18,14 @@ Cars in AirSim
 
 Execute the following to download this repo and build the AirSim component
 
-    git clone https://github.com/nightduck/AirSim.git               # Clone this repo
+    git clone --recursive https://github.com/nightduck/AirSim.git   # Clone this repo
     cd AirSim
-    git submodule update --init --recursive                         # Load all external sources
     ./setup.sh                                                      # Build repo
     ./build.sh
 
 The environment required to run the ros packages is provided, just run
 
-    docker run -e DISPLAY=$DISPLAY --gpus all -it --rm -v /path/to/this/repo:/workspace/AirSim \
+    docker run --gpus all -it --rm -v /path/to/this/repo:/workspace/AirSim \
         nightduck/airsim_cinematography:jp4.5_dashing_devel airsim_hostname 192.168.0.255
 
 Set /path/to/repo to this absolute path to this repository, so you can mount it in the docker container. Set airsim_hostname and 192.168.0.255 to the hostname and IP address of the machine running airsim (likely the one you're typing on)
