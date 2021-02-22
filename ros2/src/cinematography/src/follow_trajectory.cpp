@@ -252,8 +252,6 @@ int main(int argc, char **argv)
                 else{
                     yaw_diff = 0;
                 }
-
-                std::cout << "Yaw: " << current_yaw << " Desired: " << yaw << " Assigned diff: " << yaw_diff << std::endl;
                 
                 float yaw_rate = yaw_diff / scaled_flight_time.count();
 
