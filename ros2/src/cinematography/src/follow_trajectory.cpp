@@ -37,7 +37,7 @@ bool copy_panic_traj = false;
 bool copy_normal_traj = false;
 bool wasEmpty = true;
 
-float yaw_threshold = 30;
+float yaw_threshold = 5;
 
 struct multiDOFpoint {
     double x, y, z;
@@ -237,10 +237,10 @@ int main(int argc, char **argv)
                                 
                 auto q = airsim_client->getMultirotorState().getOrientation();
                 float pitch, roll, current_yaw;
-                msr::airlib::VectorMath::toEulerianAngle(q, pitch, current_yaw, roll);
-                current_yaw = yaw*180 / M_PI;
+                msr::airlib::VectorMath::toEulerianAngle(q, pitch, roll, current_yaw);
+                current_yaw = current_yaw*180 / M_PI;
 
-                float yaw_diff = (int(yaw - current_yaw) + 360) % 360;
+                float yaw_diff = fmod(yaw - current_yaw + 360, 360);
                 yaw_diff = yaw_diff <= 180 ? yaw_diff : yaw_diff - 360;
 
                 if(yaw_diff >= yaw_threshold){
@@ -252,6 +252,8 @@ int main(int argc, char **argv)
                 else{
                     yaw_diff = 0;
                 }
+
+                std::cout << "Yaw: " << current_yaw << " Desired: " << yaw << " Assigned diff: " << yaw_diff << std::endl;
                 
                 float yaw_rate = yaw_diff / scaled_flight_time.count();
 
