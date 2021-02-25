@@ -25,8 +25,13 @@ Execute the following to download this repo and build the AirSim component
 
 The environment required to run the ros packages is provided, just run
 
-    docker run --gpus all -it --rm -v /path/to/this/repo:/workspace/AirSim \
+    docker run -e DISPLAY=$DISPLAY -v=/tmp/.X11-unix:/tmp/.X11-unix \
+        --gpus all -it --rm -v /path/to/this/repo:/workspace/AirSim \
         nightduck/airsim_cinematography:jp4.5_dashing_devel airsim_hostname 192.168.0.255
+
+In order to run the debug nodes with GUIs, you need to give docker access to your display:
+
+    xhost +local:docker
 
 Set /path/to/repo to this absolute path to this repository, so you can mount it in the docker container. Set airsim_hostname and 192.168.0.255 to the hostname and IP address of the machine running airsim (likely the one you're typing on)
 

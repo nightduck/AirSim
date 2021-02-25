@@ -153,10 +153,10 @@ add_subdirectory(tkDNN)
 # cuda_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include ${CUDA_INCLUDE_DIRS} ${CUDNN_INCLUDE_DIRS})
 # cuda_add_library(kernels SHARED ${tkdnn_CUSRC})
 
-cuda_add_library(motion_planner_cuda STATIC
-  src/optimize_drone_path.cu
-  OPTIONS -g -shared -Xcompiler -fPIC -rdc=true
-)
+# cuda_add_library(motion_planner_cuda STATIC
+#   src/optimize_drone_path.cu
+#   OPTIONS -g -shared -Xcompiler -fPIC -rdc=true
+# )
 
 # #-------------------------------------------------------------------------------
 # # Build Libraries
@@ -201,7 +201,7 @@ target_link_libraries(mapping tsdf_package::tsdf_node)
 
 add_executable(motion_planner src/motion_planner.cpp)
 ament_target_dependencies(motion_planner rclcpp geometry_msgs cinematography_msgs tf2_geometry_msgs tsdf_package_msgs)
-target_link_libraries(motion_planner AirLib motion_planner_cuda)
+target_link_libraries(motion_planner AirLib) #motion_planner_cuda)
 
 add_executable(follow_trajectory src/follow_trajectory.cpp)
 ament_target_dependencies(follow_trajectory rclcpp geometry_msgs cinematography_msgs tf2_geometry_msgs nav_msgs)
@@ -227,7 +227,7 @@ if(BUILD_TESTING)
 endif()
 
 install(TARGETS
-        actor_detection heading_estimation motion_forecasting mapping motion_planner motion_planner_cuda follow_trajectory airsim_ros2_wrapper debug_viz
+        actor_detection heading_estimation motion_forecasting mapping motion_planner follow_trajectory airsim_ros2_wrapper debug_viz #motion_planner_cuda
         DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/
         DESTINATION include)

@@ -58,7 +58,7 @@ rclcpp::Publisher<cinematography_msgs::msg::MultiDOFarray>::SharedPtr ideal_traj
 // Define default artistic constraints
 double viewport_heading = M_PI / 3;
 double viewport_pitch = M_PI / 4;
-double viewport_distance = 5;
+double viewport_distance = 3;
 
 rclcpp::Node::SharedPtr node;
 rclcpp::Clock::SharedPtr clock_;
@@ -917,7 +917,7 @@ int main(int argc, char ** argv)
     node = rclcpp::Node::make_shared("motion_planner");
     clock_ = node->get_clock();
 
-    allocate_bucket_indices();
+    //allocate_bucket_indices();
 
     node->declare_parameter<int>("max_iterations", 1);
     node->get_parameter("max_iterations", MAX_ITERATIONS);
