@@ -131,6 +131,7 @@ include_directories(
         ${common_utility_src}
         tkDNN/include
         ukf/include
+        /usr/local/include/eigen3
 )
 include_directories(${CUDA_INCLUDE_DIRS} ${OPENCV_INCLUDE_DIRS} ${NVINFER_INCLUDES} ${CUDNN_INCLUDE_DIRS})
 
@@ -157,6 +158,10 @@ add_subdirectory(tkDNN)
 #   src/optimize_drone_path.cu
 #   OPTIONS -g -shared -Xcompiler -fPIC -rdc=true
 # )
+
+ADD_DEFINITIONS(-DEIGEN_NO_MALLOC -DUKF_DOUBLE_PRECISION)
+add_library(ukf SHARED src/filter.cpp)
+ament_target_dependencies(ukf rclcpp cinematography_msgs)
 
 # #-------------------------------------------------------------------------------
 # # Build Libraries
@@ -192,9 +197,9 @@ add_executable(heading_estimation src/heading_estimation.cpp)
 ament_target_dependencies(heading_estimation rclcpp cinematography_msgs sensor_msgs geometry_msgs nav_msgs cv_bridge tf2_geometry_msgs)
 target_link_libraries(heading_estimation ioHelper ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES} ${CUDNN_LIBRARIES} ${OpenCV_LIBS} ${NVINFER_LIBRARY})
 
-add_executable(motion_forecasting src/motion_forecasting.cpp src/filter.cpp)
+add_executable(motion_forecasting src/motion_forecasting.cpp)
 ament_target_dependencies(motion_forecasting rclcpp geometry_msgs cinematography_msgs)
-target_link_libraries(motion_forecasting AirLib)
+target_link_libraries(motion_forecasting AirLib ukf)
 
 add_executable(mapping src/mapping.cpp)
 target_link_libraries(mapping tsdf_package::tsdf_node)
@@ -230,6 +235,8 @@ install(TARGETS
         actor_detection heading_estimation motion_forecasting mapping motion_planner follow_trajectory airsim_ros2_wrapper debug_viz #motion_planner_cuda
         DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/
+        DESTINATION include)
+install(DIRECTORY ukf/include/
         DESTINATION include)
 install(DIRECTORY launch
         DESTINATION share/${PROJECT_NAME}/)

@@ -162,6 +162,8 @@ private:
             vm.height = msg->height;
             vm.fov = msg->fov;
             vm.drone_pose = msg->drone_pose;
+            vm.drone_vel = msg->drone_vel;
+            vm.drone_acc = msg->drone_acc;
             vm.hde = 0;
             hde_pub->publish(vm);
             return;

@@ -6,7 +6,7 @@
 #include <cinematography_msgs/msg/multi_dof.hpp>
 #include "cinematography_msgs/msg/vision_measurements.hpp"
 #include "vehicles/multirotor/api/MultirotorRpcLibClient.hpp"
-#include <Eigen/Dense>
+#include "filter.h"
 
 using namespace std::chrono_literals;
 using std::placeholders::_1;
@@ -30,11 +30,34 @@ private:
         return Eigen::Quaternion<float, 2>(quat.w() / length, 0, 0, quat.z() / length);
     }
 
+    geometry_msgs::msg::Quaternion flatten(geometry_msgs::msg::Quaternion quat) {
+        double length = sqrt(quat.w * quat.w + quat.z * quat.z);
+        quat.w = quat.w / length;
+        quat.x = quat.y = 0;
+        quat.z = quat.z / length;
+        return quat;
+    }
+
     float getYaw(Eigen::Quaternion<float, 2> q) {
         q = flatten(q);
         double siny_cosp = 2 * (q.w() * q.z() + q.x() * q.y());
         double cosy_cosp = 1 - 2 * (q.y() * q.y() + q.z() * q.z());
         return std::atan2(siny_cosp, cosy_cosp);
+    }
+
+    float getYaw(geometry_msgs::msg::Quaternion q) {
+        q = flatten(q);
+        double siny_cosp = 2 * (q.w * q.z + q.x * q.y);
+        double cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z);
+        return std::atan2(siny_cosp, cosy_cosp);
+    }
+
+    float getPitch(geometry_msgs::msg::Quaternion q) {
+        geometry_msgs::msg::Quaternion f = flatten(q);
+
+        float dot_product = f.w * q.w + f.x * q.x + f.y * q.y + f.z * q.z;
+        float angle = acos(2*dot_product*dot_product - 1);
+        return angle;
     }
 
     void getVisionMeasurements(const cinematography_msgs::msg::VisionMeasurements::SharedPtr msg) {
@@ -46,15 +69,34 @@ private:
         rclcpp::Duration duration = now - lastPoseTimestamp;
         lastPoseTimestamp = now;
 
+        double fws;                                                     // Calculate length of trajectory
+        get_parameter("forecast_window_secs", fws);
+        int num_points = fws / duration.seconds() + 1;
+
+        ukf_meas_clear();
+        if (msg->width > 0) {
+            ukf_set_bb(msg->centerx, msg->centery, msg->width * msg->height);
+            ukf_set_hde(msg->hde);
+        }
+        ukf_set_position(msg->drone_pose.position.x, msg->drone_pose.position.y, msg->drone_pose.position.z);
+        ukf_set_yaw(getYaw(msg->drone_pose.orientation));
+        ukf_set_pitch(getPitch(msg->drone_pose.orientation));
+
         cinematography_msgs::msg::MultiDOFarray pred_traj;
         pred_traj.header.stamp = now;
 
-        double fws;
-        get_parameter("forecast_window_secs", fws);
-        pred_traj.points.reserve(fws / duration.seconds() + 1);
+        // Return a forecasted trajectory, including point for this point in time. Update filter in
+        // background
+        pred_traj.points = ukf_iterate(duration, num_points,
+                        msg->drone_vel.linear.x, msg->drone_vel.linear.y, msg->drone_vel.linear.z,
+                        msg->drone_vel.angular.x, msg->drone_vel.angular.y, msg->drone_vel.angular.z);
+        
+
+        // DEBUGGING UNTIL FILTER IS WORKING AND TRAINED
+        pred_traj.points.clear();
         msr::airlib::Vector3r posDiff = pose.position - lastPose.position;
         double yawDiff = getYaw(pose.orientation) - getYaw(lastPose.orientation);
-        for(int i = 0; i < (int) (10 / duration.seconds()); i++) {
+        for(int i = 0; i < num_points; i++) {
             cinematography_msgs::msg::MultiDOF point;
             //trajectory_msgs::msg::MultiDOFJointTrajectoryPoint point;
             point.x = pose.position.x() + posDiff.x() * i;
@@ -70,7 +112,6 @@ private:
             point.yaw = getYaw(pose.orientation) + yawDiff * i;
             pred_traj.points.push_back(point);
         }
-
         lastPose = pose;
 
         predict_pub->publish(pred_traj);

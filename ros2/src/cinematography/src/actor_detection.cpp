@@ -12,6 +12,8 @@
 #include "geometry_msgs/msg/point.hpp"
 #include "geometry_msgs/msg/quaternion.hpp"
 #include "geometry_msgs/msg/pose.hpp"
+#include "geometry_msgs/msg/twist.hpp"
+#include "geometry_msgs/msg/accel.hpp"
 #include "builtin_interfaces/msg/time.hpp"
 #include <opencv2/opencv.hpp>
 #include <cv_bridge/cv_bridge.h>
@@ -32,6 +34,13 @@ using std::placeholders::_1;
 #define GIMBAL_DAMPING_FACTOR   0.8       // Don't immediately face actor, but ease camera in their direction. That way, false positive don't swivel the camera so real actor's out of frame
 #define PERIOD 250ms
 
+struct odometry {
+    geometry_msgs::msg::Pose pose;
+    geometry_msgs::msg::Twist vel;
+    geometry_msgs::msg::Accel acc;
+    rclcpp::Time timestamp;
+};
+
 class ActorDetection : public rclcpp::Node {
 private:
     rclcpp::Publisher<cinematography_msgs::msg::BoundingBox>::SharedPtr bb_pub;
@@ -39,6 +48,8 @@ private:
 
     tf2_ros::Buffer* tf_buffer;
     tf2_ros::TransformListener* tf_listener;
+
+    struct odometry odom;
 
     rclcpp::TimerBase::SharedPtr timer_infr;
     rclcpp::TimerBase::SharedPtr timer_img;
@@ -58,16 +69,52 @@ private:
     std::string trt_engine_filename;
     std::string airsim_hostname;
 
+    struct odometry updateOdometry(struct odometry old_state, geometry_msgs::msg::Pose new_point, rclcpp::Duration t_diff) {
+        struct odometry temp;
+        temp.pose = new_point;
+
+        tf2::Quaternion quat;
+        geometry_msgs::msg::Vector3 rpy1, rpy2;
+        tf2::fromMsg(temp.pose.orientation, quat);
+        tf2::Matrix3x3(quat).getRPY(rpy1.x, rpy1.y, rpy1.z);
+        tf2::fromMsg(new_point.orientation, quat);
+        tf2::Matrix3x3(quat).getRPY(rpy2.x, rpy2.y, rpy2.z);
+
+        temp.vel.linear.x = (new_point.position.x - old_state.pose.position.x) / t_diff.seconds();
+        temp.vel.linear.y = (new_point.position.y - old_state.pose.position.y) / t_diff.seconds();
+        temp.vel.linear.z = (new_point.position.z - old_state.pose.position.z) / t_diff.seconds();
+        temp.vel.angular.x = (rpy2.x - rpy2.x) / t_diff.seconds();
+        temp.vel.angular.y = (rpy2.y - rpy2.y) / t_diff.seconds();
+        temp.vel.angular.z = (rpy2.z - rpy2.z) / t_diff.seconds();
+
+        temp.acc.linear.x = (temp.vel.linear.x - old_state.vel.linear.x) / t_diff.seconds();
+        temp.acc.linear.y = (temp.vel.linear.y - old_state.vel.linear.y) / t_diff.seconds();
+        temp.acc.linear.z = (temp.vel.linear.z - old_state.vel.linear.z) / t_diff.seconds();
+        temp.vel.angular.x = (temp.vel.angular.x - old_state.acc.angular.x) / t_diff.seconds();
+        temp.vel.angular.y = (temp.vel.angular.y - old_state.acc.angular.y) / t_diff.seconds();
+        temp.vel.angular.z = (temp.vel.angular.z - old_state.acc.angular.z) / t_diff.seconds();
+
+        return temp;
+    }
+
     void fetchImage(const sensor_msgs::msg::Image::SharedPtr msg) {
         cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
         cv::Mat img = cv_ptr->image;
 
         cinematography_msgs::msg::BoundingBox bb;   // Contains subimage, position in frame, and camera pose at the moment the image was taken
         geometry_msgs::msg::TransformStamped transform = tf_buffer->lookupTransform(world_frame, pose_frame, tf2::TimePointZero, std::chrono::milliseconds(100)); // TODO: Make sure inference + this block doesn't exceed period
-        bb.drone_pose.position.x = transform.transform.translation.x;
-        bb.drone_pose.position.y = transform.transform.translation.y;
-        bb.drone_pose.position.z = transform.transform.translation.z;
-        bb.drone_pose.orientation = transform.transform.rotation;
+
+        geometry_msgs::msg::Pose temp;        
+        temp.position.x = transform.transform.translation.x;
+        temp.position.y = transform.transform.translation.y;
+        temp.position.z = transform.transform.translation.z;
+        temp.orientation = transform.transform.rotation;
+
+        odom = updateOdometry(odom, temp, rclcpp::Time(transform.header.stamp) - odom.timestamp);
+
+        bb.drone_pose = odom.pose;
+        bb.drone_vel = odom.vel;
+        bb.drone_acc = odom.acc;
 
         // Perform inference
         std::vector<cv::Mat> frame_array;
