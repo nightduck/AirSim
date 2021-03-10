@@ -10,15 +10,17 @@
 #include "UKF/Core.h"
 #include "filter.h"
 
-double fov = 90;
-int width = 672;
-int height = 672;
-int actor_area = 1806336;
+static double fov = 90;
+static int width = 672;
+static int height = 672;
 
 enum StateFields {
-    MagicVector,
-    CameraYaw,
-    CameraPitch,
+    CameraPosition,
+    CameraQuat,
+    CameraVelocity,
+    CameraAngVelocity,
+    CameraAcceleration,
+    CameraAngAcceleration,
     ActorPosition,
     ActorYaw,
     ActorVelocity,
@@ -28,9 +30,12 @@ enum StateFields {
 };
 
 using TrajectoryStateVector = UKF::StateVector<
-    UKF::Field<MagicVector, UKF::Vector<3>>,
-    UKF::Field<CameraYaw, real_t>,
-    UKF::Field<CameraPitch, real_t>,
+    UKF::Field<CameraPosition, UKF::Vector<3>>,
+    UKF::Field<CameraQuat, UKF::Vector<4>>,
+    UKF::Field<CameraVelocity, UKF::Vector<3>>,
+    UKF::Field<CameraAngVelocity, UKF::Vector<3>>,
+    UKF::Field<CameraAcceleration, UKF::Vector<3>>,
+    UKF::Field<CameraAngAcceleration, UKF::Vector<3>>,
     UKF::Field<ActorPosition, UKF::Vector<3>>,
     UKF::Field<ActorYaw, real_t>,
     UKF::Field<ActorVelocity, UKF::Vector<3>>,
@@ -42,29 +47,32 @@ using TrajectoryStateVector = UKF::StateVector<
 
 namespace UKF {
     template <> template<>
-    TrajectoryStateVector TrajectoryStateVector::derivative<Vector<3>, Vector<3>>(
-            const Vector<3>& droneVelocity,
-            const Vector<3>& droneAngularVelocity) const {
+    TrajectoryStateVector TrajectoryStateVector::derivative<>() const {
         TrajectoryStateVector temp;
-        /* Magic number derivatives */
-        float x1 = get_field<MagicVector>()[0];
-        float x2 = get_field<MagicVector>()[1];
-        float x3 = get_field<MagicVector>()[2];
-        Vector<3> actorVelocity = get_field<ActorVelocity>();
-        float vqx = actorVelocity[0];
-        float vqy = actorVelocity[1];
-        float vqz = actorVelocity[2];
-        float vcx = droneVelocity[0];
-        float vcy = droneVelocity[1];
-        float vcz = droneVelocity[2];
-        float wcx = droneAngularVelocity[0];
-        float wcy = droneAngularVelocity[1];
-        float wcz = droneAngularVelocity[2];
-        float mn1 = vqx * x3 - vqz * x1 * x3 + wcx * x2 - wcy - wcy * x1 * x1 - wcx * x1 * x2 + x3 * (vcz * x1 - vcx);
-        float mn2 = vqy * x3 - vqz * x2 * x3 - wcz * x2 + wcx - wcx * x2 * x2 - wcy * x1 * x2 + x3 * (vcz * x2 - vcy);
-        float mn3 = -vqz * x3 * x3 + vcz * x3 * x3 - (wcy * x1 - wcx * x2) * x3;
 
-        temp.set_field<MagicVector>(Vector<3>(mn1, mn2, mn3));
+        /* Position derivative */
+        temp.set_field<CameraPosition>(get_field<CameraVelocity>());
+        UKF::Vector<3> ang_vel = get_field<CameraAngVelocity>();
+        float cr = std::cos(ang_vel[0] * 0.5);
+        float sr = std::sin(ang_vel[0] * 0.5);
+        float cp = std::cos(ang_vel[1] * 0.5);
+        float sp = std::sin(ang_vel[1] * 0.5);
+        float cy = std::cos(ang_vel[2] * 0.5);
+        float sy = std::sin(ang_vel[2] * 0.5);
+        temp.set_field<CameraQuat>(
+            UKF::Vector<4>(cr * cp * cy + sr * sp * sy, //w
+                            sr * cp * cy - cr * sp * sy, //x
+                            cr * sp * cy + sr * cp * sy, //y
+                            cr * cp * sy - sr * sp * cy  //z
+                            ));
+
+        /* Velocity derivative */
+        temp.set_field<CameraVelocity>(get_field<CameraAcceleration>());
+        temp.set_field<CameraAngVelocity>(get_field<CameraAngAcceleration>());
+
+        /* Acceleration derivative */
+        temp.set_field<CameraAcceleration>(Vector<3>(0,0,0));
+        temp.set_field<CameraAngAcceleration>(0);
 
         /* Position derivative */
         temp.set_field<ActorPosition>(get_field<ActorVelocity>());
@@ -84,6 +92,7 @@ namespace UKF {
 
 enum MeasurementFields {
     BoundingBox,
+    Depth,
     DronePosition,
     DroneYaw,
     DronePitch,
@@ -91,7 +100,8 @@ enum MeasurementFields {
 };
 
 using MeasurementVector = UKF::DynamicMeasurementVector<
-    UKF::Field<BoundingBox, UKF::Vector<3>>,
+    UKF::Field<BoundingBox, UKF::Vector<2>>,
+    UKF::Field<Depth, real_t>,
     UKF::Field<DronePosition, UKF::Vector<3>>,
     UKF::Field<DroneYaw, real_t>,
     UKF::Field<DronePitch, real_t>,
@@ -104,107 +114,107 @@ using MotionForecastingCore = UKF::Core<
     UKF::IntegratorRK4
 >;
 
+UKF::Vector<4> flatten(UKF::Vector<4> quat) {
+    double length = sqrt(quat[0] * quat[0] + quat[3] * quat[3]);
+    return UKF::Vector<4>(quat[0] / length, 0, 0, quat[3] / length);
+}
+
+float getYaw(UKF::Vector<4> q) {
+    q = flatten(q);
+    double siny_cosp = 2 * (q[0] * q[3] + q[1] * q[2]);
+    double cosy_cosp = 1 - 2 * (q[2] * q[2] + q[3] * q[3]);
+    return std::atan2(siny_cosp, cosy_cosp);
+}
+
+float getPitch(UKF::Vector<4> q) {
+    UKF::Vector<4> f = flatten(q);
+
+    float dot_product = f[0] * q[0] + f[1] * q[1] + f[2] * q[2] + f[3] * q[3];
+    float angle = acos(2*dot_product*dot_product - 1);
+    return angle;
+}
+
 namespace UKF {
     template <> template <>
-    UKF::Vector<3> MeasurementVector::expected_measurement
-    <TrajectoryStateVector, BoundingBox, Vector<3>, Vector<3>>(
-            const TrajectoryStateVector& state,
-            const Vector<3>& droneVelocity,
-            const Vector<3>& droneAngularVelocity) {
-        double fx = fov/width;
-        double fy = fov/height;
+    UKF::Vector<2> MeasurementVector::expected_measurement
+    <TrajectoryStateVector, BoundingBox>(
+            const TrajectoryStateVector& state) {
+        double fx = width/fov;
+        double fy = height/fov;
         int cu = width/2;
         int cv = height/2;
 
-        int u = fx*state.get_field<BoundingBox>()[0] + cu;
-        int v = fy*state.get_field<BoundingBox>()[1] + cv;
-        int a = actor_area * fx * fy * std::pow(state.get_field<BoundingBox>()[2],2);
+        UKF::Vector<3> diff = state.get_field<ActorPosition>() - state.get_field<CameraPosition>();
 
-        return UKF::Vector<3>(u, v, a);
+        float camera_yaw = getYaw(state.get_field<CameraQuat>());
+        float camera_pitch = getPitch(state.get_field<CameraQuat>());
+
+        float actor_yaw = std::atan2(diff[0], diff[1]);
+        float actor_pitch = std::atan2(diff[2], std::sqrt(diff[1]*diff[1] + diff[0]*diff[0]));
+
+        int u = fx*(actor_yaw - camera_yaw) + cu;
+        int v = fy*(actor_pitch - camera_pitch) + cv;
+
+        return UKF::Vector<2>(u, v);
+    }
+    template <> template <>
+    real_t MeasurementVector::expected_measurement
+    <TrajectoryStateVector, Depth>(
+            const TrajectoryStateVector& state) {
+        // Calculate vector r_q/c between drone and actor, and get the magnitude of that
+        UKF::Vector<3> diff = state.get_field<CameraPosition>() - state.get_field<ActorPosition>();
+        return diff.norm();
     }
     template <> template <>
     UKF::Vector<3> MeasurementVector::expected_measurement
-    <TrajectoryStateVector, DronePosition, Vector<3>, Vector<3>>(
-            const TrajectoryStateVector& state,
-            const Vector<3>& droneVelocity,
-            const Vector<3>& droneAngularVelocity) {
-        float x1 = state.get_field<MagicVector>()[0];
-        float x2 = state.get_field<MagicVector>()[1];
-        float x3 = state.get_field<MagicVector>()[2];
-        float pitch = state.get_field<CameraPitch>();
-        float yaw = state.get_field<CameraYaw>();
-
-        // Get r_q/c vector from magic numbers and then use camera pitch and yaw to correct it into
-        // NED coordinate frame
-        UKF::Vector<3> rqc = UKF::Vector<3>(1/x3, x1/x3, x2/x3);
-        Eigen::Matrix<real_t, 3, 3> r_pitch = Eigen::MatrixXd::Identity(3,3).cast<real_t>();
-        Eigen::Matrix<real_t, 3, 3> r_yaw = Eigen::MatrixXd::Identity(3,3).cast<real_t>();
-        r_pitch(0,0) = std::cos(pitch);
-        r_pitch(0,2) = std::sin(pitch);
-        r_pitch(2,0) = -std::sin(pitch);
-        r_pitch(2,2) = std::cos(pitch);
-        r_pitch(0,0) = std::cos(yaw);
-        r_pitch(0,1) = -std::sin(yaw);
-        r_pitch(1,0) = std::sin(yaw);
-        r_pitch(1,1) = std::cos(yaw);
-        Eigen::Matrix<real_t, 3, 3> correct_to_ned = r_pitch * r_yaw;
-        correct_to_ned = correct_to_ned.inverse();
-        rqc = correct_to_ned * rqc;
-
-        UKF::Vector<3> rq = state.get_field<ActorPosition>();
-
-        // return r_c.  r_c = r_q - r_q/c
-        return rq - rqc;
+    <TrajectoryStateVector, DronePosition>(
+            const TrajectoryStateVector& state) {
+        return state.get_field<CameraPosition>();
     }
     template <> template <>
     real_t MeasurementVector::expected_measurement
-    <TrajectoryStateVector, DroneYaw, Vector<3>, Vector<3>>(
-            const TrajectoryStateVector& state,
-            const Vector<3>& droneVelocity,
-            const Vector<3>& droneAngularVelocity) {
-        return state.get_field<CameraYaw>();
+    <TrajectoryStateVector, DroneYaw>(
+            const TrajectoryStateVector& state) {
+        UKF::Vector<4> q = state.get_field<CameraQuat>();
+        return getYaw(q);
     }
     template <> template <>
     real_t MeasurementVector::expected_measurement
-    <TrajectoryStateVector, DronePitch, Vector<3>, Vector<3>>(
-            const TrajectoryStateVector& state,
-            const Vector<3>& droneVelocity,
-            const Vector<3>& droneAngularVelocity) {
-        return state.get_field<CameraPitch>();
+    <TrajectoryStateVector, DronePitch>(
+            const TrajectoryStateVector& state) {
+        UKF::Vector<4> q = state.get_field<CameraQuat>();
+        return getPitch(q);
     }
     template <> template <>
     real_t MeasurementVector::expected_measurement
-    <TrajectoryStateVector, HDE, Vector<3>, Vector<3>>(
-            const TrajectoryStateVector& state,
-            const Vector<3>& droneVelocity,
-            const Vector<3>& droneAngularVelocity) {
+    <TrajectoryStateVector, HDE>(
+            const TrajectoryStateVector& state) {
         float yaw_actor = state.get_field<ActorYaw>();
-        float yaw_drone = state.get_field<DroneYaw>();
-        float x1 = state.get_field<MagicVector>()[0];
-        double fx = fov/width;
-
-        return yaw_drone - yaw_actor + fx * x1;
+        float yaw_camera = getYaw(state.get_field<CameraQuat>());
+        return yaw_actor - yaw_camera;
     }
 }
 
 static MotionForecastingCore filter;
 static MeasurementVector meas;
 
-void ukf_init() {
-    filter.state.set_field<MagicVector>(UKF::Vector<3>());
-    filter.state.set_field<CameraYaw>(0);
-    filter.state.set_field<CameraPitch>(0);
+void ukf_init(float x, float y, float z, float yaw) {
+    filter.state.set_field<CameraPosition>(UKF::Vector<3>(0,0,0));
+    filter.state.set_field<CameraQuat>(UKF::Vector<4>(cos(yaw/2), 0, 0, sin(yaw/2)));
+    filter.state.set_field<CameraVelocity>(UKF::Vector<3>(0,0,0));
+    filter.state.set_field<CameraAngVelocity>(UKF::Vector<3>(0,0,0));
+    filter.state.set_field<CameraAcceleration>(UKF::Vector<3>(0,0,0));
+    filter.state.set_field<CameraAngAcceleration>(UKF::Vector<3>(0,0,0));
     filter.state.set_field<ActorPosition>(UKF::Vector<3>(0,0,0));
     filter.state.set_field<ActorYaw>(0);
     filter.state.set_field<ActorVelocity>(UKF::Vector<3>(0,0,0));
     filter.state.set_field<ActorYawVelocity>(0);
     filter.state.set_field<ActorAcceleration>(UKF::Vector<3>(0,0,0));
     filter.state.set_field<ActorYawAcceleration>(0);
-    filter.covariance = TrajectoryStateVector::CovarianceMatrix::Zero();
-    filter.covariance.diagonal() << 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1;
+    filter.covariance = TrajectoryStateVector::CovarianceMatrix::Identity();
 
     filter.process_noise_covariance = TrajectoryStateVector::CovarianceMatrix::Identity() * 0.1;
-    filter.measurement_covariance << 1;
+    filter.measurement_covariance << 1e-2, 1e-2, 0.1, 0.2, 0.2, 0.2, 0.1, 0.1, 1e-2;
 }
 
 
@@ -243,7 +253,7 @@ cinematography_msgs::msg::MultiDOF get_state(rclcpp::Duration duration, MotionFo
 }
 
 // forecast length must be at least 2 (now and next point)
-std::vector<cinematography_msgs::msg::MultiDOF> ukf_iterate(rclcpp::Duration point_duration, int forecast_length, float vx, float vy, float vz, float wx, float wy, float wz) {
+std::vector<cinematography_msgs::msg::MultiDOF> ukf_iterate(rclcpp::Duration point_duration, int forecast_length) {
     if (forecast_length < 2) {
         return std::vector<cinematography_msgs::msg::MultiDOF>();
     }
@@ -253,12 +263,12 @@ std::vector<cinematography_msgs::msg::MultiDOF> ukf_iterate(rclcpp::Duration poi
 
     path[0] = get_state(point_duration);
     
-    filter.step(point_duration.seconds(), meas, UKF::Vector<3>(vx, vy, vz), UKF::Vector<3>(wx, wy, wz));
+    filter.step(point_duration.seconds(), meas);
     path[1] = get_state(point_duration);
 
     MotionForecastingCore forecaster = filter;
     for(int i = 2; i < forecast_length; i++) {
-        forecaster.step(point_duration.seconds(), MeasurementVector(), UKF::Vector<3>(0,0,0), UKF::Vector<3>(0,0,0));
+        forecaster.step(point_duration.seconds(), MeasurementVector());
         path[i] = get_state(point_duration, forecaster);
     }
 
@@ -269,8 +279,16 @@ void ukf_meas_clear() {
     meas = MeasurementVector();
 }
 
-void ukf_set_bb(float width, float height, float area) {
-    meas.set_field<BoundingBox>(UKF::Vector<3>(width, height, area));
+void ukf_set_fov(float f) {
+    fov = f;
+}
+
+void ukf_set_bb(float width, float height) {
+    meas.set_field<BoundingBox>(UKF::Vector<2>(width, height));
+}
+
+void ukf_set_depth(float depth) {
+    meas.set_field<Depth>(depth);
 }
 
 void ukf_set_position(float x, float y, float z) {

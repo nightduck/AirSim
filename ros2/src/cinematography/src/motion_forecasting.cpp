@@ -1,5 +1,6 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/time.hpp>
+#include "sensor_msgs/msg/image.hpp"
 #include <geometry_msgs/msg/pose_array.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <cinematography_msgs/msg/multi_do_farray.hpp>
@@ -7,6 +8,7 @@
 #include "cinematography_msgs/msg/vision_measurements.hpp"
 #include "vehicles/multirotor/api/MultirotorRpcLibClient.hpp"
 #include "filter.h"
+#include "unistd.h"
 
 using namespace std::chrono_literals;
 using std::placeholders::_1;
@@ -75,7 +77,8 @@ private:
 
         ukf_meas_clear();
         if (msg->width > 0) {
-            ukf_set_bb(msg->centerx, msg->centery, msg->width * msg->height);
+            ukf_set_bb(msg->centerx, msg->centery);
+            ukf_set_depth(msg->depth);
             ukf_set_hde(msg->hde);
         }
         ukf_set_position(msg->drone_pose.position.x, msg->drone_pose.position.y, msg->drone_pose.position.z);
@@ -87,9 +90,7 @@ private:
 
         // Return a forecasted trajectory, including point for this point in time. Update filter in
         // background
-        pred_traj.points = ukf_iterate(duration, num_points,
-                        msg->drone_vel.linear.x, msg->drone_vel.linear.y, msg->drone_vel.linear.z,
-                        msg->drone_vel.angular.x, msg->drone_vel.angular.y, msg->drone_vel.angular.z);
+        //pred_traj.points = ukf_iterate(duration, num_points);
         
 
         // DEBUGGING UNTIL FILTER IS WORKING AND TRAINED
@@ -121,7 +122,7 @@ public:
     MotionForecasting() : Node("motion_forecasting") {
         std::string airsim_hostname;
         declare_parameter<double>("forecast_window_secs", 10);
-        declare_parameter<std::string>("actor_name", "DeerBothBP2_19");
+        declare_parameter<std::string>("actor_name", "Deer");
         get_parameter("actor_name", ACTOR_NAME);
 
         auto parameters_client = std::make_shared<rclcpp::SyncParametersClient>(this, "airsim_ros2_wrapper");
@@ -132,6 +133,7 @@ public:
             }
             RCLCPP_INFO(this->get_logger(), "service not available, waiting again...");
         }
+        ukf_init(0,0,0,0);
         airsim_hostname = parameters_client->get_parameter<std::string>("airsim_hostname");
 
         airsim_client = new msr::airlib::MultirotorRpcLibClient(airsim_hostname);

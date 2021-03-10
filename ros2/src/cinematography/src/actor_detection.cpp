@@ -32,7 +32,6 @@ using std::placeholders::_1;
 #define ACTOR_CLASS 0
 #define PROB_THRESHHOLD 0.8
 #define GIMBAL_DAMPING_FACTOR   0.8       // Don't immediately face actor, but ease camera in their direction. That way, false positive don't swivel the camera so real actor's out of frame
-#define PERIOD 250ms
 
 struct odometry {
     geometry_msgs::msg::Pose pose;
@@ -45,11 +44,14 @@ class ActorDetection : public rclcpp::Node {
 private:
     rclcpp::Publisher<cinematography_msgs::msg::BoundingBox>::SharedPtr bb_pub;
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr camera_sub;
+    rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr depth_sub;
 
     tf2_ros::Buffer* tf_buffer;
     tf2_ros::TransformListener* tf_listener;
 
     struct odometry odom;
+
+    cv::Mat last_depth_img;
 
     rclcpp::TimerBase::SharedPtr timer_infr;
     rclcpp::TimerBase::SharedPtr timer_img;
@@ -69,8 +71,9 @@ private:
     std::string trt_engine_filename;
     std::string airsim_hostname;
 
-    struct odometry updateOdometry(struct odometry old_state, geometry_msgs::msg::Pose new_point, rclcpp::Duration t_diff) {
+    struct odometry updateOdometry(struct odometry old_state, geometry_msgs::msg::PoseStamped new_point_stamped, rclcpp::Duration t_diff) {
         struct odometry temp;
+        geometry_msgs::msg::Pose new_point = new_point_stamped.pose;
         temp.pose = new_point;
 
         tf2::Quaternion quat;
@@ -90,11 +93,18 @@ private:
         temp.acc.linear.x = (temp.vel.linear.x - old_state.vel.linear.x) / t_diff.seconds();
         temp.acc.linear.y = (temp.vel.linear.y - old_state.vel.linear.y) / t_diff.seconds();
         temp.acc.linear.z = (temp.vel.linear.z - old_state.vel.linear.z) / t_diff.seconds();
-        temp.vel.angular.x = (temp.vel.angular.x - old_state.acc.angular.x) / t_diff.seconds();
-        temp.vel.angular.y = (temp.vel.angular.y - old_state.acc.angular.y) / t_diff.seconds();
-        temp.vel.angular.z = (temp.vel.angular.z - old_state.acc.angular.z) / t_diff.seconds();
+        temp.acc.angular.x = (temp.vel.angular.x - old_state.vel.angular.x) / t_diff.seconds();
+        temp.acc.angular.y = (temp.vel.angular.y - old_state.vel.angular.y) / t_diff.seconds();
+        temp.acc.angular.z = (temp.vel.angular.z - old_state.vel.angular.z) / t_diff.seconds();
+
+        temp.timestamp = new_point_stamped.header.stamp;
 
         return temp;
+    }
+
+    void getDepthImage(const sensor_msgs::msg::Image::SharedPtr msg) {
+        cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::TYPE_32FC1);
+        last_depth_img = cv_ptr->image;
     }
 
     void fetchImage(const sensor_msgs::msg::Image::SharedPtr msg) {
@@ -104,11 +114,12 @@ private:
         cinematography_msgs::msg::BoundingBox bb;   // Contains subimage, position in frame, and camera pose at the moment the image was taken
         geometry_msgs::msg::TransformStamped transform = tf_buffer->lookupTransform(world_frame, pose_frame, tf2::TimePointZero, std::chrono::milliseconds(100)); // TODO: Make sure inference + this block doesn't exceed period
 
-        geometry_msgs::msg::Pose temp;        
-        temp.position.x = transform.transform.translation.x;
-        temp.position.y = transform.transform.translation.y;
-        temp.position.z = transform.transform.translation.z;
-        temp.orientation = transform.transform.rotation;
+        geometry_msgs::msg::PoseStamped temp;        
+        temp.pose.position.x = transform.transform.translation.x;
+        temp.pose.position.y = transform.transform.translation.y;
+        temp.pose.position.z = transform.transform.translation.z;
+        temp.pose.orientation = transform.transform.rotation;
+        temp.header.stamp = transform.header.stamp;
 
         odom = updateOdometry(odom, temp, rclcpp::Time(transform.header.stamp) - odom.timestamp);
 
@@ -170,6 +181,9 @@ private:
         width = mostLikely.w / img.cols;
         height = mostLikely.h / img.rows;
 
+        // Look at depth image and get value of pixel in middle of bounding box
+        float distance = last_depth_img.at<float>(centerx * last_depth_img.cols, centery * last_depth_img.rows);
+
         // If the actor is too small, assume it's incorrect. False positives are often in the distance
         if (width < 0.05 && height < 0.05) {
             bb.fov = fov;
@@ -177,6 +191,7 @@ private:
             bb.centery = 0.5;
             bb.width = 0;
             bb.height = 0;
+            bb.depth = 0;
             cv_msg.image = cv::Mat();
             bb.image = *cv_msg.toImageMsg();
             bb_pub->publish(bb);
@@ -197,6 +212,7 @@ private:
         bb.centery = centery;
         bb.width = width;
         bb.height = height;
+        bb.depth = distance;
         // bb.drone_pose was copied in the thread safe portion at the top of this function
 
         int px_left = (centerx - width/2) * img.cols;
@@ -230,6 +246,8 @@ public:
         tf_buffer = new tf2_ros::Buffer(this->get_clock()); 
         tf_listener = new tf2_ros::TransformListener(*tf_buffer);
 
+        while(!tf_buffer->_frameExists("world_ned"));
+
         auto parameters_client = std::make_shared<rclcpp::SyncParametersClient>(this, "airsim_ros2_wrapper");
         while (!parameters_client->wait_for_service(1s)) {
             if (!rclcpp::ok()) {
@@ -238,15 +256,27 @@ public:
             }
             RCLCPP_INFO(this->get_logger(), "service not available, waiting again...");
         }
+
         airsim_hostname = parameters_client->get_parameter<std::string>("airsim_hostname");
         vehicle_name = parameters_client->get_parameter<std::string>("vehicle_name");
         camera_name = parameters_client->get_parameter<std::string>("camera_name");
         world_frame = parameters_client->get_parameter<std::string>("world_frame");
+        int fps = parameters_client->get_parameter<int>("camera_fps");
+
+        geometry_msgs::msg::TransformStamped transform = tf_buffer->lookupTransform(world_frame, pose_frame, tf2::TimePointZero, std::chrono::milliseconds(100)); // TODO: Make sure inference + this block doesn't exceed period
+        geometry_msgs::msg::PoseStamped temp;        
+        temp.pose.position.x = transform.transform.translation.x;
+        temp.pose.position.y = transform.transform.translation.y;
+        temp.pose.position.z = transform.transform.translation.z;
+        temp.pose.orientation = transform.transform.rotation;
+        temp.header.stamp = transform.header.stamp;
+        odom = updateOdometry(odom, temp, rclcpp::Duration(1000000000/fps)); // Populate odom initially, use estimated time diff for 3rd argument
         
         airsim_client = new msr::airlib::MultirotorRpcLibClient(airsim_hostname);
         gimbal_setpoint = tf2::Quaternion(0,0,0,1);
         bb_pub = this->create_publisher<cinematography_msgs::msg::BoundingBox>("bounding_box", 50);
         camera_sub = this->create_subscription<sensor_msgs::msg::Image>("camera", 1, std::bind(&ActorDetection::fetchImage, this, _1));
+        depth_sub = this->create_subscription<sensor_msgs::msg::Image>("camera/depth", 1, std::bind(&ActorDetection::getDepthImage, this, _1));
 
         //netRT = new tk::dnn::NetworkRT(NULL, "hde_deer_airsim.rt");
         detNN = new tk::dnn::Yolo3Detection();

@@ -11,6 +11,7 @@ def generate_launch_description():
             remappings=[
                 ("actor_pose", "/airsim_ros2_wrapper/pose/drone_1/front_center_custom"),
                 ("camera", "/airsim_ros2_wrapper/camera"),
+                ("camera/depth", "/airsim_ros2_wrapper/camera/depth"),
                 ("bounding_box", "/auto_cinematography/vision/bounding_box")
             ],
             parameters=[

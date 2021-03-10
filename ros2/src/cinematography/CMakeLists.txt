@@ -180,7 +180,7 @@ add_library(ioHelper SHARED src/ioHelper.cpp)
 target_link_libraries(ioHelper ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES} ${CUDNN_LIBRARIES} ${OpenCV_LIBS})
 
 install(TARGETS
-        ioHelper
+        ioHelper ukf
         DESTINATION lib)
 
 
@@ -213,8 +213,8 @@ ament_target_dependencies(follow_trajectory rclcpp geometry_msgs cinematography_
 target_link_libraries(follow_trajectory AirLib)
 
 add_executable(airsim_ros2_wrapper src/airsim_ros2_wrapper.cpp)
-ament_target_dependencies(airsim_ros2_wrapper rclcpp sensor_msgs tf2 tf2_ros)
-target_link_libraries(airsim_ros2_wrapper AirLib)
+ament_target_dependencies(airsim_ros2_wrapper rclcpp sensor_msgs tf2 tf2_ros cv_bridge)
+target_link_libraries(airsim_ros2_wrapper AirLib ${OpenCV_LIBS})
 
 add_executable(debug_viz src/debug_viz.cpp)
 ament_target_dependencies(debug_viz rclcpp sensor_msgs geometry_msgs cinematography_msgs cv_bridge visualization_msgs tsdf_package_msgs)

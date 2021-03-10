@@ -160,6 +160,7 @@ private:
             vm.centery = msg->centery;
             vm.width = msg->width;
             vm.height = msg->height;
+            vm.depth = msg->depth;
             vm.fov = msg->fov;
             vm.drone_pose = msg->drone_pose;
             vm.drone_vel = msg->drone_vel;
@@ -183,6 +184,7 @@ private:
         vm.centery = msg->centery;
         vm.width = msg->width;
         vm.height = msg->height;
+        vm.depth = msg->depth;
         vm.fov = msg->fov;
         vm.drone_pose = msg->drone_pose;
 

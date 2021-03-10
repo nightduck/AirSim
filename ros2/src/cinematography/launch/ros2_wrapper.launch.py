@@ -21,6 +21,7 @@ def generate_launch_description():
             output="screen",
             remappings=[
                 ("camera", "/airsim_ros2_wrapper/camera"),
+                ("camera/depth", "/airsim_ros2_wrapper/camera/depth"),
                 ("lidar", "/airsim_ros2_wrapper/lidar")
             ],
             parameters=[

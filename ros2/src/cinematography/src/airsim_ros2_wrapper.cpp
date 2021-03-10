@@ -7,6 +7,8 @@
 #include "geometry_msgs/msg/pose.hpp"
 #include "geometry_msgs/msg/transform_stamped.hpp"
 #include "geometry_msgs/msg/vector3.hpp"
+#include <opencv2/opencv.hpp>
+#include <cv_bridge/cv_bridge.h>
 #include "vehicles/multirotor/api/MultirotorRpcLibClient.hpp"
 #include <Eigen/Core>
 #include <Eigen/Geometry>
@@ -22,6 +24,7 @@ class AirsimROS2Wrapper : public rclcpp::Node {
 private:
     msr::airlib::MultirotorRpcLibClient* airsim_client;
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr camera;
+    rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr depth_camera;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr lidar;
     rclcpp::Publisher<geometry_msgs::msg::Pose>::SharedPtr actorPose;
     rclcpp::Publisher<geometry_msgs::msg::Pose>::SharedPtr actorAndCamPose;
@@ -63,22 +66,36 @@ private:
     void fetchImage() {
         std::unique_lock<std::recursive_mutex> lck(drone_control_mutex_);
         std::vector<ImageCaptureBase::ImageRequest> request = {
-            ImageCaptureBase::ImageRequest(camera_name, ImageCaptureBase::ImageType::Scene, false, false)
+            ImageCaptureBase::ImageRequest(camera_name, ImageCaptureBase::ImageType::Scene, false, false),
+            ImageCaptureBase::ImageRequest(camera_name, ImageCaptureBase::ImageType::DepthPlanner, true, false)
         };
-        ImageCaptureBase::ImageResponse response = airsim_client->simGetImages(request, vehicle_name)[0];
+        std::vector<ImageCaptureBase::ImageResponse> response = airsim_client->simGetImages(request, vehicle_name);
+        rclcpp::Time now = this->now();
         lck.unlock();
 
-        sensor_msgs::msg::Image img_msg_ptr;
-        img_msg_ptr.data = response.image_data_uint8;
-        img_msg_ptr.step = response.width * 3; // todo un-hardcode. image_width*num_bytes
-        img_msg_ptr.header.stamp = this->now();
-        img_msg_ptr.header.frame_id = response.camera_name;
-        img_msg_ptr.height = response.height;
-        img_msg_ptr.width = response.width;
-        img_msg_ptr.encoding = "bgr8";
+        sensor_msgs::msg::Image::SharedPtr img_msg_ptr;
+        cv::Mat depth_img(response[1].height, response[1].width, CV_32FC1, cv::Scalar(0));
+        int img_width = response[1].width;
+        for (int row = 0; row < response[1].height; row++)
+            for (int col = 0; col < img_width; col++)
+                depth_img.at<float>(row, col) = response[1].image_data_float[row * img_width + col];
+        img_msg_ptr = cv_bridge::CvImage(std_msgs::msg::Header(), "32FC1", depth_img).toImageMsg();
+        img_msg_ptr->header.stamp = now;
+        img_msg_ptr->header.frame_id = response[0].camera_name + "_depth";
+
+        depth_camera->publish(img_msg_ptr);
+
+
+        img_msg_ptr->data = response[0].image_data_uint8;
+        img_msg_ptr->step = response[0].width * 3; // todo un-hardcode. image_width*num_bytes
+        img_msg_ptr->header.stamp = now;
+        img_msg_ptr->header.frame_id = response[0].camera_name;
+        img_msg_ptr->height = response[0].height;
+        img_msg_ptr->width = response[0].width;
+        img_msg_ptr->encoding = "bgr8";
         if (is_vulkan_)
-            img_msg_ptr.encoding = "rgb8";
-        img_msg_ptr.is_bigendian = 0;
+            img_msg_ptr->encoding = "rgb8";
+        img_msg_ptr->is_bigendian = 0;
 
         camera->publish(img_msg_ptr);
     }
@@ -197,6 +214,7 @@ public:
         airsim_client = new msr::airlib::MultirotorRpcLibClient(airsim_hostname);
 
         camera = this->create_publisher<sensor_msgs::msg::Image>("camera", 10);
+        depth_camera = this->create_publisher<sensor_msgs::msg::Image>("camera/depth", 10);
         lidar = this->create_publisher<sensor_msgs::msg::PointCloud2>("lidar", 10);
         timer_img = create_wall_timer(std::chrono::milliseconds(1000)/camera_fps,
                 std::bind(&AirsimROS2Wrapper::fetchImage, this));
