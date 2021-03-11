@@ -159,7 +159,7 @@ add_subdirectory(tkDNN)
 #   OPTIONS -g -shared -Xcompiler -fPIC -rdc=true
 # )
 
-ADD_DEFINITIONS(-DEIGEN_NO_MALLOC -DUKF_DOUBLE_PRECISION)
+ADD_DEFINITIONS(-DUKF_DOUBLE_PRECISION)
 add_library(ukf SHARED src/filter.cpp)
 ament_target_dependencies(ukf rclcpp cinematography_msgs)
 

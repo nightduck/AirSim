@@ -84,7 +84,7 @@ int main(int argc, char ** argv)
   node->get_parameter("lidar_frame", lidar_frame);
 
   Params params(voxel_size, truncation_distance, max_weight, publish_distance_squared, garbage_collect_distance_squared);
-  initializeGlobalVars(params);
+  initGlobalVars(params);
 
   clock_ = node->get_clock();
 
