@@ -47,6 +47,22 @@ The ROS launch file at `ros/launch/ros2_wrapper.launch.py` will look for the env
 
 All other nodes that need to connect to airsim will use the ros2_wrapper as a parameter server to get this value, so as long as `AIRSIM_HOSTNAME` is exported, no code modification is needed.
 
+
+## Compiling Vision AI TensorRT Engines
+Although TensorRT engines are provided with each docker image, you may want to build them for your own system. First, you need to install Onnx:
+
+    sudo apt-get install libprotobuf-dev protobuf-compiler # protobuf is a prerequisite library
+    git clone --recursive https://github.com/onnx/onnx.git # Pull the ONNX repository from GitHub 
+    cd onnx
+    mkdir build && cd build 
+    cmake .. # Compile and install ONNX
+    make # Use the ‘-j’ option for parallel jobs, for example, ‘make -j $(nproc)’ 
+    make install
+
+Then you can run the provided script to download the models weights and compile them. This assumes you have CUDA, cuDNN, and TensorRT setup on your machine.
+
+    ./build_trt_engines.sh
+
 ## Running on Jetson
 
 Cross compilation is not yet available, so this repo has to be built on the Jetson board, which will take several minutes for the ROS1 and ROS2 workspaces, and upwards of half an hour for the ROS1 bridge. ROS relies on hostnames to run on a distributed system. So be sure to entries to the /etc/hosts file for all machines involved. Eg if the desktop you're running airsim on is named "ubuntu-workstation" and has an IP of 192.168.0.14, then add the following line to /etc/hosts on your Jetson board.
