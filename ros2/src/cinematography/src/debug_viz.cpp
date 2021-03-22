@@ -162,8 +162,8 @@ private:
             for (tsdf_package_msgs::msg::Voxel v : voxels){
                 geometry_msgs::msg::Point p;
                 //although in ned frame this swaps the points to enu for easier visualization in rviz
-                p.x = -1 * v.x; //todo: fix, swapping so visualization looks right in rviz
-                p.y = -1 * v.y;
+                p.x = -1 * v.y; //todo: fix, swapping so visualization looks right in rviz
+                p.y = -1 * v.x;
                 p.z = -1 * v.z;
                 if(v.sdf >= 0){
                     markerGreen.points.push_back(p);
