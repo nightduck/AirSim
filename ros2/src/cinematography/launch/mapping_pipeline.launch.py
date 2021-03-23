@@ -9,20 +9,17 @@ def generate_launch_description():
             node_name='mapping',
             remappings=[
                 ("lidar", "/airsim_ros2_wrapper/lidar"),
-                ("tsdf", "/auto_cinematography/mapping/tsdf"),
-                ("tsdf_occupied_voxels", "/auto_cinematography/debug/markers")
+                ("tsdf", "/auto_cinematography/mapping/tsdf")
             ],
             parameters=[
                 {
                     "voxel_size" : .5,
                     "truncation_distance" : 4.0,
-                    "max_weight" : 10000.0,
-                    "visualize_published_voxels" : False,
+                    "max_weight" : 1000.0,
                     "publish_distance_squared" : 2500.0,
                     "garbage_collect_distance_squared" : 250000.0,
                     "lidar_frame" : "drone_1/LidarCustom"
                 }
-            ],
-            # prefix=['cuda-memcheck --leak-check full']
+            ]
         )
     ])
