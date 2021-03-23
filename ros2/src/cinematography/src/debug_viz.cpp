@@ -151,7 +151,7 @@ private:
             markerGreen.scale.x = markerRed.scale.x = voxel_size;
             markerGreen.scale.y = markerRed.scale.y = voxel_size;
             markerGreen.scale.z = markerRed.scale.z = voxel_size;
-            markerGreen.color.a = markerRed.color.a = 1.0;
+            markerGreen.color.a = markerRed.color.a = 0.3;
             markerGreen.color.r = 0.0;
             markerRed.color.g = 0.0;
             markerGreen.color.b = markerRed.color.b = 0.0;
@@ -161,9 +161,10 @@ private:
             std::vector<tsdf_package_msgs::msg::Voxel> voxels = tsdf->voxels;
             for (tsdf_package_msgs::msg::Voxel v : voxels){
                 geometry_msgs::msg::Point p;
+
                 //although in ned frame this swaps the points to enu for easier visualization in rviz
-                p.x = -1 * v.x; //todo: fix, swapping so visualization looks right in rviz
-                p.y = -1 * v.y;
+                p.x = -1 * v.y; //todo: fix, swapping so visualization looks right in rviz
+                p.y = -1 * v.x;
                 p.z = -1 * v.z;
                 if(v.sdf >= 0){
                     markerGreen.points.push_back(p);

@@ -132,10 +132,9 @@ int main(int argc, char **argv)
 
     airsim_client = new msr::airlib::MultirotorRpcLibClient(host_ip);
     airsim_client->enableApiControl(true);
-    // airsim_client->takeoffAsync()->waitOnLastTask();
-    airsim_client->moveToPositionAsync(0,0,-30,3)->waitOnLastTask();
-    airsim_client->moveToPositionAsync(0,0,0,3)->waitOnLastTask();
     airsim_client->takeoffAsync()->waitOnLastTask();
+    // airsim_client->moveToPositionAsync(0,0,-30,3)->waitOnLastTask();
+    // airsim_client->moveToPositionAsync(0,0,0,3)->waitOnLastTask();
 
     //variable     
     rclcpp::Rate loop_rate(FREQ);    // NOTE: Set to frequency of trajectory points

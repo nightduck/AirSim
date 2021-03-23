@@ -16,6 +16,7 @@ using std::placeholders::_1;
 class MotionForecasting : public rclcpp::Node {
 private:
     std::string ACTOR_NAME;
+    int CAMERA_FPS;
 
     rclcpp::Publisher<cinematography_msgs::msg::MultiDOFarray>::SharedPtr predict_pub;
     rclcpp::Subscription<cinematography_msgs::msg::VisionMeasurements>::SharedPtr pose_sub;
@@ -66,6 +67,10 @@ private:
         // TODO: Implement an actual EKF
 
         msr::airlib::Pose pose = airsim_client->simGetObjectPose(ACTOR_NAME);
+        if (pose.position.x() == NAN) {
+            RCLCPP_ERROR(this->get_logger(), "Actor name not found!!");
+            return;
+        }
         
         rclcpp::Time now = rclcpp::Time(msg->header.stamp, RCL_SYSTEM_TIME);
         rclcpp::Duration duration = now - lastPoseTimestamp;
@@ -73,7 +78,11 @@ private:
 
         double fws;                                                     // Calculate length of trajectory
         get_parameter("forecast_window_secs", fws);
-        int num_points = fws / duration.seconds() + 1;
+        int num_points = fws * CAMERA_FPS;          // Depending on duration of point, the duration
+                                                    // of the path might not match the specified
+                                                    // fws, but it's important to bound the size of
+                                                    // the traj array to guaranteed max computation
+                                                    // requirements in motion planning node
 
         ukf_meas_clear();
         if (msg->width > 0) {
@@ -135,6 +144,7 @@ public:
         }
         ukf_init(0,0,0,0);
         airsim_hostname = parameters_client->get_parameter<std::string>("airsim_hostname");
+        CAMERA_FPS = parameters_client->get_parameter<int>("camera_fps");
 
         airsim_client = new msr::airlib::MultirotorRpcLibClient(airsim_hostname);
 

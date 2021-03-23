@@ -733,6 +733,8 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
 
 
     int n = drone_traj.points.size();
+    if (n < 2)  // Need at least 1 unfixed point in order to optimize
+        return;
 
     std::vector<cinematography_msgs::msg::MultiDOF> drone_points = drone_traj.points;
     std::vector<cinematography_msgs::msg::MultiDOF> actor_points = actor_traj.points;
@@ -806,7 +808,7 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
             drone_traj.points[j+1].y -= traj_change(j, 1);
             drone_traj.points[j+1].z -= traj_change(j, 2);
 
-            if(traj_change(i,0) > e_1 || traj_change(i,1) > e_1 || traj_change(i,2) > e_1){
+            if(traj_change(j,0) > e_1 || traj_change(j,1) > e_1 || traj_change(j,2) > e_1){
                 converged = false;
             }
         }
