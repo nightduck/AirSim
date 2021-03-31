@@ -399,6 +399,136 @@ Eigen::Matrix<double, 3, 1> get_voxel_cost_gradient(const Eigen::Matrix<double, 
     return gradient_val;
 }
 
+double get_segment_cost(const cinematography_msgs::msg::MultiDOF point_start, const cinematography_msgs::msg::MultiDOF point_end, bool gradient=false) {
+    double cost = 0;
+
+    double MIN_L = 0;       // If the path spends less length than this inside a voxel, it's ignored
+    double w = voxel_size;
+
+    double x = point_start.x;
+    double y = point_start.y;
+    double z = point_start.z;
+
+    double xi = std::round(x/w)*w;
+    double yi = std::round(y/w)*w;
+    double zi = std::round(z/w)*w;
+
+    double dx = point_end.x - x;
+    double dy = point_end.y - y;
+    double dz = point_end.z - z;
+    double length = std::sqrt(dx*dx+dy*dy+dz*dz);
+    dx /= length;
+    dy /= length;
+    dz /= length;
+
+    double vx = point_start.vx;
+    double vy = point_start.vy;
+    double vz = point_start.vz;
+    double v_mag = std::sqrt(vx*vx+vy*vy+vz*vz);
+
+
+    // Calculate the length the the x, y, and z edges of the voxel. The shortest non-zero length
+    // is the wall you'll hit first
+    double l, l_accum=0;
+    for(; l_accum < length; x += l*dx, y += l*dy, z += l*dz, l_accum+=l) {
+        l = w;
+
+        double lx = std::fmod((dx > 0 ? -1 : 1) * (x+w/2), w);
+        double span_x = std::abs(((lx > MIN_L) ? lx : w) / dx);
+        if (span_x < l) {
+            l = span_x;
+        }
+        double ly = std::fmod((dy > 0 ? -1 : 1) * (y+w/2), w);
+        double span_y = std::abs(((ly > MIN_L) ? ly : w) / dy);
+        if (span_y < l) {
+            l = span_y;
+        }
+        double lz = std::fmod((dz > 0 ? -1 : 1) * (z+w/2), w);
+        double span_z = std::abs(((lz > MIN_L) ? lz : w) / dz);
+        if (span_z < l) {
+            l = span_z;
+        }
+
+        cost += get_voxel_cost(Eigen::Matrix<double, 3, 1>(xi, yi, zi)) * l;
+
+        if (l == span_x) xi += w * (dx > 0 ? 1 : -1);
+        else if (l == span_y) yi += w * (dy > 0 ? 1 : -1);
+        else if (l == span_z) zi += w * (dz > 0 ? 1 : -1);
+        else {
+            std::cout << "ERROR in get_segment_cost in calculating l. x=" << x << "y=" << y << "z=" << z
+                    << "dx=" << dx << "dy=" << dy << "dz=" << dz << "w=" << w << "l=" << l;
+        }
+    }
+
+    return cost;
+}
+
+Eigen::Matrix<double, 3, 1> get_segment_cost_gradient(const cinematography_msgs::msg::MultiDOF point_start,
+                const cinematography_msgs::msg::MultiDOF point_end, bool gradient=false) {
+    Eigen::Matrix<double, 3, 1> cost_grad;
+    cost_grad.setZero();
+
+    double MIN_L = 0;       // If the path spends less length than this inside a voxel, it's ignored
+    double w = voxel_size;
+
+    double x = point_start.x;
+    double y = point_start.y;
+    double z = point_start.z;
+
+    double xi = std::round(x/w)*w;
+    double yi = std::round(y/w)*w;
+    double zi = std::round(z/w)*w;
+
+    double dx = point_end.x - x;
+    double dy = point_end.y - y;
+    double dz = point_end.z - z;
+    double length = std::sqrt(dx*dx+dy*dy+dz*dz);
+    dx /= length;
+    dy /= length;
+    dz /= length;
+
+    double vx = point_start.vx;
+    double vy = point_start.vy;
+    double vz = point_start.vz;
+    double v_mag = std::sqrt(vx*vx+vy*vy+vz*vz);
+
+
+    // Calculate the length the the x, y, and z edges of the voxel. The shortest non-zero length
+    // is the wall you'll hit first
+    double l, l_accum=0;
+    for(; l_accum < length; x += l*dx, y += l*dy, z += l*dz, l_accum+=l) {
+        l = w;
+
+        double lx = std::fmod((dx > 0 ? -1 : 1) * (x+w/2), w);
+        double span_x = std::abs(((lx > MIN_L) ? lx : w) / dx);
+        if (span_x < l) {
+            l = span_x;
+        }
+        double ly = std::fmod((dy > 0 ? -1 : 1) * (y+w/2), w);
+        double span_y = std::abs(((ly > MIN_L) ? ly : w) / dy);
+        if (span_y < l) {
+            l = span_y;
+        }
+        double lz = std::fmod((dz > 0 ? -1 : 1) * (z+w/2), w);
+        double span_z = std::abs(((lz > MIN_L) ? lz : w) / dz);
+        if (span_z < l) {
+            l = span_z;
+        }
+
+        cost_grad += get_voxel_cost_gradient(Eigen::Matrix<double, 3, 1>(xi, yi, zi)) * l;
+
+        if (l == span_x) xi += w * (dx > 0 ? 1 : -1);
+        else if (l == span_y) yi += w * (dy > 0 ? 1 : -1);
+        else if (l == span_z) zi += w * (dz > 0 ? 1 : -1);
+        else {
+            std::cout << "ERROR in get_segment_cost in calculating l. x=" << x << "y=" << y << "z=" << z
+                    << "dx=" << dx << "dy=" << dy << "dz=" << dz << "w=" << w << "l=" << l;
+        }
+    }
+
+    return cost_grad;
+}
+
 //======================VVV==Cost functions==VVV====================================
 
 double traj_smoothness(const cinematography_msgs::msg::MultiDOFarray& drone_traj, int delta_t) {
@@ -467,12 +597,7 @@ double obstacle_avoidance(const cinematography_msgs::msg::MultiDOFarray& drone_t
     for(size_t i = 0; i<points.size()-1; ++i){
         cinematography_msgs::msg::MultiDOF point_start = points[i];
         cinematography_msgs::msg::MultiDOF point_end = points[i+1];
-        std::vector<Eigen::Matrix<double, 3, 1>> traversed_voxels = get_voxels(point_start, point_end, voxel_size); //get traversed voxels between each drone point
-        double velocity = sqrt(pow(point_end.vx, 2) + pow(point_end.vy ,2) + pow(point_end.vz , 2));
-
-        for(size_t j = 1; j<traversed_voxels.size(); ++j){ //skip first voxel for each drone point so not double counting voxel cost
-            cost += get_voxel_cost(traversed_voxels[j]) * velocity;
-        }
+        cost += get_segment_cost(point_start, point_end);
     }
     return cost;
 }
@@ -501,7 +626,8 @@ double occlusion_avoidance(const cinematography_msgs::msg::MultiDOFarray& drone_
 double traj_cost_function(const cinematography_msgs::msg::MultiDOFarray& drone_traj, cinematography_msgs::msg::MultiDOFarray& actor_traj, cinematography_msgs::msg::MultiDOFarray& ideal_traj, double t) {      // TODO: Add 4th argument for TSDF
     double LAMBDA_OBS, LAMBDA_OCC, LAMBDA_SHOT = 1;    // TODO: Have these specified as ROS parameters
 
-    return traj_smoothness(drone_traj, t) + LAMBDA_OBS * obstacle_avoidance(drone_traj) + LAMBDA_OCC * occlusion_avoidance(drone_traj, actor_traj) + LAMBDA_SHOT * shot_quality(drone_traj, ideal_traj);
+    //return traj_smoothness(drone_traj, t) + LAMBDA_OBS * obstacle_avoidance(drone_traj) + LAMBDA_OCC * occlusion_avoidance(drone_traj, actor_traj) + LAMBDA_SHOT * shot_quality(drone_traj, ideal_traj);
+    return LAMBDA_OBS * obstacle_avoidance(drone_traj);
 }
 
 //======================^^^==Cost functions==^^^====================================
@@ -589,8 +715,6 @@ Eigen::Matrix<double, Eigen::Dynamic, 3>  obstacle_avoidance_gradient(const cine
         cinematography_msgs::msg::MultiDOF point_start = points[i];
         cinematography_msgs::msg::MultiDOF point_end = points[i+1];
 
-        std::vector<Eigen::Matrix<double, 3, 1>> traversed_voxels = get_voxels(point_start, point_end, voxel_size);
-
         double velocity_mag = sqrt(pow(point_end.vx, 2) + pow(point_end.vy ,2) + pow(point_end.vz , 2));
 
         Eigen::Matrix<double, 3, 1> point_acceleration(point_end.ax, point_end.ay, point_end.az);
@@ -603,22 +727,10 @@ Eigen::Matrix<double, Eigen::Dynamic, 3>  obstacle_avoidance_gradient(const cine
         }
         Eigen::Matrix<double, 3, 3> p_hat_multiplied = p_hat * p_hat.transpose();
         Eigen::Matrix<double, 3, 3> identity_minus_p_hat_multiplied = Eigen::Matrix3d::Identity(3,3) - p_hat_multiplied;
-        Eigen::Matrix<double, 3, 1> gradient_val(0,0,0);
 
-        for(size_t j = 1; j<traversed_voxels.size(); ++j){ //skip first voxel for each drone point so not double counting voxel cost
-            Eigen::Matrix<double, 3, 1> cost_function_gradient = get_voxel_cost_gradient(traversed_voxels[j]);
-            // Eigen::Matrix<double, 3, 1> gradient_multiplied_result = identity_minus_p_hat_multiplied * cost_function_gradient;
-            // double voxel_cost = get_voxel_cost(traversed_voxels[j]);
-            // Eigen::Matrix<double, 3, 1> k = ((1 / pow(velocity_mag, 2)) * identity_minus_p_hat_multiplied) * point_acceleration;
-            // Eigen::Matrix<double, 3, 1> inner_term = gradient_multiplied_result - (voxel_cost * k);
-            // Eigen::Matrix<double, 3, 1> grad_j_obs = inner_term * velocity_mag;
-            // if(!(isnan(grad_j_obs(0)) || isnan(grad_j_obs(1)) || isnan(grad_j_obs(2)))){
-            //     gradient_val+=grad_j_obs;
-            // }      
-            gradient_val += cost_function_gradient;    
-        }
         //normalize
-        gradient_val/=traversed_voxels.size();
+        Eigen::Matrix<double, 3, 1> gradient_val = get_segment_cost_gradient(point_start, point_end);
+        gradient_val/=std::sqrt(std::pow(point_start.x,2)+std::pow(point_start.y,2)+std::pow(point_start.z,2));
 
         gradient_vals(i, 0) += gradient_val(0);
         gradient_vals(i, 1) += gradient_val(1);
@@ -814,30 +926,30 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
             j_grad = LAMBDA_OBS * obs_grad;
         }
         else{
-            // auto start = std::chrono::high_resolution_clock::now();
-            Eigen::Matrix<double, Eigen::Dynamic, 3> smooth_grad = traj_smoothness_gradient(drone_traj, t, K, K0, K1, K2, A_smooth); 
-            // auto stop = std::chrono::high_resolution_clock::now(); 
-            // auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start); 
-            // std::cout << "smooth grad duration: ";
-            // std::cout << duration.count() << std::endl;
+            // // auto start = std::chrono::high_resolution_clock::now();
+            // Eigen::Matrix<double, Eigen::Dynamic, 3> smooth_grad = traj_smoothness_gradient(drone_traj, t, K, K0, K1, K2, A_smooth); 
+            // // auto stop = std::chrono::high_resolution_clock::now(); 
+            // // auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start); 
+            // // std::cout << "smooth grad duration: ";
+            // // std::cout << duration.count() << std::endl;
 
-            // auto start1 = std::chrono::high_resolution_clock::now();
-            Eigen::Matrix<double, Eigen::Dynamic, 3> shot_grad = shot_quality_gradient(drone_traj, ideal_traj, A_shot);
-            // auto stop1 = std::chrono::high_resolution_clock::now(); 
-            // auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(stop1 - start1); 
-            // std::cout << "shot grad duration: ";
-            // std::cout << duration1.count() << std::endl;
+            // // auto start1 = std::chrono::high_resolution_clock::now();
+            // Eigen::Matrix<double, Eigen::Dynamic, 3> shot_grad = shot_quality_gradient(drone_traj, ideal_traj, A_shot);
+            // // auto stop1 = std::chrono::high_resolution_clock::now(); 
+            // // auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(stop1 - start1); 
+            // // std::cout << "shot grad duration: ";
+            // // std::cout << duration1.count() << std::endl;
 
-            // auto start3 = std::chrono::high_resolution_clock::now();
-            Eigen::Matrix<double, Eigen::Dynamic, 3> occ_grad = occlusion_avoidance_gradient(drone_traj, actor_traj);
-            // auto stop3 = std::chrono::high_resolution_clock::now(); 
-            // auto duration3 = std::chrono::duration_cast<std::chrono::milliseconds>(stop3 - start3); 
-            // std::cout << "occ grad duration: ";
-            // std::cout << duration3.count() << std::endl;
+            // // auto start3 = std::chrono::high_resolution_clock::now();
+            // Eigen::Matrix<double, Eigen::Dynamic, 3> occ_grad = occlusion_avoidance_gradient(drone_traj, actor_traj);
+            // // auto stop3 = std::chrono::high_resolution_clock::now(); 
+            // // auto duration3 = std::chrono::duration_cast<std::chrono::milliseconds>(stop3 - start3); 
+            // // std::cout << "occ grad duration: ";
+            // // std::cout << duration3.count() << std::endl;
 
-            // j_grad = LAMBDA_SMOOTH * smooth_grad + LAMBDA_OCC * occ_grad + LAMBDA_SHOT * shot_grad;
+            // // j_grad = LAMBDA_SMOOTH * smooth_grad + LAMBDA_OCC * occ_grad + LAMBDA_SHOT * shot_grad;
 
-            j_grad = LAMBDA_OCC * occ_grad + LAMBDA_SHOT * shot_grad;
+            j_grad = LAMBDA_OBS * obs_grad;
         }
 
         Eigen::MatrixXd traj_change = (1 / normalization) * M_inv * j_grad;
