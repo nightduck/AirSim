@@ -3,8 +3,9 @@ from launch_ros.actions import Node
 import os
 
 def generate_launch_description():
-    hostname = os.environ["AIRSIM_HOSTNAME"]
-    if len(hostname) == 0:
+    try:
+        hostname = os.environ["AIRSIM_HOSTNAME"]
+    except:
         hostname = 'localhost'
     return LaunchDescription([
         Node(

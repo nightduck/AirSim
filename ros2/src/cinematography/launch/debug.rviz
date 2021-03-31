@@ -8,8 +8,8 @@ Panels:
         - /Status1
         - /PoseArray1
         - /PoseArray2
-        - /MarkerArray1
         - /PoseArray3
+        - /PointCloud22
       Splitter Ratio: 0.32348597049713135
     Tree Height: 1156
   - Class: rviz_common/Selection
@@ -128,23 +128,32 @@ Visualization Manager:
       Frame Timeout: 15
       Frames:
         All Enabled: true
+        drone_1:
+          Value: true
+        drone_1/LidarCustom:
+          Value: true
+        drone_1/front_center_custom:
+          Value: true
+        world_enu:
+          Value: true
+        world_ned:
+          Value: true
       Marker Scale: 1
       Name: TF
       Show Arrows: true
       Show Axes: true
       Show Names: false
       Tree:
-        {}
+        world_ned:
+          drone_1:
+            {}
+          drone_1/LidarCustom:
+            {}
+          drone_1/front_center_custom:
+            {}
+          world_enu:
+            {}
       Update Interval: 0
-      Value: true
-    - Class: rviz_default_plugins/MarkerArray
-      Enabled: true
-      Name: MarkerArray
-      Namespaces:
-        {}
-      Queue Size: 10
-      Topic: /auto_cinematography/debug/markers
-      Unreliable: false
       Value: true
     - Alpha: 1
       Arrow Length: 0.30000001192092896
@@ -161,6 +170,36 @@ Visualization Manager:
       Shape: Arrow (3D)
       Topic: /auto_cinematography/debug/ideal_traj
       Unreliable: false
+      Value: true
+    - Alpha: 0.25
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz_default_plugins/PointCloud2
+      Color: 255; 255; 255
+      Color Transformer: Intensity
+      Decay Time: 0
+      Enabled: true
+      Invert Rainbow: false
+      Max Color: 138; 226; 52
+      Max Intensity: 4.41712760925293
+      Min Color: 239; 41; 41
+      Min Intensity: -4.42264986038208
+      Name: PointCloud2
+      Position Transformer: XYZ
+      Queue Size: 10
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.5
+      Style: Boxes
+      Topic: /auto_cinematography/debug/tsdf
+      Unreliable: false
+      Use Fixed Frame: true
+      Use rainbow: false
       Value: true
   Enabled: true
   Global Options:

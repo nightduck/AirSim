@@ -36,7 +36,7 @@ def generate_launch_description():
                 ("drone_traj_out", "/auto_cinematography/debug/drone_traj"),
                 ("ideal_traj_out", "/auto_cinematography/debug/ideal_traj"),
                 ("img_out", "/auto_cinematography/debug/camera"),
-                ("tsdf_occupied_voxels", "/auto_cinematography/debug/markers"),
+                ("tsdf_occupied_voxels", "/auto_cinematography/debug/tsdf"),
                 ("pose_in", "/airsim_ros2_wrapper/pose/drone_1/front_center_custom"),
                 ("actor_traj_in", "/auto_cinematography/planning/actor_traj"),
                 ("drone_traj_in", "/auto_cinematography/planning/drone_traj"),

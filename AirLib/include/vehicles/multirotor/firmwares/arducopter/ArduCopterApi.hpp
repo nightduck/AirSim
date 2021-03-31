@@ -182,7 +182,7 @@ protected:
         // pick a number, 3 meters is probably safe
         // enough to get out of the backwash turbulence.  Negative due to NED coordinate system.
         // return params_.takeoff.takeoff_z;
-        return 3.0;
+        return 5.0;
     }
 
     virtual float getDistanceAccuracy() const override

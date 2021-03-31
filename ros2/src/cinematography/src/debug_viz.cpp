@@ -4,6 +4,7 @@
 #include "cinematography_msgs/msg/multi_do_farray.hpp"
 #include "cinematography_msgs/msg/vision_measurements.hpp"
 #include "sensor_msgs/msg/image.hpp"
+#include "sensor_msgs/msg/point_cloud2.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/pose_array.hpp"
 #include <visualization_msgs/msg/marker_array.hpp>
@@ -30,7 +31,7 @@ private:
     rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr drone_traj_pub;
     rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr ideal_traj_pub;
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr img_pub;
-    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr tsdf_occupied_voxels_pub;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr tsdf_occupied_voxels_pub;
 
     std::recursive_mutex m;
     rclcpp::Clock clock = rclcpp::Clock(RCL_SYSTEM_TIME);
@@ -135,48 +136,51 @@ private:
         rclcpp::Duration duration = now - last_time;
         double duration_seconds = duration.seconds();
 
-        if(duration_seconds > 5){
+        if(duration_seconds > 0){
             last_time = now;
 
             float voxel_size = tsdf->voxel_size;
 
-            markerArray.markers.clear(); 
-            visualization_msgs::msg::Marker markerGreen, markerRed;
-            markerGreen.type = markerRed.type = visualization_msgs::msg::Marker::CUBE_LIST;
-            markerGreen.action = markerRed.action = visualization_msgs::msg::Marker::ADD;
-            markerGreen.header.frame_id = markerRed.header.frame_id= "world_ned";
-            markerGreen.ns = markerRed.ns = "occupied_voxels";
-            markerGreen.id = 0;
-            markerRed.id = 1;
-            markerGreen.scale.x = markerRed.scale.x = voxel_size;
-            markerGreen.scale.y = markerRed.scale.y = voxel_size;
-            markerGreen.scale.z = markerRed.scale.z = voxel_size;
-            markerGreen.color.a = markerRed.color.a = 0.3;
-            markerGreen.color.r = 0.0;
-            markerRed.color.g = 0.0;
-            markerGreen.color.b = markerRed.color.b = 0.0;
-            markerRed.color.r = 1.0;
-            markerGreen.color.g = 1.0;
-
+            sensor_msgs::msg::PointCloud2 pc;
+            pc.header.stamp = now;
+            pc.header.frame_id = "world_ned";
+            pc.height = 1;
+            pc.width = tsdf->size;
+            pc.is_bigendian = __BYTE_ORDER == __BIG_ENDIAN;
+            pc.point_step = 16;
+            pc.row_step = tsdf->size;
+            pc.is_dense = tsdf->size == 0;
+            pc.fields = std::vector<sensor_msgs::msg::PointField>(4);
+            pc.fields[0].name = "intensity";
+            pc.fields[0].offset = 0;
+            pc.fields[0].datatype = sensor_msgs::msg::PointField::FLOAT32;
+            pc.fields[0].count = 1;
+            pc.fields[1].name = "x";
+            pc.fields[1].offset = 4;
+            pc.fields[1].datatype = sensor_msgs::msg::PointField::FLOAT32;
+            pc.fields[1].count = 1;
+            pc.fields[2].name = "y";
+            pc.fields[2].offset = 8;
+            pc.fields[2].datatype = sensor_msgs::msg::PointField::FLOAT32;
+            pc.fields[2].count = 1;
+            pc.fields[3].name = "z";
+            pc.fields[3].offset = 12;
+            pc.fields[3].datatype = sensor_msgs::msg::PointField::FLOAT32;
+            pc.fields[3].count = 1;
+            pc.data.resize(pc.width * pc.point_step);
+            
             std::vector<tsdf_package_msgs::msg::Voxel> voxels = tsdf->voxels;
+            uint8_t* data = pc.data.data();
             for (tsdf_package_msgs::msg::Voxel v : voxels){
-                geometry_msgs::msg::Point p;
+                ((float*)data)[0] = v.sdf;
+                ((float*)data)[1] = v.x;
+                ((float*)data)[2] = v.y;
+                ((float*)data)[3] = v.z;
 
-                //although in ned frame this swaps the points to enu for easier visualization in rviz
-                p.x = -1 * v.y; //todo: fix, swapping so visualization looks right in rviz
-                p.y = -1 * v.x;
-                p.z = -1 * v.z;
-                if(v.sdf >= 0){
-                    markerGreen.points.push_back(p);
-                }
-                else{
-                    markerRed.points.push_back(p);
-                }
+                data += pc.point_step;
             }
 
-            markerArray.markers.push_back(markerGreen);
-            markerArray.markers.push_back(markerRed);
-            tsdf_occupied_voxels_pub->publish(markerArray);
+            tsdf_occupied_voxels_pub->publish(pc);
         }
     }
     
@@ -188,7 +192,7 @@ public:
         drone_traj_pub = this->create_publisher<geometry_msgs::msg::PoseArray>("drone_traj_out", 1);
         ideal_traj_pub = this->create_publisher<geometry_msgs::msg::PoseArray>("ideal_traj_out", 1);
         img_pub = this->create_publisher<sensor_msgs::msg::Image>("img_out", 20);
-        tsdf_occupied_voxels_pub = this->create_publisher<visualization_msgs::msg::MarkerArray>("tsdf_occupied_voxels", 1);
+        tsdf_occupied_voxels_pub = this->create_publisher<sensor_msgs::msg::PointCloud2>("tsdf_occupied_voxels", 1);
         
         pose_sub = this->create_subscription<geometry_msgs::msg::Pose>("pose_in", 1,
             std::bind(&DebugViz::fetchDronePose, this, _1));
@@ -211,6 +215,7 @@ public:
 
 int main(int argc, char **argv) {
     rclcpp::init(argc, argv);
+    sleep(10);
     rclcpp::executors::MultiThreadedExecutor exec;
     auto ros2wrapper = std::make_shared<DebugViz>();
     exec.add_node(ros2wrapper);
