@@ -51,8 +51,6 @@
                 <ul class="current">
                     <li class="toctree-l1 current"><a class="reference internal current" href=".">Home</a>
     <ul class="current">
-    <li class="toctree-l2"><a class="reference internal" href="#whats-new">What's New</a>
-    </li>
     <li class="toctree-l2"><a class="reference internal" href="#how-to-get-it">How to Get It</a>
         <ul>
     <li class="toctree-l3"><a class="reference internal" href="#windows">Windows</a>
@@ -62,6 +60,16 @@
     <li class="toctree-l3"><a class="reference internal" href="#macos">macOS</a>
     </li>
         </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#build-instructions">Build Instructions</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#specifying-airsim-host">Specifying Airsim Host</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#compiling-vision-ai-tensorrt-engines">Compiling Vision AI TensorRT Engines</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#running-on-jetson">Running on Jetson</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#whats-new">What's New</a>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#how-to-use-it">How to Use It</a>
         <ul>
@@ -93,7 +101,11 @@
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#contact">Contact</a>
     </li>
+    <li class="toctree-l2"><a class="reference internal" href="#whats-new_1">What's New</a>
+    </li>
     <li class="toctree-l2"><a class="reference internal" href="#faq">FAQ</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#code-of-conduct">Code of Conduct</a>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#license">License</a>
     </li>
@@ -331,23 +343,8 @@
 <p><a href="https://youtu.be/-WfTr1-OBGQ"><img alt="AirSim Drone Demo Video" src="images/demo_video.png" /></a></p>
 <p>Cars in AirSim</p>
 <p><a href="https://youtu.be/gnz1X3UNM5Y"><img alt="AirSim Car Demo Video" src="images/car_demo_video.png" /></a></p>
-<h2 id="whats-new">What's New<a class="headerlink" href="#whats-new" title="Permanent link">#</a></h2>
-<ul>
-<li>Latest release <code>v1.3.1</code> for <a href="https://github.com/microsoft/AirSim/releases/tag/v1.3.1-windows">Windows</a> and <a href="https://github.com/microsoft/AirSim/releases/tag/v1.3.1-linux">Linux</a></li>
-<li>Upgraded to Unreal Engine 4.24, Visual Studio 2019, Clang 8, C++ 17 standard</li>
-<li>Mac OSX Catalina support</li>
-<li>Updated <a href="https://pypi.org/project/airsim/">airsim</a> Python package, with lots of new APIs</li>
-<li><a href="https://github.com/microsoft/AirSim/pull/2494">Removed legacy API wrappers</a></li>
-<li><a href="https://microsoft.github.io/AirSim/px4_setup/">Support for latest PX4 stable release</a></li>
-<li>Support for <a href="https://ardupilot.org/ardupilot/">ArduPilot</a> - <a href="https://ardupilot.org/dev/docs/sitl-with-airsim.html">Copter, Rover vehicles</a></li>
-<li><a href="https://microsoft.github.io/AirSim/Unity/">Updated Unity support</a></li>
-<li><a href="https://github.com/microsoft/AirSim/pull/2493">Removed simChar* APIs</a></li>
-<li><a href="https://github.com/microsoft/AirSim/pull/2304">Plotting APIs for Debugging</a></li>
-<li>ROS wrapper for multirotors is available. See <a href="https://microsoft.github.io/AirSim/airsim_ros_pkgs/">airsim_ros_pkgs</a> for the ROS API, and <a href="https://microsoft.github.io/AirSim/airsim_tutorial_pkgs/">airsim_tutorial_pkgs</a> for tutorials.</li>
-<li>Added support for <a href="https://microsoft.github.io/AirSim/docker_ubuntu/">docker in ubuntu</a></li>
-</ul>
-<p>For complete list of changes, view our <a href="CHANGELOG/">Changelog</a></p>
 <h2 id="how-to-get-it">How to Get It<a class="headerlink" href="#how-to-get-it" title="Permanent link">#</a></h2>
+<p><a href="https://travis-ci.org/Microsoft/AirSim"><img alt="Build Status" src="https://travis-ci.org/Microsoft/AirSim.svg?branch=master" /></a></p>
 <h3 id="windows">Windows<a class="headerlink" href="#windows" title="Permanent link">#</a></h3>
 <ul>
 <li><a href="https://github.com/Microsoft/AirSim/releases">Download binaries</a></li>
@@ -362,7 +359,65 @@
 <ul>
 <li><a href="https://microsoft.github.io/AirSim/build_linux">Build it</a></li>
 </ul>
-<p><a href="https://travis-ci.org/Microsoft/AirSim"><img alt="Build Status" src="https://travis-ci.org/Microsoft/AirSim.svg?branch=master" /></a></p>
+<p>For more details, see the <a href="use_precompiled/">use precompiled binaries</a> document. </p>
+<h2 id="build-instructions">Build Instructions<a class="headerlink" href="#build-instructions" title="Permanent link">#</a></h2>
+<p>Execute the following to download this repo and build the AirSim component</p>
+<pre><code>git clone --recursive https://github.com/nightduck/AirSim.git   # Clone this repo
+cd AirSim
+./setup.sh                                                      # Build repo
+./build.sh
+</code></pre>
+<p>The environment required to run the ros packages is provided, just run</p>
+<pre><code>docker run -e DISPLAY=$DISPLAY -v=/tmp/.X11-unix:/tmp/.X11-unix \
+    --gpus all -it --rm -v /path/to/this/repo:/workspace/AirSim \
+    nightduck/airsim_cinematography:jp4.5_dashing_devel airsim_hostname 192.168.0.255
+</code></pre>
+<p>In order to run the debug nodes with GUIs, you need to give docker access to your display:</p>
+<pre><code>xhost +local:docker
+</code></pre>
+<p>Set /path/to/repo to this absolute path to this repository, so you can mount it in the docker container. Set airsim_hostname and 192.168.0.255 to the hostname and IP address of the machine running airsim (likely the one you're typing on)</p>
+<p>This will open a new shell. In the current directory is this repo, as well as the 2 appropriate tensorrt engines. To build the ros2 application:</p>
+<pre><code>cd ros2
+./build.sh
+</code></pre>
+<p>There are separately tagged docker images, built for arm64, that run the full application pipeline instead of a bash shell. They are not stable yet, but the in-progress dockerfile for the Jetson AGX is still source controlled here.</p>
+<h2 id="specifying-airsim-host">Specifying Airsim Host<a class="headerlink" href="#specifying-airsim-host" title="Permanent link">#</a></h2>
+<p>The ROS launch file at <code>ros/launch/ros2_wrapper.launch.py</code> will look for the environment variable <code>AIRSIM_HOSTNAME</code>, and use that to connect to airsim. This is set automatically when a docker container is launched with the hostname and IP arguments. If you are not working in a docker container: a) why? b) you'll have to export this variable yourself, otherwise it defaults to localhost.</p>
+<p>All other nodes that need to connect to airsim will use the ros2_wrapper as a parameter server to get this value, so as long as <code>AIRSIM_HOSTNAME</code> is exported, no code modification is needed.</p>
+<h2 id="compiling-vision-ai-tensorrt-engines">Compiling Vision AI TensorRT Engines<a class="headerlink" href="#compiling-vision-ai-tensorrt-engines" title="Permanent link">#</a></h2>
+<p>Although TensorRT engines are provided with each docker image, you may want to build them for your own system. First, you need to install Onnx:</p>
+<pre><code>sudo apt-get install libprotobuf-dev protobuf-compiler # protobuf is a prerequisite library
+git clone --recursive https://github.com/onnx/onnx.git # Pull the ONNX repository from GitHub 
+cd onnx
+mkdir build &amp;&amp; cd build 
+cmake .. # Compile and install ONNX
+make # Use the ‘-j’ option for parallel jobs, for example, ‘make -j $(nproc)’ 
+make install
+</code></pre>
+<p>Then you can run the provided script to download the models weights and compile them. This assumes you have CUDA, cuDNN, and TensorRT setup on your machine.</p>
+<pre><code>./build_trt_engines.sh
+</code></pre>
+<h2 id="running-on-jetson">Running on Jetson<a class="headerlink" href="#running-on-jetson" title="Permanent link">#</a></h2>
+<p>Cross compilation is not yet available, so this repo has to be built on the Jetson board, which will take several minutes for the ROS1 and ROS2 workspaces, and upwards of half an hour for the ROS1 bridge. ROS relies on hostnames to run on a distributed system. So be sure to entries to the /etc/hosts file for all machines involved. Eg if the desktop you're running airsim on is named "ubuntu-workstation" and has an IP of 192.168.0.14, then add the following line to /etc/hosts on your Jetson board.</p>
+<pre><code>192.168.0.14  ubuntu-workstation
+</code></pre>
+<p>And vice-versa for the Jetson's hostname on the workstation's hosts file. A machine's hostname can be found by running <code>hostname</code>.</p>
+<h2 id="whats-new">What's New<a class="headerlink" href="#whats-new" title="Permanent link">#</a></h2>
+<ul>
+<li>A ROS wrapper for multirotors is available. See <a href="https://github.com/microsoft/AirSim/blob/master/ros/src/airsim_ros_pkgs">airsim_ros_pkgs</a> for the ROS API, and <a href="https://github.com/microsoft/AirSim/blob/master/ros/src/airsim_tutorial_pkgs">airsim_tutorial_pkgs</a> for tutorials.</li>
+<li><a href="https://microsoft.github.io/AirSim/sensors">Added sensor APIs for Barometer, IMU, GPS, Magnetometer, Distance Sensor</a></li>
+<li>Added support for <a href="https://github.com/microsoft/AirSim/blob/master/docs/docker_ubuntu.md">docker in ubuntu</a></li>
+<li>Added Weather Effects and <a href="https://microsoft.github.io/AirSim/apis#weather-apis">APIs</a></li>
+<li>Added <a href="https://microsoft.github.io/AirSim/apis#time-of-day-api">Time of Day API</a></li>
+<li>An experimental integration of <a href="https://github.com/Microsoft/AirSim/tree/master/Unity">AirSim on Unity</a> is now available. Learn more in <a href="https://blogs.unity3d.com/2018/11/14/airsim-on-unity-experiment-with-autonomous-vehicle-simulation">Unity blog post</a>.</li>
+<li><a href="https://github.com/Microsoft/AirSim/releases/tag/v1.2.1">New environments</a>: Forest, Plains (windmill farm), TalkingHeads (human head simulation), TrapCam (animal detection via camera)</li>
+<li>Highly efficient <a href="https://microsoft.github.io/AirSim/settings#viewmode">NoDisplay view mode</a> to turn off main screen rendering so you can capture images at high rate</li>
+<li><a href="https://microsoft.github.io/AirSim/lidar">Lidar Sensor</a></li>
+<li>Case Study: <a href="https://github.com/Microsoft/AirSim/wiki/technion">Formula Student Technion Driverless</a></li>
+<li><a href="https://microsoft.github.io/AirSim/multi_vehicle">Multi-Vehicle Capability</a></li>
+<li><a href="https://github.com/Microsoft/AirSim/pull/1135">ROS publisher</a></li>
+</ul>
+<p>For complete list of changes, view our <a href="CHANGELOG/">Changelog</a></p>
 <h2 id="how-to-use-it">How to Use It<a class="headerlink" href="#how-to-use-it" title="Permanent link">#</a></h2>
 <h3 id="documentation">Documentation<a class="headerlink" href="#documentation" title="Permanent link">#</a></h3>
 <p>View our <a href="https://microsoft.github.io/AirSim/">detailed documentation</a> on all aspects of AirSim.</p>
@@ -398,29 +453,40 @@
 <h2 id="participate">Participate<a class="headerlink" href="#participate" title="Permanent link">#</a></h2>
 <h3 id="paper">Paper<a class="headerlink" href="#paper" title="Permanent link">#</a></h3>
 <p>More technical details are available in <a href="https://arxiv.org/abs/1705.05065">AirSim paper (FSR 2017 Conference)</a>. Please cite this as:
-<div class="highlight"><pre><span></span><code>@inproceedings{airsim2017fsr,
+<pre class="highlight"><code>@inproceedings{airsim2017fsr,
   author = {Shital Shah and Debadeepta Dey and Chris Lovett and Ashish Kapoor},
   title = {AirSim: High-Fidelity Visual and Physical Simulation for Autonomous Vehicles},
   year = {2017},
   booktitle = {Field and Service Robotics},
   eprint = {arXiv:1705.05065},
   url = {https://arxiv.org/abs/1705.05065}
-}
-</code></pre></div></p>
+}</code></pre></p>
 <h3 id="contribute">Contribute<a class="headerlink" href="#contribute" title="Permanent link">#</a></h3>
 <p>Please take a look at <a href="https://github.com/microsoft/airsim/issues">open issues</a> if you are looking for areas to contribute to.</p>
 <ul>
 <li><a href="https://microsoft.github.io/AirSim/design">More on AirSim design</a></li>
 <li><a href="https://microsoft.github.io/AirSim/code_structure">More on code structure</a></li>
 <li><a href="CONTRIBUTING/">Contribution Guidelines</a></li>
-<li><a href="https://trello.com/b/1t2qCeaA/wishlist-by-community-for-community">Trello Board</a></li>
 </ul>
 <h3 id="who-is-using-airsim">Who is Using AirSim?<a class="headerlink" href="#who-is-using-airsim" title="Permanent link">#</a></h3>
 <p>We are maintaining a <a href="https://microsoft.github.io/AirSim/who_is_using">list</a> of a few projects, people and groups that we are aware of. If you would like to be featured in this list please <a href="https://github.com/microsoft/airsim/issues">make a request here</a>.</p>
 <h2 id="contact">Contact<a class="headerlink" href="#contact" title="Permanent link">#</a></h2>
 <p>Join the AirSim group on <a href="https://www.facebook.com/groups/1225832467530667/">Facebook</a> to stay up to date or ask any questions.</p>
+<h2 id="whats-new_1">What's New<a class="headerlink" href="#whats-new_1" title="Permanent link">#</a></h2>
+<ul>
+<li><a href="https://github.com/microsoft/AirSim/pull/3215">Python wrapper for Open AI gym interfaces.</a></li>
+<li><a href="https://github.com/microsoft/AirSim/pull/3202">Python wrapper for Event camera simulation</a></li>
+<li><a href="https://github.com/microsoft/AirSim/pull/3209">Voxel grid construction</a></li>
+<li><a href="https://github.com/microsoft/AirSim/pull/3039">Programmable camera distortion</a></li>
+<li><a href="https://github.com/microsoft/AirSim/pull/2867">Wind simulation</a></li>
+<li><a href="https://github.com/microsoft/AirSim/pull/2816">Azure development environment with documentation</a></li>
+<li>ROS wrapper for <a href="https://github.com/microsoft/AirSim/blob/master/docs/airsim_ros_pkgs.md">multirotor</a> and <a href="https://github.com/microsoft/AirSim/pull/2743">car</a>.</li>
+</ul>
+<p>For complete list of changes, view our <a href="CHANGELOG/">Changelog</a></p>
 <h2 id="faq">FAQ<a class="headerlink" href="#faq" title="Permanent link">#</a></h2>
 <p>If you run into problems, check the <a href="https://microsoft.github.io/AirSim/faq">FAQ</a> and feel free to post issues in the  <a href="https://github.com/Microsoft/AirSim/issues">AirSim</a> repository.</p>
+<h2 id="code-of-conduct">Code of Conduct<a class="headerlink" href="#code-of-conduct" title="Permanent link">#</a></h2>
+<p>This project has adopted the <a href="https://opensource.microsoft.com/codeofconduct/">Microsoft Open Source Code of Conduct</a>. For more information see the <a href="https://opensource.microsoft.com/codeofconduct/faq/">Code of Conduct FAQ</a> or contact <a href="mailto:opencode@microsoft.com">opencode@microsoft.com</a> with any additional questions or comments.</p>
 <h2 id="license">License<a class="headerlink" href="#license" title="Permanent link">#</a></h2>
 <p>This project is released under the MIT License. Please review the <a href="LICENSE">License file</a> for more details.</p>
               
