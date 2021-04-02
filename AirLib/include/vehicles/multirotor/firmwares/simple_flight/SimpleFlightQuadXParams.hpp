@@ -104,6 +104,10 @@ protected:
         computeInertiaMatrix(params.inertia, params.body_box, params.rotor_poses, box_mass, motor_assembly_weight);
 
         //leave everything else to defaults
+        // Use connection_info_.model for the model name, see Px4MultiRotorParams for example
+
+        // Only Generic for now
+        setupFrameGenericQuad(params);
     }
 
     virtual const SensorFactory* getSensorFactory() const override
@@ -112,7 +116,6 @@ protected:
     }
 
 private:
-    vector<unique_ptr<SensorBase>> sensor_storage_;
     const AirSimSettings::VehicleSetting* vehicle_setting_; //store as pointer because of derived classes
     std::shared_ptr<const SensorFactory> sensor_factory_;
 };

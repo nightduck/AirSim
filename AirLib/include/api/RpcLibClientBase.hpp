@@ -50,7 +50,10 @@ public:
 
     vector<string> simListSceneObjects(const string& name_regex = string(".*")) const;
     Pose simGetObjectPose(const std::string& object_name) const;
+    bool simLoadLevel(const string& level_name);
+    Vector3r simGetObjectScale(const std::string& object_name) const;
     bool simSetObjectPose(const std::string& object_name, const Pose& pose, bool teleport = true);
+    bool simSetObjectScale(const std::string& object_name, const Vector3r& scale);
 
     //task management APIs
     void cancelLastTask(const std::string& vehicle_name = "");
@@ -75,13 +78,15 @@ public:
 
     msr::airlib::GeoPoint getHomeGeoPoint(const std::string& vehicle_name = "") const;
 
+    bool simRunConsoleCommand(const std::string& command);
+
     // sensor APIs
     msr::airlib::LidarData getLidarData(const std::string& lidar_name = "", const std::string& vehicle_name = "") const;
     msr::airlib::ImuBase::Output getImuData(const std::string& imu_name = "", const std::string& vehicle_name = "") const;
     msr::airlib::BarometerBase::Output getBarometerData(const std::string& barometer_name = "", const std::string& vehicle_name = "") const;
     msr::airlib::MagnetometerBase::Output getMagnetometerData(const std::string& magnetometer_name = "", const std::string& vehicle_name = "") const;
     msr::airlib::GpsBase::Output getGpsData(const std::string& gps_name = "", const std::string& vehicle_name = "") const;
-    msr::airlib::DistanceBase::Output getDistanceSensorData(const std::string& distance_sensor_name = "", const std::string& vehicle_name = "") const;
+    msr::airlib::DistanceSensorData getDistanceSensorData(const std::string& distance_sensor_name = "", const std::string& vehicle_name = "") const;
 
     // sensor omniscient APIs
     vector<int> simGetLidarSegmentation(const std::string& lidar_name = "", const std::string& vehicle_name = "") const;
@@ -98,12 +103,15 @@ public:
     CollisionInfo simGetCollisionInfo(const std::string& vehicle_name = "") const;
 
     CameraInfo simGetCameraInfo(const std::string& camera_name, const std::string& vehicle_name = "") const;
-    void simSetCameraOrientation(const std::string& camera_name, const Quaternionr& orientation, const std::string& vehicle_name = "");
+    void simSetDistortionParam(const std::string& camera_name, const std::string& param_name, float value, const std::string& vehicle_name = "");
+    std::vector<float> simGetDistortionParams(const std::string& camera_name, const std::string& vehicle_name = "");
+    void simSetCameraPose(const std::string& camera_name, const Pose& pose, const std::string& vehicle_name = "");
     void simSetCameraFov(const std::string& camera_name, float fov_degrees, const std::string& vehicle_name = "");
-
+    // This is a backwards-compatibility wrapper over simSetCameraPose, and can be removed in future major releases
+    void simSetCameraOrientation(const std::string& camera_name, const Quaternionr& orientation, const std::string& vehicle_name = "");
+    bool simCreateVoxelGrid(const Vector3r& position, const int& x_size, const int& y_size, const int& z_size, const float& res, const std::string& output_file);
     msr::airlib::Kinematics::State simGetGroundTruthKinematics(const std::string& vehicle_name = "") const;
     msr::airlib::Environment::State simGetGroundTruthEnvironment(const std::string& vehicle_name = "") const;
-
 	std::vector<std::string> simSwapTextures(const std::string& tags, int tex_id = 0, int component_id = 0, int material_id = 0);
     //----------- APIs to control ACharacter in scene ----------/
     void resetUnreal(); 
@@ -123,6 +131,13 @@ public:
     void simSetFacePresets(const std::unordered_map<std::string, float>& presets, const std::string& character_name = "");
     void simSetBonePoses(const std::unordered_map<std::string, msr::airlib::Pose>& poses, const std::string& character_name = "");
     std::unordered_map<std::string, msr::airlib::Pose> simGetBonePoses(const std::vector<std::string>& bone_names, const std::string& character_name = "") const;
+
+    // Recording APIs
+    void startRecording();
+    void stopRecording();
+    bool isRecording();
+
+    void simSetWind(const Vector3r& wind) const;
 
 protected:
     void* getClient();

@@ -10,6 +10,7 @@
 #include "NedTransform.h"
 #include "common/EarthUtils.hpp"
 
+#include "Materials/MaterialParameterCollectionInstance.h"
 #include "DrawDebugHelpers.h"
 
 PawnSimApi::PawnSimApi(const Params& params)
@@ -409,12 +410,12 @@ msr::airlib::CameraInfo PawnSimApi::getCameraInfo(const std::string& camera_name
     return camera_info;
 }
 
-void PawnSimApi::setCameraOrientation(const std::string& camera_name, const msr::airlib::Quaternionr& orientation)
+void PawnSimApi::setCameraPose(const std::string& camera_name, const msr::airlib::Pose& pose)
 {
-    UAirBlueprintLib::RunCommandOnGameThread([this, camera_name, orientation]() {
+    UAirBlueprintLib::RunCommandOnGameThread([this, camera_name, pose]() {
         APIPCamera* camera = getCamera(camera_name);
-        FQuat quat = ned_transform_.fromNed(orientation);
-        camera->setCameraOrientation(quat.Rotator());
+        FTransform pose_unreal = ned_transform_.fromRelativeNed(pose);
+        camera->setCameraPose(pose_unreal);
     }, true);
 }
 
@@ -424,6 +425,29 @@ void PawnSimApi::setCameraFoV(const std::string& camera_name, float fov_degrees)
         APIPCamera* camera = getCamera(camera_name);
         camera->setCameraFoV(fov_degrees);
     }, true);
+}
+
+void PawnSimApi::setDistortionParam(const std::string& camera_name, const std::string& param_name, float value)
+{
+    UAirBlueprintLib::RunCommandOnGameThread([this, camera_name, param_name, value]() {
+        APIPCamera* camera = getCamera(camera_name);
+        camera->distortion_param_instance_->SetScalarParameterValue(FName(param_name.c_str()), value);
+    }, true);
+}
+
+std::vector<float> PawnSimApi::getDistortionParams(const std::string& camera_name)
+{
+    std::vector<float> param_values(5, 0.0);
+    UAirBlueprintLib::RunCommandOnGameThread([this, camera_name, &param_values]() {
+        APIPCamera* camera = getCamera(camera_name);
+        camera->distortion_param_instance_->GetScalarParameterValue(FName(TEXT("K1")), param_values[0]);
+        camera->distortion_param_instance_->GetScalarParameterValue(FName(TEXT("K2")), param_values[1]);
+        camera->distortion_param_instance_->GetScalarParameterValue(FName(TEXT("K3")), param_values[2]);
+        camera->distortion_param_instance_->GetScalarParameterValue(FName(TEXT("P1")), param_values[3]);
+        camera->distortion_param_instance_->GetScalarParameterValue(FName(TEXT("P2")), param_values[4]);
+    }, true);
+
+    return param_values;
 }
 
 //parameters in NED frame
@@ -514,8 +538,8 @@ void PawnSimApi::updateKinematics(float dt)
     next_kinematics.twist.angular = msr::airlib::VectorMath::toAngularVelocity(
         kinematics_->getPose().orientation, next_kinematics.pose.orientation, dt);
 
-    next_kinematics.accelerations.linear = (next_kinematics.twist.linear - kinematics_->getTwist().linear) / dt;
-    next_kinematics.accelerations.angular = (next_kinematics.twist.angular - kinematics_->getTwist().angular) / dt;
+    next_kinematics.accelerations.linear = dt > 0 ? (next_kinematics.twist.linear - kinematics_->getTwist().linear) / dt : next_kinematics.accelerations.linear;
+    next_kinematics.accelerations.angular = dt > 0 ? (next_kinematics.twist.angular - kinematics_->getTwist().angular) / dt : next_kinematics.accelerations.angular;
 
     kinematics_->setState(next_kinematics);
     kinematics_->update();
