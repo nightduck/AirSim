@@ -241,8 +241,6 @@ public:
         declare_parameter<std::string>("tensorrt_engine", "yolo4_deer_fp32.rt");
         get_parameter("tensorrt_engine", trt_engine_filename);
 
-        pose_frame = vehicle_name + "/" + camera_name;
-
         tf_buffer = new tf2_ros::Buffer(this->get_clock()); 
         tf_listener = new tf2_ros::TransformListener(*tf_buffer);
 
@@ -262,6 +260,8 @@ public:
         camera_name = parameters_client->get_parameter<std::string>("camera_name");
         world_frame = parameters_client->get_parameter<std::string>("world_frame");
         int fps = parameters_client->get_parameter<int>("camera_fps");
+
+        pose_frame = vehicle_name + "/" + camera_name;
 
         geometry_msgs::msg::TransformStamped transform = tf_buffer->lookupTransform(world_frame, pose_frame, tf2::TimePointZero, std::chrono::milliseconds(100)); // TODO: Make sure inference + this block doesn't exceed period
         geometry_msgs::msg::PoseStamped temp;        

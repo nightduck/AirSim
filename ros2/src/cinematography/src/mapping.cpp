@@ -92,7 +92,7 @@ int main(int argc, char ** argv)
   clock_ = node->get_clock();
 
   auto lidar_sub = node->create_subscription<sensor_msgs::msg::PointCloud2>(
-    "lidar", 500, callback
+    "lidar", 1, callback
   );
 
   auto tsdf_pub = node->create_publisher<tsdf_package_msgs::msg::Tsdf>("tsdf", 10);
