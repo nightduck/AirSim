@@ -46,6 +46,8 @@ private:
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr camera_sub;
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr depth_sub;
 
+    msr::airlib::Vector3r camera_offset;
+
     tf2_ros::Buffer* tf_buffer;
     tf2_ros::TransformListener* tf_listener;
 
@@ -204,7 +206,7 @@ private:
 
         msr::airlib::Quaternionr alq = msr::airlib::Quaternionr(gimbal_setpoint.w(),
                         gimbal_setpoint.x(), gimbal_setpoint.y(), gimbal_setpoint.z());
-        airsim_client->simSetCameraOrientation(camera_name, alq, vehicle_name);
+        airsim_client->simSetCameraPose(camera_name, msr::airlib::Pose(camera_offset, alq), vehicle_name);
 
         // Extract subimage, package with centering coordinates, and publish to /bounding_box
         bb.fov = fov;
@@ -286,6 +288,8 @@ public:
 
         msr::airlib::CameraInfo ci = airsim_client->simGetCameraInfo(camera_name, vehicle_name);
         fov = ci.fov * M_PI / 180;
+
+        camera_offset = ci.pose.position;
     }
 
     ~ActorDetection() {
