@@ -1076,15 +1076,12 @@ int main(int argc, char ** argv)
     node->declare_parameter<int>("max_iterations", 1);
     node->get_parameter("max_iterations", MAX_ITERATIONS);
     airsim_client = new msr::airlib::MultirotorRpcLibClient(airsim_hostname);
-
-    tf_buffer = new tf2_ros::Buffer(node->get_clock()); 
-    tf_listener = new tf2_ros::TransformListener(*tf_buffer);
     
     auto parameters_client = std::make_shared<rclcpp::SyncParametersClient>(node, "airsim_ros2_wrapper");
-    while (!parameters_client->wait_for_service(1s)) {
+    while (!parameters_client->wait_for_service(1s) && rclcpp::ok()) {
         if (!rclcpp::ok()) {
             RCLCPP_ERROR(node->get_logger(), "Interrupted while waiting for the service. Exiting.");
-            rclcpp::shutdown();
+            return 1;
         }
         RCLCPP_INFO(node->get_logger(), "service not available, waiting again...");
     }
@@ -1092,8 +1089,15 @@ int main(int argc, char ** argv)
     world_frame = parameters_client->get_parameter<std::string>("world_frame");
     drone_frame = parameters_client->get_parameter<std::string>("vehicle_name");
 
+    tf_buffer = new tf2_ros::Buffer(node->get_clock()); 
+    tf_listener = new tf2_ros::TransformListener(*tf_buffer);
+
     while(!tf_buffer->canTransform(world_frame, drone_frame, tf2::TimePointZero)) {
-        std::cout << "Waiting for world to drone frame transform..." << std::endl;
+        if (!rclcpp::ok()) {
+            RCLCPP_ERROR(node->get_logger(), "Interrupted while waiting for the service. Exiting.");
+            return 1;
+        }
+        RCLCPP_INFO(node->get_logger(), "Waiting for world to drone frame transform...");
         sleep(1);
     };
 

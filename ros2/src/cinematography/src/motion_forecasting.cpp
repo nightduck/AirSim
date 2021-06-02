@@ -138,7 +138,7 @@ public:
         while (!parameters_client->wait_for_service(1s)) {
             if (!rclcpp::ok()) {
                 RCLCPP_ERROR(this->get_logger(), "Interrupted while waiting for the service. Exiting.");
-                rclcpp::shutdown();
+                return;
             }
             RCLCPP_INFO(this->get_logger(), "service not available, waiting again...");
         }

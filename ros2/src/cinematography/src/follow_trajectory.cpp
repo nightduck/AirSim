@@ -124,7 +124,7 @@ int main(int argc, char **argv)
     while (!parameters_client->wait_for_service(1s)) {
         if (!rclcpp::ok()) {
             RCLCPP_ERROR(node->get_logger(), "Interrupted while waiting for the service. Exiting.");
-            rclcpp::shutdown();
+            return 1;
         }
         RCLCPP_INFO(node->get_logger(), "service not available, waiting again...");
     }
