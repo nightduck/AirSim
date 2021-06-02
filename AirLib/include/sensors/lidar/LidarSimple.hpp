@@ -13,7 +13,8 @@
 
 namespace msr { namespace airlib {
 
-class LidarSimple : public LidarBase {
+class LidarSimple : public LidarBase
+{
 public:
     LidarSimple(const AirSimSettings::LidarSetting& setting = AirSimSettings::LidarSetting())
         : LidarBase(setting.sensor_name)
@@ -97,12 +98,12 @@ private: //methods
         LidarData output;
         output.point_cloud = point_cloud_;
         output.time_stamp = clock()->nowNanos();
-        output.pose = lidar_pose;            
+        output.pose = lidar_pose;
+        output.segmentation = segmentation_cloud_;
 
         last_time_ = output.time_stamp;
 
         setOutput(output);
-        setSegmentationOutput(segmentation_cloud_);
     }
 
 private:

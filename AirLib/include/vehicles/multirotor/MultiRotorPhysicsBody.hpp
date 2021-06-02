@@ -26,12 +26,15 @@
 
 namespace msr { namespace airlib {
 
-class MultiRotorPhysicsBody : public PhysicsBody {
+class MultiRotorPhysicsBody : public PhysicsBody
+{
 public:
     MultiRotorPhysicsBody(MultiRotorParams* params, MultirotorApiBase* vehicle_api, 
         Kinematics* kinematics, Environment* environment)
         : params_(params), vehicle_api_(vehicle_api)
     {
+        setName("MultiRotorPhysicsBody");
+        vehicle_api_->setParent(this);
         initialize(kinematics, environment);
     }
 
@@ -99,11 +102,24 @@ public:
     //*** End: UpdatableState implementation ***//
 
 
-    //Physics engine calls this method to set next kinematics
+    //Fast Physics engine calls this method to set next kinematics
     virtual void updateKinematics(const Kinematics::State& kinematics) override
     {
         PhysicsBody::updateKinematics(kinematics);
 
+        updateSensorsAndController();
+    }
+
+    //External Physics engine calls this method to keep physics bodies updated and move rotors
+    virtual void updateKinematics() override
+    {
+        PhysicsBody::updateKinematics();
+
+        updateSensorsAndController();
+    }
+
+    void updateSensorsAndController()
+    {
         updateSensors(*params_, getKinematics(), getEnvironment());
 
         //update controller which will update actuator control signal

@@ -19,10 +19,33 @@ class MsgpackMixin:
         #return cls(**msgpack.unpack(encoded))
         return obj
 
+class _ImageType(type):
+    @property
+    def Scene(cls):
+        return 0
+    def DepthPlanar(cls):
+        return 1
+    def DepthPerspective(cls):
+        return 2
+    def DepthVis(cls):
+        return 3
+    def DisparityNormalized(cls):
+        return 4
+    def Segmentation(cls):
+        return 5
+    def SurfaceNormals(cls):
+        return 6
+    def Infrared(cls):
+        return 7
 
-class ImageType:
+    def __getattr__(self, key):
+        if key == 'DepthPlanner':
+            print('\033[31m'+"DepthPlanner has been (correctly) renamed to DepthPlanar. Please use ImageType.DepthPlanar instead."+'\033[0m')
+            raise AttributeError
+
+class ImageType(metaclass=_ImageType):
     Scene = 0
-    DepthPlanner = 1
+    DepthPlanar = 1
     DepthPerspective = 2
     DepthVis = 3
     DisparityNormalized = 4
@@ -348,6 +371,14 @@ class CarState(MsgpackMixin):
     kinematics_estimated = KinematicsState()
     timestamp = np.uint64(0)
 
+class TripStats(MsgpackMixin):
+    state_of_charge = 0.0
+    voltage = 0.0
+    energy_consumed = 0.0
+    flight_time = 0.0
+    distance_traveled = 0.0
+    collision_count = 0
+
 class MultirotorState(MsgpackMixin):
     collision = CollisionInfo()
     kinematics_estimated = KinematicsState()
@@ -358,6 +389,11 @@ class MultirotorState(MsgpackMixin):
     ready = False
     ready_message = ""
     can_arm = False
+    trip_stats = TripStats()
+
+class RotorStates(MsgpackMixin):
+    timestamp = np.uint64(0)
+    rotors = []
 
 class ProjectionMatrix(MsgpackMixin):
     matrix = []
@@ -371,6 +407,7 @@ class LidarData(MsgpackMixin):
     point_cloud = 0.0
     time_stamp = np.uint64(0)
     pose = Pose()
+    segmentation = 0
 
 class ImuData(MsgpackMixin):
     time_stamp = np.uint64(0)
