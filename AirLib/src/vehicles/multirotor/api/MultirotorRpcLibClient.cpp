@@ -249,7 +249,7 @@ void MultirotorRpcLibClient::moveByRC(const RCData& rc_data, const std::string& 
 
 TripStats MultirotorRpcLibClient::getTripStats()
 {
-    return static_cast<rpc::client*>(getClient())->call("getTripStats").as<MultirotorRpcLibAdapators::TripStats>().to();
+    return static_cast<rpc::client*>(getClient())->call("getTripStats").as<MultirotorRpcLibAdaptors::TripStats>().to();
 }
 
 //return value of last task. It should be true if task completed without
