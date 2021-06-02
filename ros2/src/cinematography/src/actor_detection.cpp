@@ -243,25 +243,32 @@ public:
         declare_parameter<std::string>("tensorrt_engine", "yolo4_deer_fp32.rt");
         get_parameter("tensorrt_engine", trt_engine_filename);
 
-        tf_buffer = new tf2_ros::Buffer(this->get_clock()); 
-        tf_listener = new tf2_ros::TransformListener(*tf_buffer);
-
-        while(!tf_buffer->_frameExists("world_ned"));
-
         auto parameters_client = std::make_shared<rclcpp::SyncParametersClient>(this, "airsim_ros2_wrapper");
         while (!parameters_client->wait_for_service(1s)) {
             if (!rclcpp::ok()) {
                 RCLCPP_ERROR(this->get_logger(), "Interrupted while waiting for the service. Exiting.");
-                rclcpp::shutdown();
+                return;
             }
             RCLCPP_INFO(this->get_logger(), "service not available, waiting again...");
         }
-
         airsim_hostname = parameters_client->get_parameter<std::string>("airsim_hostname");
         vehicle_name = parameters_client->get_parameter<std::string>("vehicle_name");
         camera_name = parameters_client->get_parameter<std::string>("camera_name");
         world_frame = parameters_client->get_parameter<std::string>("world_frame");
         int fps = parameters_client->get_parameter<int>("camera_fps");
+
+        tf_buffer = new tf2_ros::Buffer(this->get_clock()); 
+        tf_listener = new tf2_ros::TransformListener(*tf_buffer);
+
+        while(!tf_buffer->_frameExists("world_ned")) {
+            if (!rclcpp::ok()) {
+                RCLCPP_ERROR(this->get_logger(), "Interrupted while waiting for the service. Exiting.");
+                return;
+            }
+            RCLCPP_INFO(this->get_logger(), "Waiting for world frame...");
+            sleep(1);
+        };
+
 
         pose_frame = vehicle_name + "/" + camera_name;
 
