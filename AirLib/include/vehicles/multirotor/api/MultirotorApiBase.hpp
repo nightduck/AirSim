@@ -98,6 +98,8 @@ public: //these APIs uses above low level APIs
     virtual bool land(float timeout_sec);
     virtual bool goHome(float timeout_sec);
 
+    virtual bool moveByVelocityBodyFrame(float vx, float vy, float vz, float duration, DrivetrainType drivetrain, const YawMode& yaw_mode);
+    virtual bool moveByVelocityZBodyFrame(float vx, float vy, float z, float duration, DrivetrainType drivetrain, const YawMode& yaw_mode);
     virtual bool moveByMotorPWMs(float front_right_pwm, float rear_left_pwm, float front_left_pwm, float rear_right_pwm, float duration);
     virtual bool moveByRollPitchYawZ(float roll, float pitch, float yaw, float z, float duration);
     virtual bool moveByRollPitchYawThrottle(float roll, float pitch, float yaw, float throttle, float duration);
@@ -131,6 +133,11 @@ public: //these APIs uses above low level APIs
         float obs_avoidance_vel, const Vector3r& origin, float xy_length, float max_z, float min_z);
 
     /************************* high level status APIs *********************************/
+    RotorStates getRotorStates() const
+    {
+        return rotor_states_;
+    }
+
     MultirotorState getMultirotorState() const
     {
         MultirotorState state;
@@ -150,6 +157,12 @@ public: //these APIs uses above low level APIs
     virtual void cancelLastTask() override
     {
         token_.cancel();
+    }
+
+    /******************* rotors' states setter ********************/
+    void setRotorStates(const RotorStates& rotor_states)
+    {
+        rotor_states_ = rotor_states;
     }
 
 protected: //utility methods
@@ -352,6 +365,7 @@ private: //variables
     float approx_zero_angular_vel_ = 0.01f;
 
     TripStats trip_stats_;
+    RotorStates rotor_states_;
 };
 
 }} //namespace

@@ -73,6 +73,13 @@ void SimModeBase::continueForTime(double seconds)
 	throw std::domain_error("continueForTime is not implemented by SimMode");
 }
 
+void SimModeBase::continueForFrames(uint32_t frames)
+{
+	//should be overridden by derived class
+	unused(frames);
+	throw std::domain_error("continueForFrames is not implemented by SimMode");
+}
+
 void SimModeBase::setTimeOfDay(bool is_enabled, const std::string& start_datetime, bool is_start_datetime_dst,
     float celestial_clock_speed, float update_interval_secs, bool move_sun)
 {
@@ -84,6 +91,13 @@ void SimModeBase::setTimeOfDay(bool is_enabled, const std::string& start_datetim
         unused(move_sun);
         //commenting this out for now to avoid unintentional Unity startup failure
         //throw std::domain_error("setTimeOfDay is not implemented by SimMode");
+}
+
+void SimModeBase::setWind(const msr::airlib::Vector3r& wind) const
+{
+    // should be overridden by derived class
+    unused(wind);
+    throw std::domain_error("setWind is not implemented by SimMode");
 }
 
 std::unique_ptr<msr::airlib::ApiServerBase> SimModeBase::createApiServer() const

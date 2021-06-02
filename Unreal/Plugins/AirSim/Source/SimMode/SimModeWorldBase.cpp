@@ -1,4 +1,6 @@
 #include "SimModeWorldBase.h"
+#include "physics/FastPhysicsEngine.hpp"
+#include "physics/ExternalPhysicsEngine.hpp"
 #include <exception>
 #include "AirBlueprintLib.h"
 
@@ -20,6 +22,12 @@ void ASimModeWorldBase::initializeForPlay()
     physics_world_.reset(new msr::airlib::PhysicsWorld(std::move(physics_engine),
         vehicles, getPhysicsLoopPeriod()));
 }
+
+void ASimModeWorldBase::registerPhysicsBody(msr::airlib::VehicleSimApiBase *physicsBody)
+{
+    physics_world_.get()->addBody(physicsBody);
+}
+
 
 void ASimModeWorldBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
@@ -62,6 +70,11 @@ std::unique_ptr<ASimModeWorldBase::PhysicsEngineBase> ASimModeWorldBase::createP
         else {
             physics_engine.reset(new msr::airlib::FastPhysicsEngine());
         }
+
+        physics_engine->setWind(getSettings().wind);
+    }
+    else if (physics_engine_name == "ExternalPhysicsEngine") {        
+        physics_engine.reset(new msr::airlib::ExternalPhysicsEngine());
     }
     else {
         physics_engine.reset();
@@ -96,6 +109,28 @@ void ASimModeWorldBase::continueForTime(double seconds)
         continue; 
     }
     UGameplayStatics::SetGamePaused(this->GetWorld(), true);
+}
+
+void ASimModeWorldBase::continueForFrames(uint32_t frames)
+{
+    if(physics_world_->isPaused())
+    {
+        physics_world_->pause(false);
+        UGameplayStatics::SetGamePaused(this->GetWorld(), false);        
+    }
+    
+    physics_world_->setFrameNumber((uint32_t)GFrameNumber);
+    physics_world_->continueForFrames(frames);
+    while(!physics_world_->isPaused())
+    {
+        physics_world_->setFrameNumber((uint32_t)GFrameNumber);
+    }
+    UGameplayStatics::SetGamePaused(this->GetWorld(), true);
+}
+
+void ASimModeWorldBase::setWind(const msr::airlib::Vector3r& wind) const
+{
+    physics_engine_->setWind(wind);
 }
 
 void ASimModeWorldBase::updateDebugReport(msr::airlib::StateReporterWrapper& debug_reporter)

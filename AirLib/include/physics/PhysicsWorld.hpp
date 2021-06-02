@@ -13,7 +13,8 @@
 
 namespace msr { namespace airlib {
 
-class PhysicsWorld {
+class PhysicsWorld : UpdatableObject 
+{
 public:
     PhysicsWorld(std::unique_ptr<PhysicsEngineBase> physics_engine, const std::vector<UpdatableObject*>& bodies,
             uint64_t update_period_nanos = 3000000LL, bool state_reporter_enabled = false,
@@ -21,6 +22,7 @@ public:
         )
         : world_(std::move(physics_engine))
     {
+        setName("PhysicsWorld");
         enableStateReport(state_reporter_enabled);
         update_period_nanos_ = update_period_nanos;
         initializeWorld(bodies, start_async_updator);
@@ -40,6 +42,13 @@ public:
     {
         lock();
         world_.reset();
+        unlock();
+    }
+
+    void addBody(UpdatableObject* body)
+    {
+        lock();
+        world_.insert(body);
         unlock();
     }
 
@@ -90,6 +99,18 @@ public:
     {
         world_.continueForTime(seconds);
     }
+
+    void continueForFrames(uint32_t frames)
+    {
+        world_.continueForFrames(frames);
+    }
+
+    void setFrameNumber(uint32_t frameNumber)
+    {
+        world_.setFrameNumber(frameNumber);
+    }
+
+    void resetImplementation() override {}
 
 private:
     void initializeWorld(const std::vector<UpdatableObject*>& bodies, bool start_async_updator)

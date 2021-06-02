@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10.0)
 project(airsim_ros_pkgs)
 
 # set this to path to AirSim root folder if you want your catkin workspace in a custom directory
-set(AIRSIM_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../../../AirSim/)
+set(AIRSIM_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../../)
 set (common_utility_src ${AIRSIM_ROOT}/ros/src/common)
 
 add_subdirectory("${AIRSIM_ROOT}/cmake/rpclib_wrapper" rpclib_wrapper)
@@ -48,11 +48,15 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   sensor_msgs
   std_msgs
+  geographic_msgs
+  geometry_msgs
   std_srvs
   tf2
   tf2_ros
   mav_trajectory_generation
   mav_trajectory_generation_ros
+  tf2_sensor_msgs
+  tf2_geometry_msgs
 )
 
 add_message_files(
@@ -65,6 +69,10 @@ add_message_files(
   MultiDOF.msg
   MultiDOFarray.msg
   BoolPlusHeader.msg
+  CarControls.msg
+  CarState.msg
+  Altimeter.msg
+  Environment.msg
 )
 
 add_service_files(
@@ -87,6 +95,7 @@ generate_messages(
   std_msgs
   geometry_msgs
   trajectory_msgs
+  geographic_msgs
 )
 
 catkin_package(
@@ -187,6 +196,7 @@ target_link_libraries(pd_position_controller_simple_node pd_position_controller_
 
 install(TARGETS
     #list of nodes
+    airsim_node
     pd_position_controller_simple_node
     DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )

@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Runtime/Engine/Classes/Engine/ExponentialHeightFog.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "Materials/MaterialParameterCollectionInstance.h"
 
@@ -54,15 +55,11 @@ class AIRSIM_API UWeatherLib : public UBlueprintFunctionLibrary
 	{
 		return FSoftClassPath(TEXT("AActor'/AirSim/Weather/WeatherFX/WeatherActor.WeatherActor_C'"));
 	}
-
+	
 	static const FSoftClassPath getWeatherMenuWidgetClass()
 	{
-		return FSoftClassPath(TEXT("UUserWidget'/AirSim/Weather/UI/OptionsMenu.OptionsMenu_C'"));
+		return FSoftClassPath(TEXT("UUserWidget'/AirSim/HUDAssets/OptionsMenu.OptionsMenu_C'"));
 	}
-	/*static const FSoftClassPath getMenuClass()
-	{
-		return TEXT("/AirSim/Weather/UI/OptionsMenu.OptionsMenu_C");
-	}*/
 	// menu class name for finding and closing it
 	static const FString getWeatherMenuClassName()
 	{
@@ -188,4 +185,10 @@ public:
 	// since GetWorld() isn't exposed to bp
 	UFUNCTION(BlueprintCallable, Category = World)
 	static UWorld* actorGetWorld(AActor* Actor);
+
+	UFUNCTION(BlueprintCallable, Category = Weather)
+	static void setWeatherFog(AExponentialHeightFog* fog);
+
+private:
+	static AExponentialHeightFog* weather_fog_;
 };

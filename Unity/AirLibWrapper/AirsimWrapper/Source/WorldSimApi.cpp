@@ -30,6 +30,11 @@ void WorldSimApi::continueForTime(double seconds)
 	simmode_->continueForTime(seconds);
 }
 
+void WorldSimApi::continueForFrames(uint32_t frames)
+{
+	simmode_->continueForFrames(frames);
+}
+
 void WorldSimApi::setTimeOfDay(bool is_enabled, const std::string& start_datetime, bool is_start_datetime_dst,
     float celestial_clock_speed, float update_interval_secs, bool move_sun)
 {
@@ -74,10 +79,21 @@ WorldSimApi::Pose WorldSimApi::getObjectPose(const std::string& object_name) con
 	return UnityUtilities::Convert_to_Pose(airSimPose);
 }
 
+msr::airlib::Vector3r WorldSimApi::getObjectScale(const std::string& object_name) const { return Vector3r(); }
+msr::airlib::Vector3r WorldSimApi::getObjectScaleInternal(const std::string& object_name) const { return Vector3r(); }
+bool WorldSimApi::setObjectScale(const std::string& object_name, const Vector3r& scale) { return false; }
+
 bool WorldSimApi::setObjectPose(const std::string& object_name, const WorldSimApi::Pose& pose, bool teleport)
 {
 	AirSimUnity::AirSimPose airSimPose = UnityUtilities::Convert_to_AirSimPose(pose);
 	return SetPose(airSimPose, false, object_name.c_str());
+}
+
+bool WorldSimApi::runConsoleCommand(const std::string& command)
+{
+    throw std::invalid_argument(common_utils::Utils::stringf(
+        "simrunConsoleCommand is not supported on unity").c_str());
+    return false;
 }
 
 void WorldSimApi::enableWeather(bool enable)
@@ -90,6 +106,11 @@ void WorldSimApi::setWeatherParameter(WeatherParameter param, float val)
     unused(param);
     unused(val);
     //TODO: implement weather for Unity
+}
+
+bool WorldSimApi::createVoxelGrid(const Vector3r& position, const int& x_size, const int& y_size, const int& z_size, const float& res, const std::string& output_file)
+{
+    return false;
 }
 
 //----------------Plotting APIs-----------/
@@ -148,5 +169,43 @@ std::vector<WorldSimApi::MeshPositionVertexBuffersResponse> WorldSimApi::getMesh
         "getMeshPositionVertexBuffers is not supported on unity").c_str());
     return result;
 }
+
+// Recording APIs
+void WorldSimApi::startRecording()
+{
+    throw std::invalid_argument(common_utils::Utils::stringf(
+        "startRecording is not supported on unity").c_str());
+}
+
+void WorldSimApi::stopRecording()
+{
+    throw std::invalid_argument(common_utils::Utils::stringf(
+        "stopRecording is not supported on unity").c_str());
+}
+
+bool WorldSimApi::isRecording() const
+{
+    throw std::invalid_argument(common_utils::Utils::stringf(
+        "isRecording is not supported on unity").c_str());
+    return false;
+}
+
+void WorldSimApi::setWind(const Vector3r& wind) const
+{
+    simmode_->setWind(wind);
+};
+
+bool WorldSimApi::addVehicle(const std::string& vehicle_name, const std::string& vehicle_type, const WorldSimApi::Pose& pose, const std::string& pawn_path)
+{
+    throw std::invalid_argument(common_utils::Utils::stringf(
+        "addVehicle is not supported on unity").c_str());
+    return false;
+}
+
+std::string WorldSimApi::getSettingsString() const
+{
+    return msr::airlib::AirSimSettings::singleton().settings_text_;
+}
+
 
 #pragma endregion

@@ -14,24 +14,28 @@
 
 namespace common_utils {
 
-class ScheduledExecutor {
+class ScheduledExecutor 
+{
 public:
     ScheduledExecutor()
     {}
+
     ScheduledExecutor(const std::function<bool(uint64_t)>& callback, uint64_t period_nanos)
     {
         initialize(callback, period_nanos);
     }
+
     ~ScheduledExecutor()
     {
         stop();
     }
+
     void initialize(const std::function<bool(uint64_t)>& callback, uint64_t period_nanos)
     {
         callback_ = callback;
         period_nanos_ = period_nanos;
         started_ = false;
-
+        frame_countdown_enabled_ = false;
     }
 
     void start()
@@ -49,6 +53,7 @@ public:
     void pause(bool is_paused)
     {
         paused_ = is_paused;
+        pause_period_start_ = 0; // cancel any pause period.
     }
 
     bool isPaused() const
@@ -56,11 +61,31 @@ public:
         return paused_;
     }
 
+    void pauseForTime(double seconds)
+    {
+        pause_period_start_ = nanos();
+        pause_period_ = static_cast<TTimeDelta>(1E9 * seconds);
+        paused_ = true;
+    }
+
     void continueForTime(double seconds)
     {
         pause_period_start_ = nanos();
         pause_period_ = static_cast<TTimeDelta>(1E9 * seconds);
         paused_ = false;
+    }
+
+    void continueForFrames(uint32_t frames)
+    {
+        pause_period_start_ = 0; // cancel any pause period.
+        frame_countdown_enabled_ = true;
+        targetFrameNumber_ = frames + currentFrameNumber_;
+        paused_ = false;
+    }
+
+    void setFrameNumber(uint32_t frameNumber)
+    {
+        currentFrameNumber_ = frameNumber;    
     }
 
     void stop()
@@ -74,8 +99,8 @@ public:
                     th_.join();
                 }
             }
-            catch(const std::system_error& /* e */)
-            { }
+            catch(const std::system_error& /* e */) {
+            }
         }
     }
 
@@ -150,12 +175,19 @@ private:
         while (started_) {
             TTimePoint period_start = nanos();
             TTimeDelta since_last_call = period_start - call_end;
-            
-            if (pause_period_start_ > 0) {
-                if (nanos() - pause_period_start_ >= pause_period_) {
+
+            if (frame_countdown_enabled_) {
+                if (targetFrameNumber_ <= currentFrameNumber_){
                     if (! isPaused())
                         pause(true);
 
+                    frame_countdown_enabled_ = false;
+                }
+            }
+            
+            if (pause_period_start_ > 0) {
+                if (nanos() - pause_period_start_ >= pause_period_) {
+                    pause(!isPaused());
                     pause_period_start_ = 0;
                 }
             }
@@ -196,6 +228,9 @@ private:
     std::atomic_bool paused_;
     std::atomic<TTimeDelta> pause_period_;
     std::atomic<TTimePoint> pause_period_start_;
+    uint32_t currentFrameNumber_;
+    uint32_t targetFrameNumber_;
+    std::atomic_bool frame_countdown_enabled_;
     
     double sleep_time_avg_;
 

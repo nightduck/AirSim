@@ -394,10 +394,28 @@ struct RCData {
 
 struct LidarData {
     TTimePoint time_stamp = 0;
+    // data
+    // - array of floats that represent [x,y,z] coordinate for each point hit within the range
+    //       x0, y0, z0, x1, y1, z1, ..., xn, yn, zn
+    //       TODO: Do we need an intensity place-holder [x,y,z, intensity]?
+    // - in lidar local NED coordinates
+    // - in meters
     vector<real_T> point_cloud;
     Pose pose;
+    vector<int> segmentation;
 
     LidarData()
+    {}
+};
+
+struct DistanceSensorData {
+    TTimePoint time_stamp;
+    real_T distance;        //meters
+    real_T min_distance;    //m
+    real_T max_distance;    //m
+    Pose relative_pose;
+
+    DistanceSensorData()
     {}
 };
 

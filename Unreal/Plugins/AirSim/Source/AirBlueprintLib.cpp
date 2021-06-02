@@ -9,9 +9,10 @@
 #include "Components/StaticMeshComponent.h"
 #include "EngineUtils.h"
 #include "Runtime/Engine/Classes/Engine/StaticMesh.h"
-#include "UObject/UObjectIterator.h"
+#include "Runtime/Engine/Classes/Engine/LevelStreamingDynamic.h"
+#include "UObject/UObjectIterator.h" 
 #include "Camera/CameraComponent.h"
-//#include "Runtime/Foliage/Public/FoliageType.h"
+#include "Runtime/Engine/Classes/GameFramework/PlayerStart.h"
 #include "Misc/MessageDialog.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/SkeletalMesh.h"
@@ -19,8 +20,12 @@
 #include "IImageWrapper.h"
 #include "Misc/ObjectThumbnail.h"
 #include "Engine/Engine.h"
+#include "Engine/World.h"
 #include <exception>
 #include "common/common_utils/Utils.hpp"
+#include "Modules/ModuleManager.h"
+#include "ARFilter.h"
+#include "AssetRegistryModule.h"
 
 /*
 //TODO: change naming conventions to same as other files?
@@ -29,6 +34,7 @@ Methods -> CamelCase
 parameters -> camel_case
 */
 
+ULevelStreamingDynamic *UAirBlueprintLib::CURRENT_LEVEL = nullptr;
 bool UAirBlueprintLib::log_messages_hidden_ = false;
 msr::airlib::AirSimSettings::SegmentationSetting::MeshNamingMethodType UAirBlueprintLib::mesh_naming_method_ =
     msr::airlib::AirSimSettings::SegmentationSetting::MeshNamingMethodType::OwnerName;
@@ -71,6 +77,45 @@ void UAirBlueprintLib::setSimulatePhysics(AActor* actor, bool simulate_physics)
         component->SetSimulatePhysics(simulate_physics);
     }
 }
+
+ULevelStreamingDynamic* UAirBlueprintLib::loadLevel(UObject* context, const FString& level_name)
+{
+    bool success{ false };
+    context->GetWorld()->SetNewWorldOrigin(FIntVector(0,0,0));
+    ULevelStreamingDynamic* new_level = UAirsimLevelStreaming::LoadAirsimLevelInstance(
+            context->GetWorld(), level_name, FVector(0, 0, 0), FRotator(0, 0, 0), success);
+    if (success)
+    {
+        if(CURRENT_LEVEL != nullptr && CURRENT_LEVEL->IsValidLowLevel())
+            CURRENT_LEVEL->SetShouldBeLoaded(false);
+        CURRENT_LEVEL = new_level;	
+    }
+    return CURRENT_LEVEL;
+}
+
+bool UAirBlueprintLib::spawnPlayer(UWorld* context)
+{
+    
+    bool success{ false };
+    TArray<AActor*> player_start_actors;
+    FindAllActor<APlayerStart>(context, player_start_actors);
+    if (player_start_actors.Num() > 1)
+    {
+        for (auto player_start : player_start_actors)
+        {
+            if (player_start->GetName() != FString("SuperStart"))
+            {
+                //context->GetWorld()->SetNewWorldOrigin(FIntVector(0, 0, 0));
+                auto location = player_start->GetActorLocation();
+                context->RequestNewWorldOrigin(FIntVector(location.X, location.Y, location.Z));
+                success = true;
+                break;
+            }
+        }
+    }
+    return success;
+}
+
 
 std::vector<UPrimitiveComponent*> UAirBlueprintLib::getPhysicsComponents(AActor* actor)
 {
@@ -146,6 +191,15 @@ IImageWrapperModule* UAirBlueprintLib::getImageWrapperModule()
     return image_wrapper_module_;
 }
 
+void UAirBlueprintLib::setLogMessagesVisibility(bool is_visible)
+{
+    log_messages_hidden_ = !is_visible;
+
+    // if hidden, clear any existing messages
+    if (!is_visible && GEngine)
+        GEngine->ClearOnScreenDebugMessages();
+}
+
 void UAirBlueprintLib::LogMessage(const FString &prefix, const FString &suffix, LogDebugLevel level, float persist_sec)
 {
     if (log_messages_hidden_)
@@ -186,6 +240,44 @@ void UAirBlueprintLib::LogMessage(const FString &prefix, const FString &suffix, 
     }
     //GEngine->AddOnScreenDebugMessage(key + 10, 60.0f, color, FString::FromInt(key));
 }
+
+void UAirBlueprintLib::GenerateAssetRegistryMap(const UObject* context, TMap<FString, FAssetData>& asset_map)
+{
+    UAirBlueprintLib::RunCommandOnGameThread([context, &asset_map]() {
+        FARFilter Filter;
+        Filter.ClassNames.Add(UStaticMesh::StaticClass()->GetFName());
+        Filter.bRecursivePaths = true;
+
+        auto world = context->GetWorld();
+        TArray<FAssetData> AssetData;
+
+        // Find mesh in /Game and /AirSim asset registry. When more plugins are added this function will have to change
+        FAssetRegistryModule &AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+        AssetRegistryModule.Get().GetAssets(Filter, AssetData);
+
+        UObject *LoadObject = NULL;
+        for (auto asset : AssetData)
+        {
+            FString asset_name = asset.AssetName.ToString();
+            asset_map.Add(asset_name, asset);
+        }
+
+        LogMessageString("Asset database ready", "!", LogDebugLevel::Informational); 
+    }, true);
+}
+
+
+void UAirBlueprintLib::GenerateActorMap(const UObject* context, TMap<FString, AActor*>& scene_object_map) {
+    auto world = context->GetWorld();
+    for (TActorIterator<AActor> actorIterator(world); actorIterator; ++actorIterator) 
+    {
+        AActor* actor = *actorIterator;
+        FString name = *actor->GetName();
+
+        scene_object_map.Add(name, actor);
+    }
+}
+
 
 void UAirBlueprintLib::setUnrealClockSpeed(const AActor* context, float clock_speed)
 {
@@ -323,14 +415,33 @@ bool UAirBlueprintLib::SetMeshStencilID(const std::string& mesh_name, int object
 
 int UAirBlueprintLib::GetMeshStencilID(const std::string& mesh_name)
 {
-    FString fmesh_name(mesh_name.c_str());
-    for (TObjectIterator<UMeshComponent> comp; comp; ++comp)
-    {
-        // Access the subclass instance with the * or -> operators.
-        UMeshComponent *mesh = *comp;
-        if (mesh->GetName() == fmesh_name) {
+    // Takes a UStaticMeshComponent, USkinnedMeshComponent or ALandscapeProxy and returns their custom stencil ID if 
+    // their meshes's name or their owner's name (depending on the naming method in mesh_naming_method_) equals mesh_name
+    auto getCustomStencilForMesh = [&mesh_name](auto mesh) -> int {
+        const std::string component_mesh_name = common_utils::Utils::toLower(GetMeshName(mesh));
+        if (component_mesh_name.compare(mesh_name) == 0) {
             return mesh->CustomDepthStencilValue;
         }
+        return -1;
+    };
+
+    for (TObjectIterator<UStaticMeshComponent> comp; comp; ++comp)
+    {
+        int id = getCustomStencilForMesh(*comp);
+        if(id != -1)
+            return id;
+    }
+    for (TObjectIterator<USkinnedMeshComponent> comp; comp; ++comp)
+    {
+        int id = getCustomStencilForMesh(*comp);
+        if (id != -1)
+            return id;
+    }
+    for (TObjectIterator<ALandscapeProxy> comp; comp; ++comp)
+    {
+        int id = getCustomStencilForMesh(*comp);
+        if (id != -1)
+            return id;
     }
 
     return -1;
@@ -471,6 +582,54 @@ std::vector<msr::airlib::MeshPositionVertexBuffersResponse> UAirBlueprintLib::Ge
     }
 
     return meshes;
+}
+
+
+TArray<FName> UAirBlueprintLib::ListWorldsInRegistry()
+{
+    FARFilter Filter;
+    Filter.ClassNames.Add(UWorld::StaticClass()->GetFName());
+    Filter.bRecursivePaths = true;
+    
+    TArray<FAssetData> AssetData;
+    FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+    AssetRegistryModule.Get().GetAssets(Filter, AssetData);
+    
+    TArray<FName> WorldNames;
+    for (auto asset : AssetData)
+        WorldNames.Add(asset.AssetName);
+    return WorldNames;
+}
+
+UObject* UAirBlueprintLib::GetMeshFromRegistry(const std::string& load_object)
+{
+    FARFilter Filter;
+    Filter.ClassNames.Add(UStaticMesh::StaticClass()->GetFName());
+    Filter.bRecursivePaths = true;
+
+    TArray<FAssetData> AssetData;
+    FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+    AssetRegistryModule.Get().GetAssets(Filter, AssetData);
+
+    UObject* LoadObject = NULL;
+    for (auto asset : AssetData)
+    {
+        UE_LOG(LogTemp, Log, TEXT("Asset path: %s"), *asset.PackagePath.ToString());
+        if (asset.AssetName == FName(load_object.c_str()))
+        {
+            LoadObject = asset.GetAsset();
+            break;
+        }
+    }
+    return LoadObject;
+}
+
+bool UAirBlueprintLib::RunConsoleCommand(const AActor* context, const FString& command)
+{
+    auto* playerController = UGameplayStatics::GetPlayerController(context->GetWorld(), 0);;
+    if (playerController != nullptr)
+        playerController->ConsoleCommand(command, true);
+    return playerController != nullptr;
 }
 
 bool UAirBlueprintLib::HasObstacle(const AActor* actor, const FVector& start, const FVector& end, const AActor* ignore_actor, ECollisionChannel collision_channel)
