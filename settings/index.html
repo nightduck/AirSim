@@ -115,6 +115,8 @@
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#wind-settings">Wind Settings</a>
     </li>
+    <li class="toctree-l2"><a class="reference internal" href="#camera-director-settings">Camera Director Settings</a>
+    </li>
     <li class="toctree-l2"><a class="reference internal" href="#camera-settings">Camera Settings</a>
         <ul>
     <li class="toctree-l3"><a class="reference internal" href="#note-on-imagetype-element">Note on ImageType element</a>
@@ -161,6 +163,8 @@
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#localhostip-setting">LocalHostIp Setting</a>
     </li>
+    <li class="toctree-l3"><a class="reference internal" href="#apiserverport">ApiServerPort</a>
+    </li>
     <li class="toctree-l3"><a class="reference internal" href="#speedunitfactor">SpeedUnitFactor</a>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#speedunitlabel">SpeedUnitLabel</a>
@@ -181,11 +185,17 @@
                     </li>
                     <li class="toctree-l1"><a class="reference internal" href="../multi_vehicle/">Multiple Vehicles</a>
                     </li>
-                    <li class="toctree-l1"><a class="reference internal" href="../sensors/">Sensors</a>
-                    </li>
-                    <li class="toctree-l1"><a class="reference internal" href="../lidar/">LIDAR</a>
-                    </li>
-                    <li class="toctree-l1"><a class="reference internal" href="../InfraredCamera/">Infrared Camera</a>
+                    <li class="toctree-l1"><a class="reference internal" href="#">Sensors</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../sensors/">Sensors</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../lidar/">LIDAR</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../distance_sensor/">Distance Sensor</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../InfraredCamera/">Infrared Camera</a>
+                </li>
+    </ul>
                     </li>
                     <li class="toctree-l1"><a class="reference internal" href="../airsim_ros_pkgs/">ROS: AirSim ROS Wrapper</a>
                     </li>
@@ -196,6 +206,10 @@
                     <li class="toctree-l1"><a class="reference internal" href="../meshes/">Mesh Vertex Buffers</a>
                     </li>
                     <li class="toctree-l1"><a class="reference internal" href="../playback/">Playing Logs</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../voxel_grid/">Voxel Grid Generator</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../event_sim/">Event camera</a>
                     </li>
                 </ul>
                 <p class="caption"><span class="caption-text">Design</span></p>
@@ -220,6 +234,12 @@
                 <li class="toctree-l2"><a class="reference internal" href="../px4_setup/">PX4 Setup for AirSim</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../px4_sitl/">PX4 in SITL</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../px4_sitl_wsl2/">PX4 SITL with WSL 2</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../px4_lockstep/">PX4 Lockstep</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../px4_multi_vehicle/">PX4 Multi-vehicle in SITL</a>
                 </li>
                 <li class="toctree-l2"><a class="" href="https://youtu.be/1oY8Qu5maQQ">AirSim with Pixhawk</a>
                 </li>
@@ -280,6 +300,8 @@
                     <li class="toctree-l1"><a class="reference internal" href="../drone_survey/">Surveying Using Drone</a>
                     </li>
                     <li class="toctree-l1"><a class="reference internal" href="../orbit/">Orbit Trajectory</a>
+                    </li>
+                    <li class="toctree-l1"><a class="" href="https://youtu.be/Bp86WiLUC80">Importing a custom multirotor mesh</a>
                     </li>
                 </ul>
                 <p class="caption"><span class="caption-text">Misc</span></p>
@@ -382,6 +404,7 @@ In Linux <code>./Blocks.sh --settings '{"foo" : "bar"}'</code></li>
   "ClockType": "",
   "ClockSpeed": 1,
   "LocalHostIp": "127.0.0.1",
+  "ApiServerPort": 41451,
   "RecordUIVisible": true,
   "LogMessagesVisible": true,
   "ViewMode": "",
@@ -391,11 +414,18 @@ In Linux <code>./Blocks.sh --settings '{"foo" : "bar"}'</code></li>
   "SpeedUnitFactor": 1.0,
   "SpeedUnitLabel": "m/s",
   "Wind": { "X": 0, "Y": 0, "Z": 0 },
+  "CameraDirector": {
+    "FollowDistance": -3,
+    "X": NaN, "Y": NaN, "Z": NaN,
+    "Pitch": NaN, "Roll": NaN, "Yaw": NaN
+  },
   "Recording": {
     "RecordOnMove": false,
     "RecordInterval": 0.05,
+    "Folder": "",
+    "Enabled": false,
     "Cameras": [
-        { "CameraName": "0", "ImageType": 0, "PixelsAsFloat": false, "Compress": true }
+        { "CameraName": "0", "ImageType": 0, "PixelsAsFloat": false,  "VehicleName": "", "Compress": true }
     ]
   },
   "CameraDefaults": {
@@ -441,7 +471,7 @@ In Linux <code>./Blocks.sh --settings '{"foo" : "bar"}'</code></li>
     "Gimbal": {
       "Stabilization": 0,
       "Pitch": NaN, "Roll": NaN, "Yaw": NaN
-    }
+    },
     "X": NaN, "Y": NaN, "Z": NaN,
     "Pitch": NaN, "Roll": NaN, "Yaw": NaN
   },
@@ -482,6 +512,7 @@ In Linux <code>./Blocks.sh --settings '{"foo" : "bar"}'</code></li>
       "EnableCollisionPassthrogh": false,
       "EnableCollisions": true,
       "AllowAPIAlways": true,
+      "EnableTrace": false,
       "RC": {
         "RemoteControlID": 0,
         "AllowAPIWhenDisconnected": false
@@ -551,12 +582,25 @@ In Linux <code>./Blocks.sh --settings '{"foo" : "bar"}'</code></li>
         {"WindowID": 2, "CameraName": "0", "ImageType": 0, "VehicleName": "Car1", "Visible": false}
     ]</code></pre>
 <h2 id="recording">Recording<a class="headerlink" href="#recording" title="Permanent link">#</a></h2>
-<p>The recording feature allows you to record data such as position, orientation, velocity along with the captured image at specified intervals. You can start recording by pressing red Record button on lower right or the R key. The data is stored in the <code>Documents\AirSim</code> folder, in a time stamped subfolder for each recording session, as tab separated file.</p>
+<p>The recording feature allows you to record data such as position, orientation, velocity along with the captured image at specified intervals. You can start recording by pressing red Record button on lower right or the R key. The data is stored in the <code>Documents\AirSim</code> folder (or the folder specified using <code>Folder</code>), in a time stamped subfolder for each recording session, as tab separated file.</p>
 <ul>
 <li><code>RecordInterval</code>: specifies minimal interval in seconds between capturing two images.</li>
 <li><code>RecordOnMove</code>: specifies that do not record frame if there was vehicle's position or orientation hasn't changed.</li>
-<li><code>Cameras</code>: this element controls which cameras are used to capture images. By default scene image from camera 0 is recorded as compressed png format. This setting is json array so you can specify multiple cameras to capture images, each with potentially different <a href="./#image-capture-settings">image types</a>. When PixelsAsFloat is true, image is saved as <a href="../pfm/">pfm</a> file instead of png file.</li>
+<li><code>Folder</code>: Parent folder where timestamped subfolder with recordings are created. Absolute path of the directory must be specified. If not used, then <code>Documents/AirSim</code> folder will be used. E.g. <code>"Folder": "/home/&lt;user&gt;/Documents"</code></li>
+<li><code>Enabled</code>: Whether Recording should start from the beginning itself, setting to <code>true</code> will start recording automatically when the simulation starts. By default, it's set to <code>false</code></li>
+<li><code>Cameras</code>: this element controls which cameras are used to capture images. By default scene image from camera 0 is recorded as compressed png format. This setting is json array so you can specify multiple cameras to capture images, each with potentially different <a href="./#image-capture-settings">image types</a>. <ul>
+<li>When <code>PixelsAsFloat</code> is true, image is saved as <a href="../pfm/">pfm</a> file instead of png file.</li>
+<li><code>VehicleName</code> option allows you to specify separate cameras for individual vehicles. If the <code>Cameras</code> element isn't present, <code>Scene</code> image from the default camera of each vehicle will be recorded.</li>
+<li>If you don't want to record any images and just the vehicle's physics data, then specify the <code>Cameras</code> element but leave it empty, like this: <code>"Cameras": []</code></li>
 </ul>
+</li>
+</ul>
+<p>For example, the <code>Cameras</code> element below records scene &amp; segmentation images for <code>Car1</code> &amp; scene for <code>Car2</code>-</p>
+<pre class="highlight"><code class="language-json">"Cameras": [
+    { "CameraName": "0", "ImageType": 0, "PixelsAsFloat": false, "VehicleName": "Car1", "Compress": true },
+    { "CameraName": "0", "ImageType": 5, "PixelsAsFloat": false, "VehicleName": "Car1", "Compress": true },
+    { "CameraName": "0", "ImageType": 0, "PixelsAsFloat": false, "VehicleName": "Car2", "Compress": true }
+]</code></pre>
 <h2 id="clockspeed">ClockSpeed<a class="headerlink" href="#clockspeed" title="Permanent link">#</a></h2>
 <p>This setting allows you to set the speed of simulation clock with respect to wall clock. For example, value of 5.0 would mean simulation clock has 5 seconds elapsed when wall clock has 1 second elapsed (i.e. simulation is running faster). The value of 0.1 means that simulation clock is 10X slower than wall clock. The value of 1 means simulation is running in real time. It is important to realize that quality of simulation may decrease as the simulation clock runs faster. You might see artifacts like object moving past obstacles because collision is not detected. However slowing down simulation clock (i.e. values &lt; 1.0) generally improves the quality of simulation.</p>
 <h2 id="segmentation-settings">Segmentation Settings<a class="headerlink" href="#segmentation-settings" title="Permanent link">#</a></h2>
@@ -565,6 +609,12 @@ In Linux <code>./Blocks.sh --settings '{"foo" : "bar"}'</code></li>
 <p>If <code>MeshNamingMethod</code> is "" or "OwnerName" then we use mesh's owner name to generate random hash as object IDs. If it is "StaticMeshName" then we use static mesh's name to generate random hash as object IDs. Note that it is not possible to tell individual instances of the same static mesh apart this way, but the names are often more intuitive.</p>
 <h2 id="wind-settings">Wind Settings<a class="headerlink" href="#wind-settings" title="Permanent link">#</a></h2>
 <p>This setting specifies the wind speed in World frame, in NED direction. Values are in m/s. By default, speed is 0, i.e. no wind.</p>
+<h2 id="camera-director-settings">Camera Director Settings<a class="headerlink" href="#camera-director-settings" title="Permanent link">#</a></h2>
+<p>This element specifies the settings used for the camera following the vehicle in the ViewPort.</p>
+<ul>
+<li><code>FollowDistance</code>: Distance at which camera follows the vehicle, default is -8 (8 meters) for Car, -3 for others.</li>
+<li><code>X, Y, Z, Yaw, Roll, Pitch</code>: These elements allows you to specify the position and orientation of the camera relative to the vehicle. Position is in NED coordinates in SI units with origin set to Player Start location in Unreal environment. The orientation is specified in degrees.</li>
+</ul>
 <h2 id="camera-settings">Camera Settings<a class="headerlink" href="#camera-settings" title="Permanent link">#</a></h2>
 <p>The <code>CameraDefaults</code> element at root level specifies defaults used for all cameras. These defaults can be overridden for individual camera in <code>Cameras</code> element inside <code>Vehicles</code> as described later.</p>
 <h3 id="note-on-imagetype-element">Note on ImageType element<a class="headerlink" href="#note-on-imagetype-element" title="Permanent link">#</a></h3>
@@ -641,9 +691,10 @@ In Linux <code>./Blocks.sh --settings '{"foo" : "bar"}'</code></li>
 <pre class="highlight"><code>"Vehicles": {
     "PX4": {
       "VehicleType": "PX4Multirotor",
-
+      "Lockstep": true,
       "ControlIp": "127.0.0.1",
-      "ControlPort": 14580,
+      "ControlPortLocal": 14540,
+      "ControlPortRemote": 14580,
       "LogViewerHostIp": "127.0.0.1",
       "LogViewerPort": 14388,
       "OffboardCompID": 1,
@@ -662,20 +713,43 @@ In Linux <code>./Blocks.sh --settings '{"foo" : "bar"}'</code></li>
       "VehicleCompID": 1,
       "VehicleSysID": 135,
       "Model": "Generic",
-      "LocalHostIp": "127.0.0.1"
+      "LocalHostIp": "127.0.0.1",
+      "Logs": "d:\\temp\\mavlink",
+      "Sensors": {
+        ...
+      }
+      "Parameters": {
+        ...
+      }
     }
 }</code></pre>
-<p>These settings define the MavLink SystemId and ComponentId for the Simulator (SimSysID, SimCompID), and for the vehicle (VehicleSysID, VehicleCompID)
-and the node that allows remote control of the drone from another app this is called the offboard node (OffboardSysID, OffboardCompID).</p>
-<p>If you want the simulator to also talk to your ground control app (like QGroundControl) you can also set the UDP address for that in case you want to run
-that on a different machine (QgcHostIp, QgcPort).  The default is local host so QGroundControl should "just work" if it is running on the same machine.</p>
-<p>You can connect the simulator to the LogViewer app, provided in this repo, by setting the UDP address for that (LogViewerHostIp, LogViewerPort).</p>
-<p>And for each flying drone added to the simulator there is a named block of additional settings.  In the above you see the default name "PX4".   You can change this name from the Unreal Editor when you add a new BP_FlyingPawn asset.  You will see these properties grouped under the category "MavLink". The MavLink node for this pawn can be remote over UDP or it can be connected to a local serial port.  If serial then set UseSerial to true, otherwise set UseSerial to false.  For serial connections you also need to set the appropriate SerialBaudRate.  The default of 115200 works with Pixhawk version 2 over USB.</p>
-<p>When communicating with the PX4 drone over serial port both the HIL_* messages and vehicle control messages share the same serial port.
-When communicating over UDP or TCP PX4 requires two separate channels.  If UseTcp is false, then UdpIp, UdpPort are used to send HIL_* messages,
-otherwise the TcpPort is used.  TCP support in PX4 was added in 1.9.2 with the <code>lockstep</code> feature because the guarantee of message delivery that
-TCP provides is required for the proper functioning of lockstep.  AirSim becomes a TCP server in that case, and waits for a connection
-from the PX4 app.  The second channel for controlling the vehicle is defined by (ControlIp, ControlPort) and is always a UDP channel.</p>
+<p>These settings define the MavLink SystemId and ComponentId for the Simulator (SimSysID, SimCompID),
+and for the vehicle (VehicleSysID, VehicleCompID) and the node that allows remote control of the
+drone from another app this is called the offboard node (OffboardSysID, OffboardCompID).</p>
+<p>If you want the simulator to also forward mavlink messages to your ground control app (like
+QGroundControl) you can also set the UDP address for that in case you want to run that on a
+different machine (QgcHostIp, QgcPort).  The default is local host so QGroundControl should "just
+work" if it is running on the same machine.</p>
+<p>You can connect the simulator to the LogViewer app, provided in this repo, by setting the UDP
+address for that (LogViewerHostIp, LogViewerPort).</p>
+<p>And for each flying drone added to the simulator there is a named block of additional settings.  In
+the above you see the default name "PX4".   You can change this name from the Unreal Editor when you
+add a new BP_FlyingPawn asset.  You will see these properties grouped under the category "MavLink".
+The MavLink node for this pawn can be remote over UDP or it can be connected to a local serial port.
+If serial then set UseSerial to true, otherwise set UseSerial to false.  For serial connections you
+also need to set the appropriate SerialBaudRate.  The default of 115200 works with Pixhawk version 2
+over USB.</p>
+<p>When communicating with the PX4 drone over serial port both the HIL_* messages and vehicle control
+messages share the same serial port. When communicating over UDP or TCP PX4 requires two separate
+channels.  If UseTcp is false, then UdpIp, UdpPort are used to send HIL_* messages, otherwise the
+TcpPort is used.  TCP support in PX4 was added in 1.9.2 with the <code>lockstep</code> feature because the
+guarantee of message delivery that TCP provides is required for the proper functioning of lockstep.
+AirSim becomes a TCP server in that case, and waits for a connection from the PX4 app.  The second
+channel for controlling the vehicle is defined by (ControlIp, ControlPort) and is always a UDP
+channel.</p>
+<p>The <code>Sensors</code> section can provide customized settings for simulated sensors, see
+<a href="../sensors/">Sensors</a>. The <code>Parameters</code> section can set PX4 parameters during initialization of the
+PX4 connection. See <a href="../px4_sitl/">Setting up PX4 Software-in-Loop</a> for an example.</p>
 <h3 id="using-ardupilot">Using ArduPilot<a class="headerlink" href="#using-ardupilot" title="Permanent link">#</a></h3>
 <p><a href="https://ardupilot.org/">ArduPilot</a> Copter &amp; Rover vehicles are supported in latest AirSim master &amp; releases <code>v1.3.0</code> and later. For settings and how to use, please see <a href="https://ardupilot.org/dev/docs/sitl-with-airsim.html">ArduPilot SITL with AirSim</a></p>
 <h2 id="other-settings">Other Settings<a class="headerlink" href="#other-settings" title="Permanent link">#</a></h2>
@@ -684,13 +758,16 @@ from the PX4 app.  The second channel for controlling the vehicle is defined by 
 <h3 id="pawnpaths">PawnPaths<a class="headerlink" href="#pawnpaths" title="Permanent link">#</a></h3>
 <p>This allows you to specify your own vehicle pawn blueprints, for example, you can replace the default car in AirSim with your own car. Your vehicle BP can reside in Content folder of your own Unreal project (i.e. outside of AirSim plugin folder). For example, if you have a car BP located in file <code>Content\MyCar\MySedanBP.uasset</code> in your project then you can set <code>"DefaultCar": {"PawnBP":"Class'/Game/MyCar/MySedanBP.MySedanBP_C'"}</code>. The <code>XYZ.XYZ_C</code> is a special notation required to specify class for BP <code>XYZ</code>. Please note that your BP must be derived from CarPawn class. By default this is not the case but you can re-parent the BP using the "Class Settings" button in toolbar in UE editor after you open the BP and then choosing "Car Pawn" for Parent Class settings in Class Options. It is also a good idea to disable "Auto Possess Player" and "Auto Possess AI" as well as set AI Controller Class to None in BP details. Please make sure your asset is included for cooking in packaging options if you are creating binary.</p>
 <h3 id="physicsenginename">PhysicsEngineName<a class="headerlink" href="#physicsenginename" title="Permanent link">#</a></h3>
-<p>For cars, we support only PhysX for now (regardless of value in this setting). For multirotors, we support <code>"FastPhysicsEngine"</code> only.</p>
+<p>For cars, we support only PhysX for now (regardless of value in this setting). For multirotors, we support <code>"FastPhysicsEngine"</code> and <code>"ExternalPhysicsEngine"</code>. <code>"ExternalPhysicsEngine"</code> allows the drone to be controlled via setVehiclePose (), keeping the drone in place until the next call. It is especially useful for moving the AirSim drone using an external simulator or on a saved path.</p>
 <h3 id="localhostip-setting">LocalHostIp Setting<a class="headerlink" href="#localhostip-setting" title="Permanent link">#</a></h3>
 <p>Now when connecting to remote machines you may need to pick a specific Ethernet adapter to reach those machines, for example, it might be
 over Ethernet or over Wi-Fi, or some other special virtual adapter or a VPN.  Your PC may have multiple networks, and those networks might not
 be allowed to talk to each other, in which case the UDP messages from one network will not get through to the others.</p>
 <p>So the LocalHostIp allows you to configure how you are reaching those machines.  The default of 127.0.0.1 is not able to reach external machines,
 this default is only used when everything you are talking to is contained on a single PC.</p>
+<h3 id="apiserverport">ApiServerPort<a class="headerlink" href="#apiserverport" title="Permanent link">#</a></h3>
+<p>This setting determines the server port that used by airsim clients, default port is 41451.
+By specifying different ports, the user can run multiple environments in parallel to accelerate data collection process.</p>
 <h3 id="speedunitfactor">SpeedUnitFactor<a class="headerlink" href="#speedunitfactor" title="Permanent link">#</a></h3>
 <p>Unit conversion factor for speed related to <code>m/s</code>, default is 1. Used in conjunction with SpeedUnitLabel. This may be only used for display purposes for example on-display speed when car is being driven. For example, to get speed in <code>miles/hr</code> use factor 2.23694.</p>
 <h3 id="speedunitlabel">SpeedUnitLabel<a class="headerlink" href="#speedunitlabel" title="Permanent link">#</a></h3>
@@ -715,7 +792,7 @@ this default is only used when everything you are talking to is contained on a s
   <div role="contentinfo">
     <!-- Copyright etc -->
     
-      <p>Copyright &copy; 2018 Microsoft Research</p>
+      <p>Copyright &copy; 2021 Microsoft Research</p>
     
   </div>
 
@@ -744,6 +821,8 @@ this default is only used when everything you are talking to is contained on a s
 </div>
     <script>var base_url = '..';</script>
     <script src="../js/theme.js" defer></script>
+      <script src="https://polyfill.io/v3/polyfill.min.js?features=es6" defer></script>
+      <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" defer></script>
       <script src="../search/main.js" defer></script>
     <script defer>
         window.onload = function () {
