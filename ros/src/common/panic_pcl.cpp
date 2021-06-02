@@ -228,8 +228,8 @@ int main(int argc, char** argv)
     ros::init(argc, argv, "panic_pcl");
     ros::NodeHandle nh;
     //signal(SIGINT, sigIntHandlerPrivate);
-    //std::string point_topics = "/airsim_node/drone_1/front_left_custom/DepthPlanner/registered/points";
-    std::string point_topics[2] = {"/airsim_node/drone_1/front_left_custom/DepthPlanner/registered/points", "/points_back"};
+    //std::string point_topics = "/airsim_node/drone_1/front_left_custom/DepthPlanar/registered/points";
+    std::string point_topics[2] = {"/airsim_node/drone_1/front_left_custom/DepthPlanar/registered/points", "/points_back"};
     ros::Publisher panic_pub = nh.advertise<std_msgs::Bool>("panic_topic", 1);
     ros::Publisher velocity_pub = nh.advertise<geometry_msgs::Vector3>("panic_velocity", 1);
 

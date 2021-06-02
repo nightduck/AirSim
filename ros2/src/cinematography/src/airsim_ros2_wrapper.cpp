@@ -67,7 +67,7 @@ private:
         std::unique_lock<std::recursive_mutex> lck(drone_control_mutex_);
         std::vector<ImageCaptureBase::ImageRequest> request = {
             ImageCaptureBase::ImageRequest(camera_name, ImageCaptureBase::ImageType::Scene, false, false),
-            ImageCaptureBase::ImageRequest(camera_name, ImageCaptureBase::ImageType::DepthPlanner, true, false)
+            ImageCaptureBase::ImageRequest(camera_name, ImageCaptureBase::ImageType::DepthPlanar, true, false)
         };
         std::vector<ImageCaptureBase::ImageResponse> response = airsim_client->simGetImages(request, vehicle_name);
         rclcpp::Time now = this->now();

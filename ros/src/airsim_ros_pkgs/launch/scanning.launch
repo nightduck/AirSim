@@ -15,7 +15,7 @@
 		<param name="sensor_model/max_range" value="20" />
 		
 		<!-- data source to integrate (PointCloud2) -->
-		<remap from="cloud_in" to="/airsim_node/drone_1/front_left_custom/DepthPlanner/registered/points" />
+		<remap from="cloud_in" to="/airsim_node/drone_1/front_left_custom/DepthPlanar/registered/points" />
 
 	</node>
 
