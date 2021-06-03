@@ -213,8 +213,8 @@ public:
 
         airsim_client = new msr::airlib::MultirotorRpcLibClient(airsim_hostname);
 
-        camera = this->create_publisher<sensor_msgs::msg::Image>("camera", 10);
         depth_camera = this->create_publisher<sensor_msgs::msg::Image>("camera/depth", 10);
+        camera = this->create_publisher<sensor_msgs::msg::Image>("camera", 10);
         lidar = this->create_publisher<sensor_msgs::msg::PointCloud2>("lidar", 10);
         timer_img = create_wall_timer(std::chrono::milliseconds(1000)/camera_fps,
                 std::bind(&AirsimROS2Wrapper::fetchImage, this));

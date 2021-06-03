@@ -110,6 +110,10 @@ private:
     }
 
     void fetchImage(const sensor_msgs::msg::Image::SharedPtr msg) {
+        if (last_depth_img.cols == 0 || last_depth_img.rows == 0) {
+            return;
+        }
+
         cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
         cv::Mat img = cv_ptr->image;
 
@@ -284,8 +288,8 @@ public:
         airsim_client = new msr::airlib::MultirotorRpcLibClient(airsim_hostname);
         gimbal_setpoint = tf2::Quaternion(0,0,0,1);
         bb_pub = this->create_publisher<cinematography_msgs::msg::BoundingBox>("bounding_box", 50);
-        camera_sub = this->create_subscription<sensor_msgs::msg::Image>("camera", 1, std::bind(&ActorDetection::fetchImage, this, _1));
         depth_sub = this->create_subscription<sensor_msgs::msg::Image>("camera/depth", 1, std::bind(&ActorDetection::getDepthImage, this, _1));
+        camera_sub = this->create_subscription<sensor_msgs::msg::Image>("camera", 1, std::bind(&ActorDetection::fetchImage, this, _1));
 
         //netRT = new tk::dnn::NetworkRT(NULL, "hde_deer_airsim.rt");
         detNN = new tk::dnn::Yolo3Detection();
