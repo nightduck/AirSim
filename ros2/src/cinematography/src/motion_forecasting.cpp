@@ -10,6 +10,9 @@
 #include "filter.h"
 #include "unistd.h"
 
+#define likely(x)      __builtin_expect(!!(x), 1)
+#define unlikely(x)    __builtin_expect(!!(x), 0)
+
 using namespace std::chrono_literals;
 using std::placeholders::_1;
 
@@ -79,6 +82,9 @@ private:
         
         rclcpp::Time now = rclcpp::Time(msg->header.stamp, RCL_SYSTEM_TIME);
         rclcpp::Duration duration = now - lastPoseTimestamp;
+        if(unlikely(lastPoseTimestamp.nanoseconds() == 0)) {  // If this is the first call, just use default
+            duration = rclcpp::Duration(0, 1e9/CAMERA_FPS);
+        }
         lastPoseTimestamp = now;
 
         double fws;                                                     // Calculate length of trajectory
