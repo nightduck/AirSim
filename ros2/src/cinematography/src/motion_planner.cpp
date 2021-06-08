@@ -1095,7 +1095,7 @@ int main(int argc, char ** argv)
     airsim_client = new msr::airlib::MultirotorRpcLibClient(airsim_hostname);
     
     auto parameters_client = std::make_shared<rclcpp::SyncParametersClient>(node, "airsim_ros2_wrapper");
-    while (!parameters_client->wait_for_service(1s) && rclcpp::ok()) {
+    while (!parameters_client->wait_for_service(1s)) {
         if (!rclcpp::ok()) {
             RCLCPP_ERROR(node->get_logger(), "Interrupted while waiting for the service. Exiting.");
             return 1;

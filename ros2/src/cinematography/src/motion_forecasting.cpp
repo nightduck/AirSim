@@ -156,6 +156,7 @@ public:
         CAMERA_FPS = parameters_client->get_parameter<int>("camera_fps");
 
         airsim_client = new msr::airlib::MultirotorRpcLibClient(airsim_hostname);
+        airsim_client->confirmConnection();
 
         lastPoseTimestamp = rclcpp::Time(0, 0, RCL_SYSTEM_TIME);
         predict_pub = this->create_publisher<cinematography_msgs::msg::MultiDOFarray>("pred_path", 1);

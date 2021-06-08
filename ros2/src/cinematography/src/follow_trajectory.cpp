@@ -142,6 +142,7 @@ int main(int argc, char **argv)
     std::string host_ip = parameters_client->get_parameter<std::string>("airsim_hostname");
 
     airsim_client = new msr::airlib::MultirotorRpcLibClient(host_ip);
+    airsim_client->confirmConnection();
     airsim_client->enableApiControl(true);
     airsim_client->takeoffAsync()->waitOnLastTask();
     // airsim_client->moveToPositionAsync(0,0,-30,3)->waitOnLastTask();

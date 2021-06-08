@@ -315,6 +315,7 @@ public:
         odom = updateOdometry(odom, temp, rclcpp::Duration(1000000000/fps)); // Populate odom initially, use estimated time diff for 3rd argument
         
         airsim_client = new msr::airlib::MultirotorRpcLibClient(airsim_hostname);
+        airsim_client->confirmConnection();
         gimbal_setpoint = tf2::Quaternion(0,0,0,1);
         bb_pub = this->create_publisher<cinematography_msgs::msg::BoundingBox>("bounding_box", 50);
         depth_sub = this->create_subscription<sensor_msgs::msg::Image>("camera/depth", 1, std::bind(&ActorDetection::getDepthImage, this, _1));

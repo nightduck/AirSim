@@ -20,6 +20,7 @@
 
 using namespace std::chrono_literals;
 using std::placeholders::_1;
+FILE *fd;
 
 class AirsimROS2Wrapper : public rclcpp::Node {
 private:
@@ -49,7 +50,6 @@ private:
 
     std::string world_frame_id_;
     bool is_vulkan_;
-    FILE *fd;
 
     std::string airsim_hostname;
 
@@ -201,7 +201,7 @@ private:
 
 public:
     AirsimROS2Wrapper() : Node("airsim_ros2_wrapper"), tf_broadcaster(this) {
-        declare_parameter<std::string>("airsim_hostname", "localhost");
+        declare_parameter<std::string>("airsim_hostname", "ubuntu-workstation");
         get_parameter("airsim_hostname", airsim_hostname);
         declare_parameter<std::string>("camera_name", "front_center_custom");
         get_parameter("camera_name", camera_name);
@@ -219,13 +219,8 @@ public:
         get_parameter("pose_update_rate", pose_update);
         get_parameter("is_vulkan", is_vulkan_);
 
-        fd = fopen("/sys/kernel/debug/tracing/trace_marker", "a");
-        if (fd == NULL) {
-            perror("Could not open trace marker");
-            return -1;
-        }
-
         airsim_client = new msr::airlib::MultirotorRpcLibClient(airsim_hostname);
+	airsim_client->confirmConnection();
 
         depth_camera = this->create_publisher<sensor_msgs::msg::Image>("camera/depth", 10);
         camera = this->create_publisher<sensor_msgs::msg::Image>("camera", 10);
@@ -263,6 +258,10 @@ public:
 };
 
 int main(int argc, char **argv) {
+    fd = fopen("/sys/kernel/debug/tracing/trace_marker", "a");
+    if (fd == NULL) {
+        perror("Could not open trace marker");
+    }
 
     rclcpp::init(argc, argv);
     rclcpp::executors::MultiThreadedExecutor exec;
