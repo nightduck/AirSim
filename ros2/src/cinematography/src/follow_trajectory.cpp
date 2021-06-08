@@ -24,6 +24,8 @@
 
 using namespace std;
 
+FILE *fd;
+
 // add by feiyang jin
 //bool fly_back = false;
 //std_msgs::Bool fly_back_msg;
@@ -75,6 +77,8 @@ rclcpp::Clock::SharedPtr clock_;
 
 void callback_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr msg)
 {
+    fprintf( fd, "follow_trajectory_callback_trajectory_entry" );
+    fflush( fd );
 	// RCLCPP_INFO(node->get_logger(), "call back trajectory");
     normal_traj.clear();
     rev_normal_traj.clear();
@@ -94,6 +98,8 @@ void callback_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr msg)
     traj_id = msg->traj_id;
 
     copy_normal_traj = true;
+    fprintf( fd, "follow_trajectory_callback_trajectory_exit" );
+    fflush( fd );
 }
 
 void print_rviz_vel(double x, double y, double z, double vx, double vy, double vz) {
@@ -114,6 +120,11 @@ void print_rviz_vel(double x, double y, double z, double vx, double vy, double v
 
 int main(int argc, char **argv)
 {
+    FILE *fd = fopen("/sys/kernel/debug/tracing/trace_marker", "a");
+    if (fd == NULL) {
+        perror("Could not open trace marker");
+        return -1;
+    }
     rclcpp::init(argc, argv);
 
     node = rclcpp::Node::make_shared("follow_trajectory");
@@ -157,6 +168,9 @@ int main(int argc, char **argv)
     trajectory_t * traj = nullptr;
     while (rclcpp::ok()) {
     	rclcpp::spin_some(node);
+
+        fprintf( fd, "follow_trajectory_controlLoop_entry" );
+        fflush( fd );
 
 
         // setup trajectory
@@ -280,6 +294,8 @@ int main(int argc, char **argv)
                 }
             }
         }
+        fprintf( fd, "follow_trajectory_controlLoop_exit" );
+        fflush( fd );
     }
 	return 0;
 }

@@ -39,6 +39,7 @@
 #define RAD_TO_DEG(r)   r*180/M_PI
 
 using namespace std;
+FILE *fd;
 
 rclcpp::Publisher<cinematography_msgs::msg::MultiDOFarray>::SharedPtr drone_traj_pub;
 rclcpp::Publisher<cinematography_msgs::msg::MultiDOFarray>::SharedPtr ideal_traj_pub;
@@ -978,6 +979,9 @@ void optimize_trajectory(cinematography_msgs::msg::MultiDOFarray& drone_traj, co
 // Get actor's predicted trajectory (in NED and radians)
 void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr actor_traj)
 {
+    fprintf( fd, "motion_planner_get_actor_trajectory_entry" );
+    fflush( fd );
+
     if(first_time){
         global_start = std::chrono::high_resolution_clock::now();
         first_time = false;
@@ -1023,6 +1027,8 @@ void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr act
     // RCLCPP_INFO(node->get_logger(), "Publishing drone trajectory\n");
 
     drone_traj_pub->publish(drone_path);
+    fprintf( fd, "follow_trajectory_callback_trajectory_release" );
+    fflush( fd );
 
     auto stop = std::chrono::high_resolution_clock::now(); 
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start); 
@@ -1037,9 +1043,13 @@ void get_actor_trajectory(cinematography_msgs::msg::MultiDOFarray::SharedPtr act
     // printf("---------------------------------------------\n");
 
     // RCLCPP_INFO(node->get_logger(), "average time: %ld\n", duration1.count() / global_iterations);
+    fprintf( fd, "motion_planner_get_actor_trajectory_exit" );
+    fflush( fd );
 }
 
 void tsdf_callback(tsdf_package_msgs::msg::Tsdf::SharedPtr tsdf){
+    fprintf( fd, "motion_planner_tsdf_callback_entry" );
+    fflush( fd );
     auto start = std::chrono::high_resolution_clock::now();
     for(int i=0;i<NUM_BUCKETS;++i){
         voxels_set[i].clear();
@@ -1062,10 +1072,17 @@ void tsdf_callback(tsdf_package_msgs::msg::Tsdf::SharedPtr tsdf){
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start); 
     // std::cout << "tsdf callback duration: ";
     // std::cout << duration.count() << std::endl;
+    fprintf( fd, "motion_planner_tsdf_callback_exit");
+    fflush( fd );
 }
 
 int main(int argc, char ** argv)
 {
+    FILE *fd = fopen("/sys/kernel/debug/tracing/trace_marker", "a");
+    if (fd == NULL) {
+        perror("Could not open trace marker");
+        return -1;
+    }
     sleep(3);
     rclcpp::init(argc, argv);
     node = rclcpp::Node::make_shared("motion_planner");

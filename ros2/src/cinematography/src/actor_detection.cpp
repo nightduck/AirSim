@@ -33,6 +33,8 @@ using std::placeholders::_1;
 #define PROB_THRESHHOLD 0.8
 #define GIMBAL_DAMPING_FACTOR   0.8       // Don't immediately face actor, but ease camera in their direction. That way, false positive don't swivel the camera so real actor's out of frame
 
+FILE *fd;
+
 struct odometry {
     geometry_msgs::msg::Pose pose;
     geometry_msgs::msg::Twist vel;
@@ -105,14 +107,23 @@ private:
     }
 
     void getDepthImage(const sensor_msgs::msg::Image::SharedPtr msg) {
+        fprintf( fd, "actor_detection_getDepthImage_entry" );
+        fflush( fd );
+
         cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::TYPE_32FC1);
         last_depth_img = cv_ptr->image;
+
+        fprintf( fd, "actor_detection_getDepthImage_exit" );
+        fflush( fd );
     }
 
     void fetchImage(const sensor_msgs::msg::Image::SharedPtr msg) {
         if (last_depth_img.cols == 0 || last_depth_img.rows == 0) {
             return;
         }
+
+        fprintf( fd, "actor_detection_fetchImage_entry" );
+        fflush( fd );
 
         cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
         cv::Mat img = cv_ptr->image;
@@ -178,7 +189,14 @@ private:
             bb.height = 0;
             cv_msg.image = cv::Mat();
             bb.image = *cv_msg.toImageMsg();
+            
             bb_pub->publish(bb);
+            fprintf( fd, "heading_estimation_processImage_release" );
+            fflush( fd );
+
+            fprintf( fd, "actor_detection_getDepthImage_exit no_actor" );
+            fflush( fd );
+
             return;
         }
 
@@ -200,7 +218,13 @@ private:
             bb.depth = 0;
             cv_msg.image = cv::Mat();
             bb.image = *cv_msg.toImageMsg();
+
             bb_pub->publish(bb);
+            fprintf( fd, "heading_estimation_processImage_release" );
+            fflush( fd );
+
+            fprintf( fd, "actor_detection_getDepthImage_exit far_actor" );
+            fflush( fd );
             return;
         }
 
@@ -234,10 +258,15 @@ private:
             bb.image = *cv_msg.toImageMsg();
 
             bb_pub->publish(bb);
+            fprintf( fd, "heading_estimation_processImage_release" );
+            fflush( fd );
         } catch (cv::Exception& err) {
             const char* err_msg = err.what();
             std::cout << "exception caught: " << err_msg << std::endl;
         }
+
+        fprintf( fd, "actor_detection_getDepthImage_exit" );
+        fflush( fd );
 
         return;
     }
@@ -310,6 +339,12 @@ public:
 };
 
 int main(int argc, char **argv) {
+    FILE *fd = fopen("/sys/kernel/debug/tracing/trace_marker", "a");
+    if (fd == NULL) {
+        perror("Could not open trace marker");
+        return -1;
+    }
+
     rclcpp::init(argc, argv);
     rclcpp::executors::MultiThreadedExecutor exec;
     auto actor_detection = std::make_shared<ActorDetection>();

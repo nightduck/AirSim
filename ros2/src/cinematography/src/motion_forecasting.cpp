@@ -13,6 +13,7 @@
 using namespace std::chrono_literals;
 using std::placeholders::_1;
 
+FILE *fd;
 class MotionForecasting : public rclcpp::Node {
 private:
     std::string ACTOR_NAME;
@@ -64,11 +65,15 @@ private:
     }
 
     void getVisionMeasurements(const cinematography_msgs::msg::VisionMeasurements::SharedPtr msg) {
+        fprintf( fd, "motion_forecasting_getVisionMeasurements_entry" );
+        fflush( fd );
         // TODO: Implement an actual EKF
 
         msr::airlib::Pose pose = airsim_client->simGetObjectPose(ACTOR_NAME);
         if (pose.position.x() == NAN) {
             RCLCPP_ERROR(this->get_logger(), "Actor name not found!!");
+            fprintf( fd, "motion_forecasting_getVisionMeasurements_exit no_actor" );
+            fflush( fd );
             return;
         }
         
@@ -125,6 +130,10 @@ private:
         lastPose = pose;
 
         predict_pub->publish(pred_traj);
+        fprintf( fd, "motion_planner_get_actor_trajectory_release" );
+        fflush( fd );
+        fprintf( fd, "motion_forecasting_getVisionMeasurements_exit" );
+        fflush( fd );
     }
 
 public:
@@ -155,6 +164,11 @@ public:
 };
 
 int main(int argc, char **argv) {
+    FILE *fd = fopen("/sys/kernel/debug/tracing/trace_marker", "a");
+    if (fd == NULL) {
+        perror("Could not open trace marker");
+        return -1;
+    }
     rclcpp::init(argc, argv);
     rclcpp::spin(std::make_shared<MotionForecasting>());
     rclcpp::shutdown();

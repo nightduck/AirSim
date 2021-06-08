@@ -38,6 +38,7 @@
 
 using std::placeholders::_1;
 
+FILE *fd;
 class HeadingEstimation : public rclcpp::Node {
 private:
     rclcpp::Publisher<cinematography_msgs::msg::VisionMeasurements>::SharedPtr hde_pub;
@@ -148,6 +149,9 @@ private:
     }
 
     void processImage(const cinematography_msgs::msg::BoundingBox::SharedPtr msg) {
+        fprintf( fd, "heading_estimation_processImage_entry" );
+        fflush( fd );
+
         int res;
         get_parameter("resolution", res);
 
@@ -167,6 +171,10 @@ private:
             vm.drone_acc = msg->drone_acc;
             vm.hde = 0;
             hde_pub->publish(vm);
+            fprintf( fd, "motion_forecasting_getVisionMeasurements_release" );
+            fflush( fd );
+            fprintf( fd, "heading_estimation_processImage_exit" );
+            fflush( fd );
             return;
         }
 
@@ -213,6 +221,11 @@ private:
     
         vm.hde = angle;
         hde_pub->publish(vm);
+        fprintf( fd, "motion_forecasting_getVisionMeasurements_release" );
+        fflush( fd );
+
+        fprintf( fd, "heading_estimation_processImage_exit" );
+        fflush( fd );
         return;       
     }
 
@@ -261,6 +274,11 @@ public:
 
 
 int main(int argc, char **argv) {
+    FILE *fd = fopen("/sys/kernel/debug/tracing/trace_marker", "a");
+    if (fd == NULL) {
+        perror("Could not open trace marker");
+        return -1;
+    }
     rclcpp::init(argc, argv);
     rclcpp::spin(std::make_shared<HeadingEstimation>());
     rclcpp::shutdown();

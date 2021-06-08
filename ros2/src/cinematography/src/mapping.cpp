@@ -4,6 +4,9 @@
 #include "transformer.hpp"
 #include "publisher.hpp"
 
+
+FILE *fd;
+
 typedef Eigen::Matrix<float, 3, 1> Vector3f;
 
 rclcpp::Clock::SharedPtr clock_;
@@ -25,6 +28,8 @@ Voxel publish_voxels_data[PUBLISH_VOXELS_MAX_SIZE];
 //callback for point cloud subscriber
 void callback(sensor_msgs::msg::PointCloud2::SharedPtr point_cloud_2)
 {
+    fprintf( fd, "mapping_callback_entry" );
+    fflush( fd );
     auto start = std::chrono::high_resolution_clock::now();
 
     //convert lidar position coordinates to same frame as point cloud
@@ -49,6 +54,8 @@ void callback(sensor_msgs::msg::PointCloud2::SharedPtr point_cloud_2)
 
     //publish voxels. The number of voxels to publish is passed in publish_voxels_size
     publisher->publish(publish_voxels_size);
+    fprintf( fd, "motion_planner_tsdf_callback_release" );
+    fflush( fd );
 
     //the time to integrate this lidar scan into the TSDF
     auto stop = std::chrono::high_resolution_clock::now(); 
@@ -62,10 +69,17 @@ void callback(sensor_msgs::msg::PointCloud2::SharedPtr point_cloud_2)
     count++;
     std::cout << average/count << std::endl; 
     std::cout << "---------------------------------------------------------------" << std::endl;
+    fprintf( fd, "mapping_callback_exit" );
+    fflush( fd );
 }
 
 int main(int argc, char ** argv)
 {
+    FILE *fd = fopen("/sys/kernel/debug/tracing/trace_marker", "a");
+    if (fd == NULL) {
+        perror("Could not open trace marker");
+        return -1;
+    }
 
   rclcpp::init(argc, argv);
 

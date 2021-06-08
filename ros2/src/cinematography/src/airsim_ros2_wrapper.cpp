@@ -1,4 +1,5 @@
 #include "rclcpp/rclcpp.hpp"
+#include <stdio.h>
 #include <boost/make_shared.hpp>
 #include "builtin_interfaces/msg/time.hpp"
 #include "sensor_msgs/msg/image.hpp"
@@ -20,6 +21,7 @@
 using namespace std::chrono_literals;
 using std::placeholders::_1;
 
+FILE *fd;
 class AirsimROS2Wrapper : public rclcpp::Node {
 private:
     msr::airlib::MultirotorRpcLibClient* airsim_client;
@@ -84,6 +86,8 @@ private:
         img_msg_ptr->header.frame_id = response[0].camera_name + "_depth";
 
         depth_camera->publish(img_msg_ptr);
+        fprintf( fd, "actor_detection_getDepthImage_release" );
+        fflush( fd );
 
 
         img_msg_ptr->data = response[0].image_data_uint8;
@@ -98,6 +102,8 @@ private:
         img_msg_ptr->is_bigendian = 0;
 
         camera->publish(img_msg_ptr);
+        fprintf( fd, "actor_detection_fetchImage_release" );
+        fflush( fd );
     }
 
     void fetchLidarCloud() {
@@ -140,6 +146,8 @@ private:
         }
 
         lidar->publish(lidar_msg);
+        fprintf( fd, "mapping_callback_release" );
+        fflush( fd );
     }
 
     void fetchPosition() {
@@ -249,6 +257,12 @@ public:
 };
 
 int main(int argc, char **argv) {
+    FILE *fd = fopen("/sys/kernel/debug/tracing/trace_marker", "a");
+    if (fd == NULL) {
+        perror("Could not open trace marker");
+        return -1;
+    }
+
     rclcpp::init(argc, argv);
     rclcpp::executors::MultiThreadedExecutor exec;
     auto ros2wrapper = std::make_shared<AirsimROS2Wrapper>();
