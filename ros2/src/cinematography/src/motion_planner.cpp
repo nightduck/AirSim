@@ -455,8 +455,10 @@ double get_segment_cost(const cinematography_msgs::msg::MultiDOF point_start, co
         else if (l == span_y) yi += w * (dy > 0 ? 1 : -1);
         else if (l == span_z) zi += w * (dz > 0 ? 1 : -1);
         else {
-            std::cout << "ERROR in get_segment_cost in calculating l. x=" << x << "y=" << y << "z=" << z
-                    << "dx=" << dx << "dy=" << dy << "dz=" << dz << "w=" << w << "l=" << l;
+            std::cout << "ERROR in get_segment_cost in calculating l. x=" << x << " y=" << y 
+                    << " z=" << z << " dx=" << dx << " dy=" << dy << " dz=" << dz
+                    << " span_x=" << span_x << " span_y=" << span_y << " span_z=" << span_z
+                    << " w=" << w << " l=" << l << std::endl;
         }
     }
 
@@ -521,8 +523,10 @@ Eigen::Matrix<double, 3, 1> get_segment_cost_gradient(const cinematography_msgs:
         else if (l == span_y) yi += w * (dy > 0 ? 1 : -1);
         else if (l == span_z) zi += w * (dz > 0 ? 1 : -1);
         else {
-            std::cout << "ERROR in get_segment_cost in calculating l. x=" << x << "y=" << y << "z=" << z
-                    << "dx=" << dx << "dy=" << dy << "dz=" << dz << "w=" << w << "l=" << l;
+            std::cout << "ERROR in get_segment_cost_gradient in calculating l. x=" << x << " y=" << y 
+                    << " z=" << z << " dx=" << dx << " dy=" << dy << " dz=" << dz
+                    << " span_x=" << span_x << " span_y=" << span_y << " span_z=" << span_z
+                    << " w=" << w << " l=" << l << std::endl;
         }
     }
 
