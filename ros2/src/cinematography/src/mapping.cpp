@@ -75,7 +75,7 @@ void callback(sensor_msgs::msg::PointCloud2::SharedPtr point_cloud_2)
 
 int main(int argc, char ** argv)
 {
-    FILE *fd = fopen("/sys/kernel/debug/tracing/trace_marker", "a");
+    fd = fopen("/sys/kernel/debug/tracing/trace_marker", "a");
     if (fd == NULL) {
         perror("Could not open trace marker");
         return -1;

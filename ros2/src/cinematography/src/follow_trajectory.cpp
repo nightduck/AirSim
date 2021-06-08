@@ -120,7 +120,7 @@ void print_rviz_vel(double x, double y, double z, double vx, double vy, double v
 
 int main(int argc, char **argv)
 {
-    FILE *fd = fopen("/sys/kernel/debug/tracing/trace_marker", "a");
+    fd = fopen("/sys/kernel/debug/tracing/trace_marker", "a");
     if (fd == NULL) {
         perror("Could not open trace marker");
         return -1;
