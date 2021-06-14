@@ -194,7 +194,7 @@ private:
             fprintf( fd, "heading_estimation_processImage_release" );
             fflush( fd );
 
-            fprintf( fd, "actor_detection_getDepthImage_exit no_actor" );
+            fprintf( fd, "actor_detection_fetchImage_exit no_actor" );
             fflush( fd );
 
             return;
@@ -223,7 +223,7 @@ private:
             fprintf( fd, "heading_estimation_processImage_release" );
             fflush( fd );
 
-            fprintf( fd, "actor_detection_getDepthImage_exit far_actor" );
+            fprintf( fd, "actor_detection_fetchImage_exit far_actor" );
             fflush( fd );
             return;
         }
@@ -265,7 +265,7 @@ private:
             std::cout << "exception caught: " << err_msg << std::endl;
         }
 
-        fprintf( fd, "actor_detection_getDepthImage_exit" );
+        fprintf( fd, "actor_detection_fetchImage_exit" );
         fflush( fd );
 
         return;

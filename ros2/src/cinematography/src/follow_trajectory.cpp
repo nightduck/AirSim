@@ -170,9 +170,6 @@ int main(int argc, char **argv)
     while (rclcpp::ok()) {
     	rclcpp::spin_some(node);
 
-        fprintf( fd, "follow_trajectory_controlLoop_entry" );
-        fflush( fd );
-
 
         // setup trajectory
         if (unlikely(copy_panic_traj)) {
@@ -223,7 +220,9 @@ int main(int argc, char **argv)
                 double v_z = p.vz;
                 float yaw = p.yaw*180/M_PI;
 
+		        //std::cout << "getting position" << std::endl;
                 Vector3r pos = airsim_client->getMultirotorState().getPosition();
+		        //std::cout << "got position" << std::endl;
                 double posx = pos.x();
                 double posy = pos.y();
                 double posz = pos.z();
@@ -246,10 +245,18 @@ int main(int argc, char **argv)
                 // Calculate the time for which this point's flight commands should run
                 auto scaled_flight_time = std::chrono::duration<double>(p.duration / scale);
 
+               fprintf( fd, "follow_trajectory_controlLoop_exit" );
+               fflush( fd );
+
                 // Wait until the the last point finishes processing, then tackle this point
-                std::this_thread::sleep_until(sleep_time);
+                // std::cout << "It is now " << std::chrono::system_clock::now().time_since_epoch().count() << ", sleeping until " << sleep_time.time_since_epoch().count() << std::endl;
+                std::this_thread::sleep_until(sleep_time);      // NOTE: Getting stuck here indefinitely?
+		        // std::cout << "Ok, I'm up" << std::endl;
+                fprintf( fd, "follow_trajectory_controlLoop_entry" );
+                fflush( fd );
                                 
                 auto q = airsim_client->getMultirotorState().getOrientation();
+		        // std::cout << "Got orientation" << std::endl;
                 float pitch, roll, current_yaw;
                 msr::airlib::VectorMath::toEulerianAngle(q, pitch, roll, current_yaw);
                 current_yaw = current_yaw*180 / M_PI;
@@ -277,13 +284,15 @@ int main(int argc, char **argv)
                 auto drivetrain = msr::airlib::DrivetrainType::MaxDegreeOfFreedom;
                 auto yawmode = msr::airlib::YawMode(true, yaw_rate);
 
+		        //std::cout << "Flying at (" << v_x << ", " << v_y << ", " << v_z << ") for " << p.duration << " seconds" << std::endl;
                 airsim_client->moveByVelocityAsync(v_x, v_y, v_z, scaled_flight_time.count(), drivetrain, yawmode);
-
+		        std::cout << "Flew" << std::endl;
                 print_rviz_vel(pos.y(), pos.x(), -1*pos.z(), v_x, v_y, v_z);
-                // RCLCPP_INFO(node->get_logger(), "Flying at (%f, %f, %f) for %f seconds", v_x, v_y, v_z, p.duration);
 
                 // Get deadline to process next point
+		        //std::cout << "Current sleep time: " << sleep_time.time_since_epoch().count() << ", adding" << scaled_flight_time.count() << std::endl;
                 sleep_time += std::chrono::duration_cast<std::chrono::system_clock::duration>(scaled_flight_time);
+                // std::cout << "Updated sleep time: " << sleep_time.time_since_epoch().count() << std::endl;
 
                 // Update trajectory
                 traj->pop_front();
@@ -295,8 +304,6 @@ int main(int argc, char **argv)
                 }
             }
         }
-        fprintf( fd, "follow_trajectory_controlLoop_exit" );
-        fflush( fd );
     }
 	return 0;
 }
