@@ -110,9 +110,8 @@ RUN rm -r /usr/include/eigen3 \
 RUN mkdir -p /workspace/AirSim/ros2
 COPY ros2/install /workspace/AirSim/ros2/
 
-# Download tensorrt engines
-RUN wget https://cloud.orenbell.com/index.php/s/Gy5mogdYq7PgYGM/download -O /workspace/deer_hde_fp32.rt \
-    && wget https://cloud.orenbell.com/index.php/s/AFiLTrgPiQ6dxt6/download -O /workspace/yolo4_deer_fp32.rt
+# Build tensor rt engines
+RUN ./build_trt_engines.sh
 
 # setup entrypoint
 COPY ./ros_entrypoint.sh /

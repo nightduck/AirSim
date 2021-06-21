@@ -21,6 +21,7 @@ if [ $ARCH == "aarch64" ]; then       # If running on Jetson
     ros2 launch cinematography run_application.launch.py
 elif [ $ARCH == "x86_64" ]; then      # If running on desktop
     source /opt/ros/dashing/setup.bash
+    cd AirSim
     bash
 else
     echo "UNSUPPORTED ARCHITECTURE! (How are you even running this?)"
