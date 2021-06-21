@@ -14,14 +14,7 @@ Cars in AirSim
 
 [![AirSim Car Demo Video](docs/images/car_demo_video.png)](https://youtu.be/gnz1X3UNM5Y)
 
-## Build Instructions
-
-Execute the following to download this repo and build the AirSim component
-
-    git clone --recursive https://github.com/nightduck/AirSim.git   # Clone this repo
-    cd AirSim
-    ./setup.sh                                                      # Build repo
-    ./build.sh
+## Docker
 
 The environment required to run the ros packages is provided, just run
 
@@ -35,21 +28,30 @@ In order to run the debug nodes with GUIs, you need to give docker access to you
 
 Set /path/to/repo to this absolute path to this repository, so you can mount it in the docker container. Set airsim_hostname and 192.168.0.255 to the hostname and IP address of the machine running airsim (likely the one you're typing on)
 
-This will open a new shell. In the current directory is this repo, as well as the 2 appropriate tensorrt engines. To build the ros2 application:
+This will open a new shell. In the current directory is this repo. To acquire the tensorrt engines, run
+
+    ./build_trt_engines.sh
+
+ Then build the ros2 application:
 
     cd ros2
     ./build.sh
 
 There are separately tagged docker images, built for arm64, that run the full application pipeline instead of a bash shell. They are not stable yet, but the in-progress dockerfile for the Jetson AGX is still source controlled here.
 
-## Specifying Airsim Host
-The ROS launch file at `ros/launch/ros2_wrapper.launch.py` will look for the environment variable `AIRSIM_HOSTNAME`, and use that to connect to airsim. This is set automatically when a docker container is launched with the hostname and IP arguments. If you are not working in a docker container: a) why? b) you'll have to export this variable yourself, otherwise it defaults to localhost.
+## Building from source
 
-All other nodes that need to connect to airsim will use the ros2_wrapper as a parameter server to get this value, so as long as `AIRSIM_HOSTNAME` is exported, no code modification is needed.
+### AirSim Plugin
 
+Execute the following to download this repo and build the AirSim component
 
-## Compiling Vision AI TensorRT Engines
-Although TensorRT engines are provided with each docker image, you may want to build them for your own system. First, you need to install Onnx:
+    git clone --recursive https://github.com/nightduck/AirSim.git   # Clone this repo
+    cd AirSim
+    ./setup.sh                                                      # Build repo
+    ./build.sh
+
+### TensorRT Engines
+The TensorRT engines have to be rebuilt for each unique platform+CUDA+cuDNN combination. Assuming you have CUDA, cuDNN, and TensorRT already installed, you'll next need to install Onnx:
 
     sudo apt-get install libprotobuf-dev protobuf-compiler # protobuf is a prerequisite library
     git clone --recursive https://github.com/onnx/onnx.git # Pull the ONNX repository from GitHub 
@@ -59,13 +61,20 @@ Although TensorRT engines are provided with each docker image, you may want to b
     make # Use the ‘-j’ option for parallel jobs, for example, ‘make -j $(nproc)’ 
     make install
 
-Then you can run the provided script to download the models weights and compile them. This assumes you have CUDA, cuDNN, and TensorRT setup on your machine.
+Then you can run the provided script to download the model weights and compile them into Tensor. This assumes you have CUDA, cuDNN, and TensorRT setup on your machine.
 
     ./build_trt_engines.sh
 
+### Specifying Airsim Host
+If you are running in the docker environment, this step has been done for you.
+
+The ROS launch file at `ros2/launch/ros2_wrapper.launch.py` will look for the environment variable `AIRSIM_HOSTNAME`, and use that to connect to airsim. This is set automatically when a docker container is launched with the hostname and IP arguments. If you are not working in a docker container: a) why? b) you'll have to export this variable yourself, otherwise it defaults to localhost.
+
+All other nodes that need to connect to airsim will use the ros2_wrapper as a parameter server to get this value, so as long as `AIRSIM_HOSTNAME` is exported, no code modification is needed.
+
 ## Running on Jetson
 
-Cross compilation is not yet available, so this repo has to be built on the Jetson board, which will take several minutes for the ROS1 and ROS2 workspaces, and upwards of half an hour for the ROS1 bridge. ROS relies on hostnames to run on a distributed system. So be sure to entries to the /etc/hosts file for all machines involved. Eg if the desktop you're running airsim on is named "ubuntu-workstation" and has an IP of 192.168.0.14, then add the following line to /etc/hosts on your Jetson board.
+Cross compilation is not yet available, so this repo has to be built on the Jetson board, which will take several minutes for the ROS1 and ROS2 workspaces, and upwards of half an hour for the ROS1 bridge. ROS relies on hostnames to run on a distributed system. So be sure to add entries to the /etc/hosts file for all machines involved. Eg if the desktop you're running airsim on is named "ubuntu-workstation" and has an IP of 192.168.0.14, then add the following line to /etc/hosts on your Jetson board.
 
     192.168.0.14  ubuntu-workstation
 

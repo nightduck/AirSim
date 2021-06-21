@@ -118,8 +118,6 @@ RUN git clone -b 4.1.1 https://github.com/opencv/opencv /usr/local/src/opencv &&
     ldconfig && \
     rm -r /usr/local/src/opencv /usr/local/src/opencv_contrib
 
-RUN wget https://cloud.orenbell.com/index.php/s/5To35xzwSH43Csn/download -O deer_hde_fp32.rt
-RUN wget https://cloud.orenbell.com/index.php/s/rLA6xWPH2MLRWn3/download -O yolo4_deer_fp32.rt
 
 # setup entrypoint
 COPY ./ros_entrypoint.sh /
