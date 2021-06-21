@@ -50,11 +50,17 @@
                 <ul class="current">
                     <li class="toctree-l1 current"><a class="reference internal current" href="index.html">Home</a>
     <ul class="current">
-    <li class="toctree-l2"><a class="reference internal" href="#build-instructions">Build Instructions</a>
+    <li class="toctree-l2"><a class="reference internal" href="#docker">Docker</a>
     </li>
-    <li class="toctree-l2"><a class="reference internal" href="#specifying-airsim-host">Specifying Airsim Host</a>
+    <li class="toctree-l2"><a class="reference internal" href="#building-from-source">Building from source</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#airsim-plugin">AirSim Plugin</a>
     </li>
-    <li class="toctree-l2"><a class="reference internal" href="#compiling-vision-ai-tensorrt-engines">Compiling Vision AI TensorRT Engines</a>
+    <li class="toctree-l3"><a class="reference internal" href="#tensorrt-engines">TensorRT Engines</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#specifying-airsim-host">Specifying Airsim Host</a>
+    </li>
+        </ul>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#running-on-jetson">Running on Jetson</a>
     </li>
@@ -361,13 +367,7 @@
 <p><a href="https://youtu.be/-WfTr1-OBGQ"><img alt="AirSim Drone Demo Video" src="images/demo_video.png" /></a></p>
 <p>Cars in AirSim</p>
 <p><a href="https://youtu.be/gnz1X3UNM5Y"><img alt="AirSim Car Demo Video" src="images/car_demo_video.png" /></a></p>
-<h2 id="build-instructions">Build Instructions<a class="headerlink" href="#build-instructions" title="Permanent link">#</a></h2>
-<p>Execute the following to download this repo and build the AirSim component</p>
-<pre><code>git clone --recursive https://github.com/nightduck/AirSim.git   # Clone this repo
-cd AirSim
-./setup.sh                                                      # Build repo
-./build.sh
-</code></pre>
+<h2 id="docker">Docker<a class="headerlink" href="#docker" title="Permanent link">#</a></h2>
 <p>The environment required to run the ros packages is provided, just run</p>
 <pre><code>docker run -e DISPLAY=$DISPLAY -v=/tmp/.X11-unix:/tmp/.X11-unix \
     --gpus all -it --rm -v /path/to/this/repo:/workspace/AirSim \
@@ -377,16 +377,24 @@ cd AirSim
 <pre><code>xhost +local:docker
 </code></pre>
 <p>Set /path/to/repo to this absolute path to this repository, so you can mount it in the docker container. Set airsim_hostname and 192.168.0.255 to the hostname and IP address of the machine running airsim (likely the one you're typing on)</p>
-<p>This will open a new shell. In the current directory is this repo, as well as the 2 appropriate tensorrt engines. To build the ros2 application:</p>
+<p>This will open a new shell. In the current directory is this repo. To acquire the tensorrt engines, run</p>
+<pre><code>./build_trt_engines.sh
+</code></pre>
+<p>Then build the ros2 application:</p>
 <pre><code>cd ros2
 ./build.sh
 </code></pre>
 <p>There are separately tagged docker images, built for arm64, that run the full application pipeline instead of a bash shell. They are not stable yet, but the in-progress dockerfile for the Jetson AGX is still source controlled here.</p>
-<h2 id="specifying-airsim-host">Specifying Airsim Host<a class="headerlink" href="#specifying-airsim-host" title="Permanent link">#</a></h2>
-<p>The ROS launch file at <code>ros/launch/ros2_wrapper.launch.py</code> will look for the environment variable <code>AIRSIM_HOSTNAME</code>, and use that to connect to airsim. This is set automatically when a docker container is launched with the hostname and IP arguments. If you are not working in a docker container: a) why? b) you'll have to export this variable yourself, otherwise it defaults to localhost.</p>
-<p>All other nodes that need to connect to airsim will use the ros2_wrapper as a parameter server to get this value, so as long as <code>AIRSIM_HOSTNAME</code> is exported, no code modification is needed.</p>
-<h2 id="compiling-vision-ai-tensorrt-engines">Compiling Vision AI TensorRT Engines<a class="headerlink" href="#compiling-vision-ai-tensorrt-engines" title="Permanent link">#</a></h2>
-<p>Although TensorRT engines are provided with each docker image, you may want to build them for your own system. First, you need to install Onnx:</p>
+<h2 id="building-from-source">Building from source<a class="headerlink" href="#building-from-source" title="Permanent link">#</a></h2>
+<h3 id="airsim-plugin">AirSim Plugin<a class="headerlink" href="#airsim-plugin" title="Permanent link">#</a></h3>
+<p>Execute the following to download this repo and build the AirSim component</p>
+<pre><code>git clone --recursive https://github.com/nightduck/AirSim.git   # Clone this repo
+cd AirSim
+./setup.sh                                                      # Build repo
+./build.sh
+</code></pre>
+<h3 id="tensorrt-engines">TensorRT Engines<a class="headerlink" href="#tensorrt-engines" title="Permanent link">#</a></h3>
+<p>The TensorRT engines have to be rebuilt for each unique platform+CUDA+cuDNN combination. Assuming you have CUDA, cuDNN, and TensorRT already installed, you'll next need to install Onnx:</p>
 <pre><code>sudo apt-get install libprotobuf-dev protobuf-compiler # protobuf is a prerequisite library
 git clone --recursive https://github.com/onnx/onnx.git # Pull the ONNX repository from GitHub 
 cd onnx
@@ -395,11 +403,15 @@ cmake .. # Compile and install ONNX
 make # Use the ‘-j’ option for parallel jobs, for example, ‘make -j $(nproc)’ 
 make install
 </code></pre>
-<p>Then you can run the provided script to download the models weights and compile them. This assumes you have CUDA, cuDNN, and TensorRT setup on your machine.</p>
+<p>Then you can run the provided script to download the model weights and compile them into Tensor. This assumes you have CUDA, cuDNN, and TensorRT setup on your machine.</p>
 <pre><code>./build_trt_engines.sh
 </code></pre>
+<h3 id="specifying-airsim-host">Specifying Airsim Host<a class="headerlink" href="#specifying-airsim-host" title="Permanent link">#</a></h3>
+<p>If you are running in the docker environment, this step has been done for you.</p>
+<p>The ROS launch file at <code>ros2/launch/ros2_wrapper.launch.py</code> will look for the environment variable <code>AIRSIM_HOSTNAME</code>, and use that to connect to airsim. This is set automatically when a docker container is launched with the hostname and IP arguments. If you are not working in a docker container: a) why? b) you'll have to export this variable yourself, otherwise it defaults to localhost.</p>
+<p>All other nodes that need to connect to airsim will use the ros2_wrapper as a parameter server to get this value, so as long as <code>AIRSIM_HOSTNAME</code> is exported, no code modification is needed.</p>
 <h2 id="running-on-jetson">Running on Jetson<a class="headerlink" href="#running-on-jetson" title="Permanent link">#</a></h2>
-<p>Cross compilation is not yet available, so this repo has to be built on the Jetson board, which will take several minutes for the ROS1 and ROS2 workspaces, and upwards of half an hour for the ROS1 bridge. ROS relies on hostnames to run on a distributed system. So be sure to entries to the /etc/hosts file for all machines involved. Eg if the desktop you're running airsim on is named "ubuntu-workstation" and has an IP of 192.168.0.14, then add the following line to /etc/hosts on your Jetson board.</p>
+<p>Cross compilation is not yet available, so this repo has to be built on the Jetson board, which will take several minutes for the ROS1 and ROS2 workspaces, and upwards of half an hour for the ROS1 bridge. ROS relies on hostnames to run on a distributed system. So be sure to add entries to the /etc/hosts file for all machines involved. Eg if the desktop you're running airsim on is named "ubuntu-workstation" and has an IP of 192.168.0.14, then add the following line to /etc/hosts on your Jetson board.</p>
 <pre><code>192.168.0.14  ubuntu-workstation
 </code></pre>
 <p>And vice-versa for the Jetson's hostname on the workstation's hosts file. A machine's hostname can be found by running <code>hostname</code>.</p>
