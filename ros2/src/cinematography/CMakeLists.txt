@@ -25,6 +25,8 @@ message(STATUS "found RPC_LIB_INCLUDES=${RPC_LIB_INCLUDES}")
 set(FastRTPS_INCLUDE_DIR /opt/ros/dashing/include)
 set(FastRTPS_LIBRARIES /opt/ros/dashing/lib/libfastrtps.so)
 
+set(OpenCV_DIR /usr/local/lib/cmake/opencv4)
+
 find_package(ament_cmake REQUIRED)
 ## uncomment the following section in order to fill in
 ## further dependencies manually.
