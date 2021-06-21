@@ -1,7 +1,7 @@
 #! /bin/bash
 
 # Download the weights
-wget https://cloud.orenbell.com/index.php/s/6eGA6mRyKSeHFNp/download -O models_weights.zip 
+wget https://cloud.orenbell.com/s/8S7Zb8dF24bjqji/download -O models_weights.zip 
 unzip models_weights.zip
 
 # Extract obj det AI model
@@ -20,7 +20,7 @@ mkdir -p ros2/src/cinematography/tkDNN/build/yolo4tiny_deer
 cp -r yolo4tiny_deer/debug ros2/src/cinematography/tkDNN/build/yolo4tiny_deer/
 cp -r yolo4tiny_deer/layers ros2/src/cinematography/tkDNN/build/yolo4tiny_deer/
 
-# Build yolo4 tiny trt engines
+# Build yolo4 and yolo4tiny trt engines
 cd ros2/src/cinematography/tkDNN/build
 cmake ..
 make -j $(nproc)
