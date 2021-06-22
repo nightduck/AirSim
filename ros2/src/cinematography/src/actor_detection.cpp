@@ -347,7 +347,7 @@ int main(int argc, char **argv) {
     }
 
     rclcpp::init(argc, argv);
-    rclcpp::executors::MultiThreadedExecutor exec;
+    rclcpp::executors::SingleThreadedExecutor exec;
     auto actor_detection = std::make_shared<ActorDetection>();
     exec.add_node(actor_detection);
     exec.spin();

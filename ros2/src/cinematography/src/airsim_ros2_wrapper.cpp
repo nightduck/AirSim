@@ -264,9 +264,9 @@ int main(int argc, char **argv) {
     }
 
     rclcpp::init(argc, argv);
-    rclcpp::executors::MultiThreadedExecutor exec;
-    auto ros2wrapper = std::make_shared<AirsimROS2Wrapper>();
-    exec.add_node(ros2wrapper);
+    rclcpp::executors::MultiThreadedExecutor exec(rclcpp::executor::ExecutorArgs(), 2, true);
+    auto node = std::make_shared<AirsimROS2Wrapper>();
+    exec.add_node(node);
     exec.spin();
     rclcpp::shutdown();
 
